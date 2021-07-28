@@ -437,7 +437,9 @@ ccl_device_inline void film_get_pass_pixel_shadow_catcher_matte_with_shadow(
   pixel[0] = pixel_value.x;
   pixel[1] = pixel_value.y;
   pixel[2] = pixel_value.z;
-  pixel[3] = pixel_value.w;
+  if (kfilm_convert->num_components == 4) {
+    pixel[3] = pixel_value.w;
+  }
 }
 
 /* --------------------------------------------------------------------

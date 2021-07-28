@@ -149,10 +149,8 @@ bool PassAccessor::get_render_tile_pixels(const RenderBuffers *render_buffers,
   const PassMode mode = pass_access_info_.mode;
   const PassInfo pass_info = Pass::get_info(type);
 
-  DCHECK_LE(pass_info.num_components, destination.num_components)
-      << "Number of components mismatch for " << pass_type_as_string(type);
-
   if (pass_info.num_components == 1) {
+    /* Single channel passes. */
     if (mode == PassMode::DENOISED) {
       /* Denoised passes store their final pixels, no need in special calculation. */
       get_pass_float(render_buffers, buffer_params, destination);
@@ -173,50 +171,51 @@ bool PassAccessor::get_render_tile_pixels(const RenderBuffers *render_buffers,
       get_pass_float(render_buffers, buffer_params, destination);
     }
   }
-  else if (pass_info.num_components == 3) {
-    if (mode == PassMode::DENOISED) {
-      /* Denoised passes store their final pixels, no need in special calculation. */
-      get_pass_float3(render_buffers, buffer_params, destination);
-    }
-    else if (pass_info.divide_type != PASS_NONE) {
-      /* RGB lighting passes that need to divide out color */
-      get_pass_divide_even_color(render_buffers, buffer_params, destination);
-    }
-    else if (type == PASS_SHADOW_CATCHER) {
-      get_pass_shadow_catcher(render_buffers, buffer_params, destination);
-    }
-    else {
-      /* RGB/vector */
-      get_pass_float3(render_buffers, buffer_params, destination);
-    }
+  else if (type == PASS_MOTION) {
+    /* Motion pass. */
+    DCHECK_EQ(destination.num_components, 4) << "Motion pass must have 4 components";
+    get_pass_motion(render_buffers, buffer_params, destination);
   }
-  else if (pass_info.num_components == 4) {
+  else if (type == PASS_CRYPTOMATTE) {
+    /* Cryptomatte pass. */
+    DCHECK_EQ(destination.num_components, 4) << "Cryptomatte pass must have 4 components";
+    get_pass_cryptomatte(render_buffers, buffer_params, destination);
+  }
+  else {
+    /* RGB, RGBA and vector passes. */
+    DCHECK(destination.num_components == 3 || destination.num_components == 4)
+        << pass_type_as_string(type) << " pass must have 3 or 4 components";
+
     if (type == PASS_SHADOW_CATCHER_MATTE && pass_access_info_.use_approximate_shadow_catcher) {
       /* Denoised matte with shadow needs to do calculation (will use denoised shadow catcher pass
        * to approximate shadow with). */
       get_pass_shadow_catcher_matte_with_shadow(render_buffers, buffer_params, destination);
     }
-    else if (mode == PassMode::DENOISED) {
-      /* Denoised passes store their final pixels, no need in special calculation. */
-      if (type == PASS_COMBINED || type == PASS_SHADOW_CATCHER ||
-          type == PASS_SHADOW_CATCHER_MATTE) {
-        get_pass_combined(render_buffers, buffer_params, destination);
-      }
-      else {
-        get_pass_float4(render_buffers, buffer_params, destination);
-      }
+    else if (type == PASS_SHADOW_CATCHER && mode != PassMode::DENOISED) {
+      /* Shadow catcher pass. */
+      get_pass_shadow_catcher(render_buffers, buffer_params, destination);
     }
-    else if (type == PASS_MOTION) {
-      get_pass_motion(render_buffers, buffer_params, destination);
-    }
-    else if (type == PASS_CRYPTOMATTE) {
-      get_pass_cryptomatte(render_buffers, buffer_params, destination);
-    }
-    else if (type == PASS_COMBINED || type == PASS_SHADOW_CATCHER_MATTE) {
-      get_pass_combined(render_buffers, buffer_params, destination);
+    else if (pass_info.divide_type != PASS_NONE && mode != PassMode::DENOISED) {
+      /* RGB lighting passes that need to divide out color. */
+      get_pass_divide_even_color(render_buffers, buffer_params, destination);
     }
     else {
-      get_pass_float4(render_buffers, buffer_params, destination);
+      /* Passes that need no special computation, or denoised passes that already
+       * had the computation done. */
+      if (pass_info.num_components == 3) {
+        get_pass_float3(render_buffers, buffer_params, destination);
+      }
+      else if (pass_info.num_components == 4) {
+        if (type == PASS_COMBINED || type == PASS_SHADOW_CATCHER ||
+            type == PASS_SHADOW_CATCHER_MATTE) {
+          /* Passes with transparency as 4th component. */
+          get_pass_combined(render_buffers, buffer_params, destination);
+        }
+        else {
+          /* Passes with alpha as 4th component. */
+          get_pass_float4(render_buffers, buffer_params, destination);
+        }
+      }
     }
   }
 

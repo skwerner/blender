@@ -321,16 +321,19 @@ film_calculate_shadow_catcher(const KernelFilmConvert *ccl_restrict kfilm_conver
     return film_calculate_shadow_catcher_denoised(kfilm_convert, buffer);
   }
 
-  kernel_assert(kfilm_convert->pass_shadow_catcher != PASS_UNUSED);
-
-  ccl_global const float *in_catcher = buffer + kfilm_convert->pass_shadow_catcher;
+  kernel_assert(kfilm_convert->pass_shadow_catcher_sample_count != PASS_UNUSED);
 
   /* If there is no shadow catcher object in this pixel, there is no modification of the light
    * needed, so return one. */
-  const float num_samples = in_catcher[3];
+  ccl_global const float *in_catcher_sample_count =
+      buffer + kfilm_convert->pass_shadow_catcher_sample_count;
+  const float num_samples = in_catcher_sample_count[0];
   if (num_samples == 0.0f) {
     return one_float3();
   }
+
+  kernel_assert(kfilm_convert->pass_shadow_catcher != PASS_UNUSED);
+  ccl_global const float *in_catcher = buffer + kfilm_convert->pass_shadow_catcher;
 
   /* NOTE: It is possible that the Shadow Catcher pass is requested as an output without actual
    * shadow catcher objects in the scene. In this case there will be no auxillary passes required
@@ -421,9 +424,6 @@ ccl_device_inline void film_get_pass_pixel_shadow_catcher(
   pixel[0] = pixel_value.x;
   pixel[1] = pixel_value.y;
   pixel[2] = pixel_value.z;
-  if (kfilm_convert->num_components == 4) {
-    pixel[3] = 1.0f;
-  }
 }
 
 ccl_device_inline void film_get_pass_pixel_shadow_catcher_matte_with_shadow(

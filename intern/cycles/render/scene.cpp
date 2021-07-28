@@ -587,6 +587,7 @@ void Scene::update_passes()
                                  !background->get_transparent();
 
     Pass::add_internal(passes, PASS_SHADOW_CATCHER, Pass::FLAG_AUTO);
+    Pass::add_internal(passes, PASS_SHADOW_CATCHER_SAMPLE_COUNT, Pass::FLAG_AUTO);
     Pass::add_internal(passes, PASS_SHADOW_CATCHER_MATTE, Pass::FLAG_AUTO);
 
     if (need_background) {
@@ -600,6 +601,7 @@ void Scene::update_passes()
   }
   else if (Pass::contains_any(passes, PASS_SHADOW_CATCHER)) {
     Pass::add_internal(passes, PASS_SHADOW_CATCHER, Pass::FLAG_AUTO);
+    Pass::add_internal(passes, PASS_SHADOW_CATCHER_SAMPLE_COUNT, Pass::FLAG_AUTO);
     if (add_denoised_passes) {
       Pass::add_internal(passes, PASS_SHADOW_CATCHER, PassMode::DENOISED, Pass::FLAG_AUTO);
     }

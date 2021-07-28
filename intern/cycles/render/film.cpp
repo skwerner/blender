@@ -208,6 +208,7 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
   kfilm->pass_sample_count = PASS_UNUSED;
   kfilm->pass_adaptive_aux_buffer = PASS_UNUSED;
   kfilm->pass_shadow_catcher = PASS_UNUSED;
+  kfilm->pass_shadow_catcher_sample_count = PASS_UNUSED;
   kfilm->pass_shadow_catcher_matte = PASS_UNUSED;
 
   bool have_cryptomatte = false;
@@ -358,6 +359,9 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
 
       case PASS_SHADOW_CATCHER:
         kfilm->pass_shadow_catcher = kfilm->pass_stride;
+        break;
+      case PASS_SHADOW_CATCHER_SAMPLE_COUNT:
+        kfilm->pass_shadow_catcher_sample_count = kfilm->pass_stride;
         break;
       case PASS_SHADOW_CATCHER_MATTE:
         kfilm->pass_shadow_catcher_matte = kfilm->pass_stride;

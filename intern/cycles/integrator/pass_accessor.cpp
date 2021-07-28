@@ -212,9 +212,6 @@ bool PassAccessor::get_render_tile_pixels(const RenderBuffers *render_buffers,
     else if (type == PASS_CRYPTOMATTE) {
       get_pass_cryptomatte(render_buffers, buffer_params, destination);
     }
-    else if (type == PASS_SHADOW_CATCHER) {
-      get_pass_shadow_catcher(render_buffers, buffer_params, destination);
-    }
     else if (type == PASS_COMBINED || type == PASS_SHADOW_CATCHER_MATTE) {
       get_pass_combined(render_buffers, buffer_params, destination);
     }
@@ -251,6 +248,8 @@ void PassAccessor::init_kernel_film_convert(KernelFilmConvert *kfilm_convert,
       PASS_ADAPTIVE_AUX_BUFFER);
   kfilm_convert->pass_motion_weight = buffer_params.get_pass_offset(PASS_MOTION_WEIGHT);
   kfilm_convert->pass_shadow_catcher = buffer_params.get_pass_offset(PASS_SHADOW_CATCHER, mode);
+  kfilm_convert->pass_shadow_catcher_sample_count = buffer_params.get_pass_offset(
+      PASS_SHADOW_CATCHER_SAMPLE_COUNT);
   kfilm_convert->pass_shadow_catcher_matte = buffer_params.get_pass_offset(
       PASS_SHADOW_CATCHER_MATTE, mode);
 

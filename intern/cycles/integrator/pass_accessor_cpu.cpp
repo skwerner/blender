@@ -161,12 +161,12 @@ DEFINE_PASS_ACCESSOR(float)
 
 /* Float3 passes. */
 DEFINE_PASS_ACCESSOR(divide_even_color)
+DEFINE_PASS_ACCESSOR(shadow_catcher)
 DEFINE_PASS_ACCESSOR(float3)
 
 /* Float4 passes. */
 DEFINE_PASS_ACCESSOR(motion)
 DEFINE_PASS_ACCESSOR(cryptomatte)
-DEFINE_PASS_ACCESSOR(shadow_catcher)
 DEFINE_PASS_ACCESSOR(shadow_catcher_matte_with_shadow)
 DEFINE_PASS_ACCESSOR(combined)
 DEFINE_PASS_ACCESSOR(float4)

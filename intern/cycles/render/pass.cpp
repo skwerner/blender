@@ -110,6 +110,7 @@ const NodeEnum *Pass::get_type_enum()
     pass_type_enum.insert("denoising_albedo", PASS_DENOISING_ALBEDO);
 
     pass_type_enum.insert("shadow_catcher", PASS_SHADOW_CATCHER);
+    pass_type_enum.insert("shadow_catcher_sample_count", PASS_SHADOW_CATCHER_SAMPLE_COUNT);
     pass_type_enum.insert("shadow_catcher_matte", PASS_SHADOW_CATCHER_MATTE);
 
     pass_type_enum.insert("bake_primitive", PASS_BAKE_PRIMITIVE);
@@ -264,10 +265,13 @@ PassInfo Pass::get_info(PassType type)
       break;
 
     case PASS_SHADOW_CATCHER:
-      pass_info.num_components = 4;
+      pass_info.num_components = 3;
       pass_info.use_exposure = true;
       pass_info.use_compositing = true;
       pass_info.use_denoising_albedo = false;
+      break;
+    case PASS_SHADOW_CATCHER_SAMPLE_COUNT:
+      pass_info.num_components = 1;
       break;
     case PASS_SHADOW_CATCHER_MATTE:
       pass_info.num_components = 4;

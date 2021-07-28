@@ -370,9 +370,13 @@ typedef enum PassType {
    * result of this division is then to be multiplied with the backdrop. The alpha channel of this
    * pass contains number of samples which contributed to the color components of the pass.
    *
+   * PASS_SHADOW_CATCHER_SAMPLE_COUNT contains number of samples for which the path split
+   * happenned.
+   *
    * PASS_SHADOW_CATCHER_MATTE contains pass which contains non-catcher objects. This pass is to be
    * alpha-overed onto the backdrop (after multiplication). */
   PASS_SHADOW_CATCHER,
+  PASS_SHADOW_CATCHER_SAMPLE_COUNT,
   PASS_SHADOW_CATCHER_MATTE,
 
   PASS_CATEGORY_DATA_END = 63,
@@ -981,6 +985,7 @@ typedef struct KernelFilm {
   float pass_shadow_scale;
 
   int pass_shadow_catcher;
+  int pass_shadow_catcher_sample_count;
   int pass_shadow_catcher_matte;
 
   int filter_table_offset;
@@ -1019,9 +1024,6 @@ typedef struct KernelFilm {
   int display_pass_denoised_offset;
   int show_active_pixels;
   int use_approximate_shadow_catcher;
-
-  /* padding */
-  int pad1;
 } KernelFilm;
 static_assert_align(KernelFilm, 16);
 
@@ -1039,6 +1041,7 @@ typedef struct KernelFilmConvert {
   int pass_adaptive_aux_buffer;
   int pass_motion_weight;
   int pass_shadow_catcher;
+  int pass_shadow_catcher_sample_count;
   int pass_shadow_catcher_matte;
   int pass_background;
 
@@ -1060,7 +1063,7 @@ typedef struct KernelFilmConvert {
   int is_denoised;
 
   /* Padding. */
-  int pad1, pad2, pad3;
+  int pad1, pad2;
 } KernelFilmConvert;
 static_assert_align(KernelFilmConvert, 16);
 

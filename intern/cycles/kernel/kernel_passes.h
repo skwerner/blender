@@ -132,7 +132,7 @@ ccl_device_forceinline void kernel_write_shadow_catcher_bounce_data(
     return;
   }
 
-  kernel_assert(kernel_data.film.pass_shadow_catcher != PASS_UNUSED);
+  kernel_assert(kernel_data.film.pass_shadow_catcher_sample_count != PASS_UNUSED);
   kernel_assert(kernel_data.film.pass_shadow_catcher_matte != PASS_UNUSED);
 
   if (!kernel_shadow_catcher_is_path_split_bounce(INTEGRATOR_STATE_PASS, sd->object_flag)) {
@@ -142,7 +142,7 @@ ccl_device_forceinline void kernel_write_shadow_catcher_bounce_data(
   ccl_global float *buffer = kernel_pass_pixel_render_buffer(INTEGRATOR_STATE_PASS, render_buffer);
 
   /* Count sample for the shadow catcher object. */
-  kernel_write_pass_float(buffer + kernel_data.film.pass_shadow_catcher + 3, 1.0f);
+  kernel_write_pass_float(buffer + kernel_data.film.pass_shadow_catcher_sample_count, 1.0f);
 
   /* Since the split is done, the sample does not contribute to the matte, so accumulate it as
    * transparency to the matte. */

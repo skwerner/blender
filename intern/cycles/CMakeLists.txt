@@ -313,6 +313,11 @@ if(WITH_CYCLES_LOGGING)
   )
 endif()
 
+# NaN debugging
+if(WITH_CYCLES_DEBUG_NAN)
+  add_definitions(-DWITH_CYCLES_DEBUG_NAN)
+endif()
+
 if(NOT OPENIMAGEIO_PUGIXML_FOUND)
   add_definitions(-DWITH_SYSTEM_PUGIXML)
 endif()

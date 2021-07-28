@@ -145,6 +145,10 @@ CCL_NAMESPACE_BEGIN
 #  endif
 #endif
 
+#ifdef WITH_CYCLES_DEBUG_NAN
+#  define __KERNEL_DEBUG_NAN__
+#endif
+
 /* Features that enable others */
 
 #if defined(__SUBSURFACE__) || defined(__SHADER_RAYTRACE__)

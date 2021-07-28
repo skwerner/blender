@@ -101,6 +101,11 @@ ccl_device_inline float3 bsdf_eval_diffuse_glossy_ratio(const BsdfEval *eval)
 
 ccl_device_forceinline void kernel_accum_clamp(const KernelGlobals *kg, float3 *L, int bounce)
 {
+#ifdef __KERNEL_DEBUG_NAN__
+  if (!isfinite3_safe(*L)) {
+    kernel_assert(!"Cycles sample with non-finite value detected");
+  }
+#endif
   /* Make sure all components are finite, allowing the contribution to be usable by adaptive
    * sampling convergence check, but also to make it so render result never causes issues with
    * post-processing. */

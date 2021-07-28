@@ -731,9 +731,9 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
     const float *normal_in = buffer + render_pass_denoising_normal;
     float *normal_out = guiding_pixel + guiding_pass_normal;
 
-    normal_out[3] = normal_in[0] * pixel_scale;
-    normal_out[4] = normal_in[1] * pixel_scale;
-    normal_out[5] = normal_in[2] * pixel_scale;
+    normal_out[0] = normal_in[0] * pixel_scale;
+    normal_out[1] = normal_in[1] * pixel_scale;
+    normal_out[2] = normal_in[2] * pixel_scale;
   }
 }
 

@@ -59,7 +59,7 @@ class BufferParams {
   BufferParams();
 
   /* Pre-calculate all fields which depends on the passes. */
-  void update_passes(vector<Pass> &passes);
+  void update_passes(vector<Pass *> &passes);
 
   /* Returns PASS_UNUSED if there is no such pass in the buffer. */
   int get_pass_offset(PassType type, PassMode mode = PassMode::NOISY) const;

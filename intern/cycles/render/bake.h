@@ -31,7 +31,7 @@ class BakeManager {
   ~BakeManager();
 
   void set(Scene *scene, const std::string &object_name);
-  bool get_baking();
+  bool get_baking() const;
 
   void device_update(Device *device, DeviceScene *dscene, Scene *scene, Progress &progress);
   void device_free(Device *device, DeviceScene *dscene);

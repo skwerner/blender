@@ -164,7 +164,7 @@ struct Node {
 
   bool socket_is_modified(const SocketType &input) const;
 
-  bool is_modified();
+  bool is_modified() const;
 
   void tag_modified();
   void clear_modified();

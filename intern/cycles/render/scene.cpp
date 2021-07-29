@@ -163,12 +163,15 @@ void Scene::free_memory(bool final)
     delete p;
   foreach (Light *l, lights)
     delete l;
+  foreach (Pass *p, passes)
+    delete p;
 
   geometry.clear();
   objects.clear();
   lights.clear();
   particle_systems.clear();
   procedurals.clear();
+  passes.clear();
 
   if (device) {
     camera->device_free(device, &dscene, this);
@@ -543,80 +546,6 @@ bool Scene::update(Progress &progress)
   return true;
 }
 
-void Scene::update_passes()
-{
-  if (!object_manager->need_update() && !integrator->is_modified() && !film->is_modified()) {
-    return;
-  }
-
-  Pass::remove_all_auto(passes);
-
-  /* Display pass for viewport. */
-  const PassType display_pass = film->get_display_pass();
-  Pass::add_internal(passes, display_pass, Pass::FLAG_AUTO);
-
-  /* Create passes needed for adaptive sampling. */
-  const AdaptiveSampling adaptive_sampling = integrator->get_adaptive_sampling();
-  if (adaptive_sampling.use) {
-    Pass::add_internal(passes, PASS_SAMPLE_COUNT, Pass::FLAG_AUTO);
-    Pass::add_internal(passes, PASS_ADAPTIVE_AUX_BUFFER, Pass::FLAG_AUTO);
-  }
-
-  /* Create passes needed for denoising. */
-  const bool denoise_store_passes = integrator->get_denoise_store_passes();
-  const bool add_denoised_passes = integrator->get_use_denoise() || denoise_store_passes;
-  if (add_denoised_passes) {
-    Pass::add_internal(passes, PASS_COMBINED, Pass::FLAG_AUTO);
-    Pass::add_internal(passes, PASS_COMBINED, PassMode::DENOISED, Pass::FLAG_AUTO);
-
-    /* NOTE: Enable all passes when storage is requested. This way it is possible to tweak denoiser
-     * parameters later on. */
-
-    if (denoise_store_passes || integrator->get_use_denoise_pass_normal()) {
-      Pass::add_internal(passes, PASS_DENOISING_NORMAL, Pass::FLAG_AUTO);
-    }
-
-    if (denoise_store_passes || integrator->get_use_denoise_pass_albedo()) {
-      Pass::add_internal(passes, PASS_DENOISING_ALBEDO, Pass::FLAG_AUTO);
-    }
-  }
-
-  /* Create passes for shadow catcher. */
-  if (has_shadow_catcher()) {
-    const bool need_background = film->get_use_approximate_shadow_catcher() &&
-                                 !background->get_transparent();
-
-    Pass::add_internal(passes, PASS_SHADOW_CATCHER, Pass::FLAG_AUTO);
-    Pass::add_internal(passes, PASS_SHADOW_CATCHER_SAMPLE_COUNT, Pass::FLAG_AUTO);
-    Pass::add_internal(passes, PASS_SHADOW_CATCHER_MATTE, Pass::FLAG_AUTO);
-
-    if (need_background) {
-      Pass::add_internal(passes, PASS_BACKGROUND, Pass::FLAG_AUTO);
-    }
-
-    if (add_denoised_passes) {
-      Pass::add_internal(passes, PASS_SHADOW_CATCHER, PassMode::DENOISED, Pass::FLAG_AUTO);
-      Pass::add_internal(passes, PASS_SHADOW_CATCHER_MATTE, PassMode::DENOISED, Pass::FLAG_AUTO);
-    }
-  }
-  else if (Pass::contains_any(passes, PASS_SHADOW_CATCHER)) {
-    Pass::add_internal(passes, PASS_SHADOW_CATCHER, Pass::FLAG_AUTO);
-    Pass::add_internal(passes, PASS_SHADOW_CATCHER_SAMPLE_COUNT, Pass::FLAG_AUTO);
-    if (add_denoised_passes) {
-      Pass::add_internal(passes, PASS_SHADOW_CATCHER, PassMode::DENOISED, Pass::FLAG_AUTO);
-    }
-  }
-
-  film->tag_modified();
-
-  if (VLOG_IS_ON(2)) {
-    VLOG(2) << "Effective scene passes:";
-    for (const Pass &pass : passes) {
-      VLOG(2) << "- " << pass;
-    }
-  }
-}
-
 static void log_kernel_features(const uint features)
 {
   VLOG(2) << "Requested features:\n";
@@ -812,6 +741,15 @@ template<> AlembicProcedural *Scene::create_node<AlembicProcedural>()
 #endif
 }
 
+template<> Pass *Scene::create_node<Pass>()
+{
+  Pass *node = new Pass();
+  node->set_owner(this);
+  passes.push_back(node);
+  film->tag_modified();
+  return node;
+}
+
 template<typename T> void delete_node_from_array(vector<T> &nodes, T node)
 {
   for (size_t i = 0; i < nodes.size(); ++i) {
@@ -897,6 +835,12 @@ template<> void Scene::delete_node_impl(AlembicProcedural *node)
 #endif
 }
 
+template<> void Scene::delete_node_impl(Pass *node)
+{
+  delete_node_from_array(passes, node);
+  film->tag_modified();
+}
+
 template<typename T>
 static void remove_nodes_in_set(const set<T *> &nodes_set,
                                 vector<T *> &nodes_array,
@@ -958,6 +902,12 @@ template<> void Scene::delete_nodes(const set<Procedural *> &nodes, const NodeOw
 {
   remove_nodes_in_set(nodes, procedurals, owner);
   procedural_manager->tag_update();
+}
+
+template<> void Scene::delete_nodes(const set<Pass *> &nodes, const NodeOwner *owner)
+{
+  remove_nodes_in_set(nodes, passes, owner);
+  film->tag_modified();
 }
 
 CCL_NAMESPACE_END

@@ -35,10 +35,10 @@ CCL_NAMESPACE_BEGIN
 PassAccessor::PassAccessInfo::PassAccessInfo(const Pass &pass,
                                              const Film &film,
                                              const Background &background,
-                                             const vector<Pass> &passes)
+                                             const vector<Pass *> &passes)
     : type(pass.type),
       mode(pass.mode),
-      offset(Pass::get_offset(passes, pass)),
+      offset(Pass::get_offset(passes, &pass)),
       use_approximate_shadow_catcher(film.get_use_approximate_shadow_catcher()),
       use_approximate_shadow_catcher_background(use_approximate_shadow_catcher &&
                                                 !background.get_transparent())

@@ -215,7 +215,7 @@ class Scene : public NodeOwner {
   vector<Shader *> shaders;
   vector<Light *> lights;
   vector<ParticleSystem *> particle_systems;
-  vector<Pass> passes;
+  vector<Pass *> passes;
   vector<Procedural *> procedurals;
 
   /* data managers */
@@ -272,9 +272,6 @@ class Scene : public NodeOwner {
 
   void update_kernel_features();
   bool update(Progress &progress);
-
-  /* Update passes so that they contain all passes required for the configured functionality. */
-  void update_passes();
 
   bool has_shadow_catcher();
   void tag_shadow_catcher_modified();
@@ -369,6 +366,8 @@ template<> Shader *Scene::create_node<Shader>();
 
 template<> AlembicProcedural *Scene::create_node<AlembicProcedural>();
 
+template<> Pass *Scene::create_node<Pass>();
+
 template<> void Scene::delete_node_impl(Light *node);
 
 template<> void Scene::delete_node_impl(Mesh *node);
@@ -389,6 +388,8 @@ template<> void Scene::delete_node_impl(Procedural *node);
 
 template<> void Scene::delete_node_impl(AlembicProcedural *node);
 
+template<> void Scene::delete_node_impl(Pass *node);
+
 template<> void Scene::delete_nodes(const set<Light *> &nodes, const NodeOwner *owner);
 
 template<> void Scene::delete_nodes(const set<Geometry *> &nodes, const NodeOwner *owner);
@@ -400,6 +401,8 @@ template<> void Scene::delete_nodes(const set<ParticleSystem *> &nodes, const No
 template<> void Scene::delete_nodes(const set<Shader *> &nodes, const NodeOwner *owner);
 
 template<> void Scene::delete_nodes(const set<Procedural *> &nodes, const NodeOwner *owner);
+
+template<> void Scene::delete_nodes(const set<Pass *> &nodes, const NodeOwner *owner);
 
 CCL_NAMESPACE_END
 

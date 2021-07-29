@@ -631,7 +631,9 @@ void BlenderSession::bake(BL::Depsgraph &b_depsgraph_,
   /* Add render pass that we want to bake, and name it Combined so that it is
    * used as that on the Blender side. */
   const PassType pass_type = bake_type_to_pass(bake_type, bake_filter);
-  Pass::add(scene->passes, pass_type, "Combined");
+  Pass *pass = scene->create_node<Pass>();
+  pass->type = pass_type;
+  pass->name = "Combined";
 
   session->read_render_tile_cb = [&]() { read_render_tile(); };
   session->write_render_tile_cb = [&]() { write_render_tile(); };

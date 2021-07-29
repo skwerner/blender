@@ -16,9 +16,12 @@
 
 #include "render/film.h"
 #include "device/device.h"
+#include "render/background.h"
+#include "render/bake.h"
 #include "render/camera.h"
 #include "render/integrator.h"
 #include "render/mesh.h"
+#include "render/object.h"
 #include "render/scene.h"
 #include "render/stats.h"
 #include "render/tables.h"
@@ -137,11 +140,6 @@ NODE_DEFINE(Film)
 
 Film::Film() : Node(get_node_type()), filter_table_offset_(TABLE_OFFSET_INVALID)
 {
-
-  use_light_visibility = false;
-  cryptomatte_passes = CRYPT_NONE;
-  display_pass = PASS_COMBINED;
-  show_active_pixels = false;
 }
 
 Film::~Film()
@@ -150,7 +148,8 @@ Film::~Film()
 
 void Film::add_default(Scene *scene)
 {
-  Pass::add(scene->passes, PASS_COMBINED);
+  Pass *pass = scene->create_node<Pass>();
+  pass->type = PASS_COMBINED;
 }
 
 void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
@@ -216,46 +215,46 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
   bool have_aov_value = false;
 
   for (size_t i = 0; i < scene->passes.size(); i++) {
-    Pass &pass = scene->passes[i];
+    const Pass *pass = scene->passes[i];
 
-    if (pass.type == PASS_NONE || !pass.is_written()) {
+    if (pass->type == PASS_NONE || !pass->is_written()) {
       continue;
     }
 
-    if (pass.mode == PassMode::DENOISED) {
-      if (&pass == display_pass_denoised) {
+    if (pass->mode == PassMode::DENOISED) {
+      if (pass == display_pass_denoised) {
         kfilm->display_pass_denoised_offset = kfilm->pass_stride;
       }
 
       /* Generally we only storing offsets of the noisy passes. The display pass is an exception
        * since it is a read operation and not a write. */
-      kfilm->pass_stride += pass.get_info().num_components;
+      kfilm->pass_stride += pass->get_info().num_components;
       continue;
     }
 
     /* Can't do motion pass if no motion vectors are available. */
-    if (pass.type == PASS_MOTION || pass.type == PASS_MOTION_WEIGHT) {
+    if (pass->type == PASS_MOTION || pass->type == PASS_MOTION_WEIGHT) {
       if (scene->need_motion() != Scene::MOTION_PASS) {
-        kfilm->pass_stride += pass.get_info().num_components;
+        kfilm->pass_stride += pass->get_info().num_components;
         continue;
       }
     }
 
-    int pass_flag = (1 << (pass.type % 32));
-    if (pass.type <= PASS_CATEGORY_LIGHT_END) {
-      if (pass.type != PASS_COMBINED) {
+    int pass_flag = (1 << (pass->type % 32));
+    if (pass->type <= PASS_CATEGORY_LIGHT_END) {
+      if (pass->type != PASS_COMBINED) {
         kfilm->use_light_pass = 1;
       }
       kfilm->light_pass_flag |= pass_flag;
     }
-    else if (pass.type <= PASS_CATEGORY_DATA_END) {
+    else if (pass->type <= PASS_CATEGORY_DATA_END) {
       kfilm->pass_flag |= pass_flag;
     }
     else {
-      assert(pass.type <= PASS_CATEGORY_BAKE_END);
+      assert(pass->type <= PASS_CATEGORY_BAKE_END);
     }
 
-    switch (pass.type) {
+    switch (pass->type) {
       case PASS_COMBINED:
         kfilm->pass_combined = kfilm->pass_stride;
         break;
@@ -391,11 +390,11 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
         break;
     }
 
-    if (&pass == display_pass) {
+    if (pass == display_pass) {
       kfilm->display_pass_offset = kfilm->pass_stride;
     }
 
-    kfilm->pass_stride += pass.get_info().num_components;
+    kfilm->pass_stride += pass->get_info().num_components;
   }
 
   /* When displaying the normal/uv pass in the viewport we need to disable
@@ -433,44 +432,26 @@ void Film::device_free(Device * /*device*/, DeviceScene * /*dscene*/, Scene *sce
   scene->lookup_tables->remove_table(&filter_table_offset_);
 }
 
-void Film::assign_and_tag_passes_update(Scene *scene, const vector<Pass> &passes)
-{
-  if (Pass::contains(scene->passes, PASS_UV) != Pass::contains(passes, PASS_UV)) {
-    scene->geometry_manager->tag_update(scene, GeometryManager::UV_PASS_NEEDED);
-
-    foreach (Shader *shader, scene->shaders)
-      shader->need_update_uvs = true;
-  }
-  else if (Pass::contains(scene->passes, PASS_MOTION) != Pass::contains(passes, PASS_MOTION)) {
-    scene->geometry_manager->tag_update(scene, GeometryManager::MOTION_PASS_NEEDED);
-  }
-  else if (Pass::contains(scene->passes, PASS_AO) != Pass::contains(passes, PASS_AO)) {
-    scene->integrator->tag_update(scene, Integrator::AO_PASS_MODIFIED);
-  }
-
-  scene->passes = passes;
-}
-
 int Film::get_aov_offset(Scene *scene, string name, bool &is_color)
 {
   int offset_color = 0, offset_value = 0;
-  foreach (const Pass &pass, scene->passes) {
-    if (pass.name == name) {
-      if (pass.type == PASS_AOV_VALUE) {
+  foreach (const Pass *pass, scene->passes) {
+    if (pass->name == name) {
+      if (pass->type == PASS_AOV_VALUE) {
         is_color = false;
         return offset_value;
       }
-      else if (pass.type == PASS_AOV_COLOR) {
+      else if (pass->type == PASS_AOV_COLOR) {
         is_color = true;
         return offset_color;
       }
     }
 
-    if (pass.type == PASS_AOV_VALUE) {
-      offset_value += pass.get_info().num_components;
+    if (pass->type == PASS_AOV_VALUE) {
+      offset_value += pass->get_info().num_components;
     }
-    else if (pass.type == PASS_AOV_COLOR) {
-      offset_color += pass.get_info().num_components;
+    else if (pass->type == PASS_AOV_COLOR) {
+      offset_color += pass->get_info().num_components;
     }
   }
 
@@ -480,6 +461,12 @@ int Film::get_aov_offset(Scene *scene, string name, bool &is_color)
 const Pass *Film::get_actual_display_pass(Scene *scene, PassType pass_type, PassMode pass_mode)
 {
   const Pass *pass = Pass::find(scene->passes, pass_type, pass_mode);
+
+  /* Fall back to noisy pass if no denoised one is found. */
+  if (pass == nullptr && pass_mode == PassMode::DENOISED) {
+    pass = Pass::find(scene->passes, pass_type, PassMode::NOISY);
+  }
+
   return get_actual_display_pass(scene, pass);
 }
 
@@ -487,18 +474,6 @@ const Pass *Film::get_actual_display_pass(Scene *scene, const Pass *pass)
 {
   if (!pass) {
     return nullptr;
-  }
-
-  if (!pass->is_written()) {
-    if (pass->mode == PassMode::DENOISED) {
-      pass = Pass::find(scene->passes, pass->type);
-      if (!pass) {
-        return nullptr;
-      }
-    }
-    else {
-      return nullptr;
-    }
   }
 
   if (pass->type == PASS_COMBINED && scene->has_shadow_catcher()) {
@@ -512,30 +487,250 @@ const Pass *Film::get_actual_display_pass(Scene *scene, const Pass *pass)
   return pass;
 }
 
+void Film::update_passes(Scene *scene)
+{
+  const Background *background = scene->background;
+  const BakeManager *bake_manager = scene->bake_manager;
+  const ObjectManager *object_manager = scene->object_manager;
+  Integrator *integrator = scene->integrator;
+
+  if (!is_modified() && !object_manager->need_update() && !integrator->is_modified()) {
+    return;
+  }
+
+  /* Remove auto generated passes and recreate them. */
+  remove_auto_passes(scene);
+
+  /* Display pass for viewport. */
+  const PassType display_pass = get_display_pass();
+  add_auto_pass(scene, display_pass);
+
+  /* Assumption is that a combined pass always exists for now, for example
+   * adaptive sampling is always based on a combined pass. But we should
+   * try to lift this limitation in the future for faster rendering of
+   * individual passes. */
+  if (display_pass != PASS_COMBINED) {
+    add_auto_pass(scene, PASS_COMBINED);
+  }
+
+  /* Create passes needed for adaptive sampling. */
+  const AdaptiveSampling adaptive_sampling = integrator->get_adaptive_sampling();
+  if (adaptive_sampling.use) {
+    add_auto_pass(scene, PASS_SAMPLE_COUNT);
+    add_auto_pass(scene, PASS_ADAPTIVE_AUX_BUFFER);
+  }
+
+  /* Create passes needed for denoising. */
+  const bool use_denoise = integrator->get_use_denoise();
+  const bool denoise_store_passes = integrator->get_denoise_store_passes();
+  const bool add_denoised_passes = use_denoise || denoise_store_passes;
+  if (add_denoised_passes) {
+    if (denoise_store_passes || integrator->get_use_denoise_pass_normal()) {
+      add_auto_pass(scene, PASS_DENOISING_NORMAL);
+    }
+
+    if (denoise_store_passes || integrator->get_use_denoise_pass_albedo()) {
+      add_auto_pass(scene, PASS_DENOISING_ALBEDO);
+    }
+  }
+
+  /* Create passes for shadow catcher. */
+  if (scene->has_shadow_catcher()) {
+    const bool need_background = get_use_approximate_shadow_catcher() &&
+                                 !background->get_transparent();
+
+    add_auto_pass(scene, PASS_SHADOW_CATCHER);
+    add_auto_pass(scene, PASS_SHADOW_CATCHER_SAMPLE_COUNT);
+    add_auto_pass(scene, PASS_SHADOW_CATCHER_MATTE);
+
+    if (need_background) {
+      add_auto_pass(scene, PASS_BACKGROUND);
+    }
+  }
+  else if (Pass::contains(scene->passes, PASS_SHADOW_CATCHER)) {
+    add_auto_pass(scene, PASS_SHADOW_CATCHER);
+    add_auto_pass(scene, PASS_SHADOW_CATCHER_SAMPLE_COUNT);
+  }
+
+  const vector<Pass *> passes_immutable = scene->passes;
+  for (const Pass *pass : passes_immutable) {
+    const PassInfo info = Pass::get_info(pass->type);
+    /* Add utility passes needed to generate some light passes. */
+    if (info.divide_type != PASS_NONE) {
+      add_auto_pass(scene, info.divide_type);
+    }
+
+    /* NOTE: Enable all denoised passes when storage is requested.
+     * This way it is possible to tweak denoiser parameters later on. */
+    if (info.support_denoise && add_denoised_passes) {
+      add_auto_pass(scene, pass->type, PassMode::DENOISED);
+    }
+  }
+
+  if (bake_manager->get_baking()) {
+    add_auto_pass(scene, PASS_BAKE_PRIMITIVE, "BakePrimitive");
+    add_auto_pass(scene, PASS_BAKE_DIFFERENTIAL, "BakeDifferential");
+  }
+
+  /* Remove duplicates and initialize internal pass info. */
+  finalize_passes(scene, use_denoise);
+
+  /* Flush scene updates. */
+  const bool have_uv_pass = Pass::contains(scene->passes, PASS_UV);
+  const bool have_motion_pass = Pass::contains(scene->passes, PASS_MOTION);
+  const bool have_ao_pass = Pass::contains(scene->passes, PASS_AO);
+
+  if (have_uv_pass != prev_have_uv_pass) {
+    scene->geometry_manager->tag_update(scene, GeometryManager::UV_PASS_NEEDED);
+    foreach (Shader *shader, scene->shaders)
+      shader->need_update_uvs = true;
+  }
+  if (have_motion_pass != prev_have_motion_pass) {
+    scene->geometry_manager->tag_update(scene, GeometryManager::MOTION_PASS_NEEDED);
+  }
+  if (have_ao_pass != prev_have_ao_pass) {
+    scene->integrator->tag_update(scene, Integrator::AO_PASS_MODIFIED);
+  }
+
+  prev_have_uv_pass = have_uv_pass;
+  prev_have_motion_pass = have_motion_pass;
+  prev_have_ao_pass = have_ao_pass;
+
+  tag_modified();
+
+  /* Debug logging. */
+  if (VLOG_IS_ON(2)) {
+    VLOG(2) << "Effective scene passes:";
+    for (const Pass *pass : scene->passes) {
+      VLOG(2) << "- " << *pass;
+    }
+  }
+}
+
+void Film::add_auto_pass(Scene *scene, PassType type, const char *name)
+{
+  add_auto_pass(scene, type, PassMode::NOISY, name);
+}
+
+void Film::add_auto_pass(Scene *scene, PassType type, PassMode mode, const char *name)
+{
+  Pass *pass = new Pass();
+  pass->type = type;
+  pass->mode = mode;
+  pass->name = (name) ? name : "";
+  pass->is_auto_ = true;
+
+  pass->set_owner(scene);
+  scene->passes.push_back(pass);
+}
+
+void Film::remove_auto_passes(Scene *scene)
+{
+  /* Remove all passes which were automatically created. */
+  vector<Pass *> new_passes;
+
+  for (Pass *pass : scene->passes) {
+    if (!pass->is_auto_) {
+      new_passes.push_back(pass);
+    }
+    else {
+      delete pass;
+    }
+  }
+
+  scene->passes = new_passes;
+}
+
+static bool compare_pass_order(const Pass *a, const Pass *b)
+{
+  const int num_components_a = a->get_info().num_components;
+  const int num_components_b = b->get_info().num_components;
+
+  if (num_components_a == num_components_b) {
+    return (a->type < b->type);
+  }
+
+  return num_components_a > num_components_b;
+}
+
+void Film::finalize_passes(Scene *scene, const bool use_denoise)
+{
+  /* Remove duplicate passes. */
+  vector<Pass *> new_passes;
+
+  for (Pass *pass : scene->passes) {
+    pass->info_ = Pass::get_info(pass->type);
+
+    /* Disable denoising on passes if denoising is disabled, or if the
+     * pass does not support it. */
+    pass->mode = (use_denoise && pass->info_.support_denoise) ? pass->mode : PassMode::NOISY;
+
+    /* All passes are currently written into the render buffer. Passes that
+     * are dynamically constructed from others without being written will
+     * be added later. */
+    pass->is_written_ = true;
+
+    /* Merge duplicate passes. */
+    bool duplicate_found = false;
+    for (Pass *new_pass : new_passes) {
+      /* If different type or denoising, don't merge. */
+      if (new_pass->type != pass->type || new_pass->mode != pass->mode) {
+        continue;
+      }
+
+      /* If both passes have a name and the names are different, don't merge.
+       * If either pass has a name, we'll use that name. */
+      if (!pass->name.empty() && !new_pass->name.empty() && pass->name != new_pass->name) {
+        continue;
+      }
+
+      if (!pass->name.empty() && new_pass->name.empty()) {
+        new_pass->name = pass->name;
+      }
+
+      new_pass->is_auto_ &= pass->is_auto_;
+      new_pass->is_written_ |= pass->is_written_;
+      duplicate_found = true;
+      break;
+    }
+
+    if (!duplicate_found) {
+      new_passes.push_back(pass);
+    }
+  }
+
+  /* Order from by components and type, This is required to for AOVs and cryptomatte passes,
+   * which the kernel assumes to be in order. Note this must use stable sort so cryptomatte
+   * passes remain in the right order. */
+  stable_sort(new_passes.begin(), new_passes.end(), compare_pass_order);
+
+  scene->passes = new_passes;
+}
+
 uint Film::get_kernel_features(const Scene *scene) const
 {
   uint kernel_features = 0;
 
-  for (const Pass &pass : scene->passes) {
-    if (!pass.is_written()) {
+  for (const Pass *pass : scene->passes) {
+    if (!pass->is_written()) {
       continue;
     }
 
-    if ((pass.type == PASS_COMBINED && pass.mode == PassMode::DENOISED) ||
-        pass.type == PASS_DENOISING_NORMAL || pass.type == PASS_DENOISING_ALBEDO) {
+    if ((pass->type == PASS_COMBINED && pass->mode == PassMode::DENOISED) ||
+        pass->type == PASS_DENOISING_NORMAL || pass->type == PASS_DENOISING_ALBEDO) {
       kernel_features |= KERNEL_FEATURE_DENOISING;
     }
 
-    if (pass.type != PASS_NONE && pass.type != PASS_COMBINED &&
-        pass.type <= PASS_CATEGORY_LIGHT_END) {
+    if (pass->type != PASS_NONE && pass->type != PASS_COMBINED &&
+        pass->type <= PASS_CATEGORY_LIGHT_END) {
       kernel_features |= KERNEL_FEATURE_LIGHT_PASSES;
 
-      if (pass.type == PASS_SHADOW) {
+      if (pass->type == PASS_SHADOW) {
         kernel_features |= KERNEL_FEATURE_SHADOW_PASS;
       }
     }
 
-    if (pass.type == PASS_AO) {
+    if (pass->type == PASS_AO) {
       kernel_features |= KERNEL_FEATURE_NODE_RAYTRACE;
     }
   }

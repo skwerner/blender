@@ -50,6 +50,9 @@ struct PassInfo {
    * Light and shadow catcher passes should not have discontinuity in the denoised result based on
    * the underlying albedo. */
   bool use_denoising_albedo = true;
+
+  /* Pass supports denoising. */
+  bool support_denoise = false;
 };
 
 class Pass : public Node {
@@ -85,51 +88,18 @@ class Pass : public Node {
 
   static PassInfo get_info(PassType type);
 
-  /* Add pass which is written by the kernel and is accessed directly. */
-  static void add(vector<Pass> &passes, PassType type, const char *name = nullptr);
-
-  /* Add pass which will be reading denoising result when it is available.
-   * This pass is not allocated and is not written by the kernel unless denoiser is used. In this
-   * case reading from this pass will fallback to reading noisy corresponding pass. */
-  static void add_denoising_read(vector<Pass> &passes, PassType type, const char *name = nullptr);
-
-  /* Add pass which will be written by a denoiser. */
-  static void add_denoising_write(vector<Pass> &passes, PassType type, const char *name = nullptr);
-
-  /* Add pass with the given configuration.
-   * Note that this is only expected to be used by the Pass implementation and the render pipeline.
-   */
-  enum {
-    FLAG_NONE = 0,
-
-    /* The has been created automatically as a requirement to various rendering functionality (such
-     * as adaptive sampling). */
-    FLAG_AUTO = (1 << 0),
-
-    /* Pass is created for read request, possibly will not be written by the render pipeline. */
-    FLAG_READ_ONLY = (1 << 1),
-  };
-  static void add_internal(vector<Pass> &passes,
-                           PassType type,
-                           int flags,
-                           const char *name = nullptr);
-  static void add_internal(
-      vector<Pass> &passes, PassType type, PassMode mode, int flags, const char *name = nullptr);
-
-  static bool contains(const vector<Pass> &passes, PassType type, PassMode mode = PassMode::NOISY);
-  static bool contains_any(const vector<Pass> &passes, PassType type);
-
-  /* Remove all passes which were automatically created. */
-  static void remove_all_auto(vector<Pass> &passes);
+  static bool contains(const vector<Pass *> &passes, PassType type);
 
   /* Returns nullptr if there is no pass with the given name or type+mode. */
-  static const Pass *find(const vector<Pass> &passes, const string &name);
-  static const Pass *find(const vector<Pass> &passes,
+  static const Pass *find(const vector<Pass *> &passes, const string &name);
+  static const Pass *find(const vector<Pass *> &passes,
                           PassType type,
                           PassMode mode = PassMode::NOISY);
 
   /* Returns PASS_UNUSED if there is no corresponding pass. */
-  static int get_offset(const vector<Pass> &passes, const Pass &pass);
+  static int get_offset(const vector<Pass *> &passes, const Pass *pass);
+
+  friend class Film;
 };
 
 std::ostream &operator<<(std::ostream &os, const Pass &pass);

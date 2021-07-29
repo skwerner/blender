@@ -54,18 +54,6 @@ std::ostream &operator<<(std::ostream &os, PassMode mode)
   return os;
 }
 
-static bool compare_pass_order(const Pass &a, const Pass &b)
-{
-  const int num_components_a = a.get_info().num_components;
-  const int num_components_b = b.get_info().num_components;
-
-  if (num_components_a == num_components_b) {
-    return (a.type < b.type);
-  }
-
-  return num_components_a > num_components_b;
-}
-
 const NodeEnum *Pass::get_type_enum()
 {
   static NodeEnum pass_type_enum;
@@ -146,7 +134,7 @@ NODE_DEFINE(Pass)
   return type;
 }
 
-Pass::Pass() : Node(get_node_type())
+Pass::Pass() : Node(get_node_type()), is_auto_(false), is_written_(false)
 {
 }
 
@@ -177,6 +165,7 @@ PassInfo Pass::get_info(PassType type)
     case PASS_COMBINED:
       pass_info.num_components = 4;
       pass_info.use_exposure = true;
+      pass_info.support_denoise = true;
       break;
     case PASS_DEPTH:
       pass_info.num_components = 1;
@@ -269,6 +258,7 @@ PassInfo Pass::get_info(PassType type)
       pass_info.use_exposure = true;
       pass_info.use_compositing = true;
       pass_info.use_denoising_albedo = false;
+      pass_info.support_denoise = true;
       break;
     case PASS_SHADOW_CATCHER_SAMPLE_COUNT:
       pass_info.num_components = 1;
@@ -276,6 +266,7 @@ PassInfo Pass::get_info(PassType type)
     case PASS_SHADOW_CATCHER_MATTE:
       pass_info.num_components = 4;
       pass_info.use_exposure = true;
+      pass_info.support_denoise = true;
       /* Without shadow catcher approximation compositing is not needed.
        * Since we don't know here whether approximation is used or not, leave the decision up to
        * the caller which will know that. */
@@ -319,113 +310,10 @@ PassInfo Pass::get_info(PassType type)
   return pass_info;
 }
 
-void Pass::add(vector<Pass> &passes, PassType type, const char *name)
+bool Pass::contains(const vector<Pass *> &passes, PassType type)
 {
-  add_internal(passes, type, PassMode::NOISY, Pass::FLAG_NONE, name);
-}
-
-void Pass::add_denoising_read(vector<Pass> &passes, PassType type, const char *name)
-{
-  add_internal(passes, type, PassMode::DENOISED, Pass::FLAG_READ_ONLY, name);
-}
-
-void Pass::add_denoising_write(vector<Pass> &passes, PassType type, const char *name)
-{
-  add_internal(passes, type, PassMode::DENOISED, Pass::FLAG_NONE, name);
-}
-
-/* Check whether the pass is a placeholder for the given configuration.
- *
- * An empty name is used as a placeholder to signal that any pass of that type is fine (because the
- * content always is the same). This is important to support divide_type:
- * - If the pass that has a `divide_type` is added first, a pass for `divide_type` with an empty
- *   name will be added. Then, if a matching pass with a name is later requested, the existing
- *   placeholder will be renamed to that.
- * - If the `divide_type` is explicitly allocated with a name first and then again as part of
- *   another pass, the second one will just be skipped because that type already exists. */
-static bool pass_placeholder_match(Pass &pass, PassType type, PassMode mode, const char *name)
-{
-  if (pass.type != type || pass.mode != mode) {
-    return false;
-  }
-
-  /* If no name is specified, any pass of the correct type will match. */
-  if (name == nullptr) {
-    return true;
-  }
-
-  /* If we already have a placeholder pass, rename that one. */
-  if (pass.name.empty()) {
-    return true;
-  }
-
-  /* If neither existing nor requested pass have placeholder name, they must match. */
-  if (name == pass.name) {
-    return true;
-  }
-
-  return false;
-}
-
-void Pass::add_internal(vector<Pass> &passes, PassType type, int flags, const char *name)
-{
-  add_internal(passes, type, PassMode::NOISY, flags, name);
-}
-
-void Pass::add_internal(
-    vector<Pass> &passes, PassType type, PassMode mode, int flags, const char *name)
-{
-  const bool is_auto = (flags & Pass::FLAG_AUTO);
-  const bool is_written = (flags & Pass::FLAG_READ_ONLY) == 0;
-
-  for (Pass &pass : passes) {
-    if (!pass_placeholder_match(pass, type, mode, name)) {
-      continue;
-    }
-
-    if (name && pass.name.empty()) {
-      pass.name = name;
-    }
-
-    pass.is_auto_ &= is_auto;
-    pass.is_written_ |= is_written;
-
-    return;
-  }
-
-  Pass pass;
-  pass.type = type;
-  pass.mode = mode;
-
-  if (name) {
-    pass.name = name;
-  }
-
-  pass.info_ = get_info(type);
-  pass.is_auto_ = is_auto;
-  pass.is_written_ = is_written;
-
-  passes.push_back(pass);
-
-  /* Order from by components and type, This is required to for AOVs and cryptomatte passes,
-   * which the kernel assumes to be in order. Note this must use stable sort so cryptomatte
-   * passes remain in the right order. */
-  stable_sort(&passes[0], &passes[0] + passes.size(), compare_pass_order);
-
-  if (pass.info_.divide_type != PASS_NONE) {
-    Pass::add_internal(passes, pass.info_.divide_type, mode, flags);
-  }
-}
-
-bool Pass::contains(const vector<Pass> &passes, PassType type, PassMode mode)
-{
-  return Pass::find(passes, type, mode) != nullptr;
-}
-
-bool Pass::contains_any(const vector<Pass> &passes, PassType type)
-{
-  for (const Pass &pass : passes) {
-    if (pass.type != type) {
+  for (const Pass *pass : passes) {
+    if (pass->type != type) {
       continue;
     }
 
@@ -435,60 +323,47 @@ bool Pass::contains_any(const vector<Pass> &passes, PassType type)
   return false;
 }
 
-void Pass::remove_all_auto(vector<Pass> &passes)
+const Pass *Pass::find(const vector<Pass *> &passes, const string &name)
 {
-  vector<Pass> new_passes;
-
-  for (const Pass &pass : passes) {
-    if (!pass.is_auto_) {
-      new_passes.push_back(pass);
-    }
-  }
-
-  passes = new_passes;
-}
-
-const Pass *Pass::find(const vector<Pass> &passes, const string &name)
-{
-  for (const Pass &pass : passes) {
-    if (pass.name == name) {
-      return &pass;
+  for (const Pass *pass : passes) {
+    if (pass->name == name) {
+      return pass;
     }
   }
 
   return nullptr;
 }
 
-const Pass *Pass::find(const vector<Pass> &passes, PassType type, PassMode mode)
+const Pass *Pass::find(const vector<Pass *> &passes, PassType type, PassMode mode)
 {
-  for (const Pass &pass : passes) {
-    if (pass.type != type || pass.mode != mode) {
+  for (const Pass *pass : passes) {
+    if (pass->type != type || pass->mode != mode) {
       continue;
     }
 
-    return &pass;
+    return pass;
   }
 
   return nullptr;
 }
 
-int Pass::get_offset(const vector<Pass> &passes, const Pass &pass)
+int Pass::get_offset(const vector<Pass *> &passes, const Pass *pass)
 {
   int pass_offset = 0;
 
-  for (const Pass &current_pass : passes) {
+  for (const Pass *current_pass : passes) {
     /* Note that pass name is allowed to be empty. This is why we check for type and mode. */
-    if (current_pass.type == pass.type && current_pass.mode == pass.mode &&
-        current_pass.name == pass.name) {
-      if (current_pass.is_written()) {
+    if (current_pass->type == pass->type && current_pass->mode == pass->mode &&
+        current_pass->name == pass->name) {
+      if (current_pass->is_written()) {
         return pass_offset;
       }
       else {
         return PASS_UNUSED;
       }
     }
-    if (current_pass.is_written()) {
-      pass_offset += current_pass.get_info().num_components;
+    if (current_pass->is_written()) {
+      pass_offset += current_pass->get_info().num_components;
     }
   }
 

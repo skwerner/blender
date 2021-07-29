@@ -41,9 +41,9 @@ static int pass_type_mode_to_index(PassType pass_type, PassMode mode)
   return index;
 }
 
-static int pass_to_index(const Pass &pass)
+static int pass_to_index(const Pass *pass)
 {
-  return pass_type_mode_to_index(pass.type, pass.mode);
+  return pass_type_mode_to_index(pass->type, pass->mode);
 }
 
 /* Buffer Params */
@@ -61,21 +61,21 @@ BufferParams::BufferParams()
   reset_pass_offset();
 }
 
-void BufferParams::update_passes(vector<Pass> &passes)
+void BufferParams::update_passes(vector<Pass *> &passes)
 {
   update_offset_stride();
   reset_pass_offset();
 
   pass_stride = 0;
-  for (const Pass &pass : passes) {
+  for (const Pass *pass : passes) {
     const int index = pass_to_index(pass);
 
-    if (pass.is_written()) {
+    if (pass->is_written()) {
       if (pass_offset_[index] == PASS_UNUSED) {
         pass_offset_[index] = pass_stride;
       }
 
-      pass_stride += pass.get_info().num_components;
+      pass_stride += pass->get_info().num_components;
     }
   }
 }

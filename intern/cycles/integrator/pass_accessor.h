@@ -41,7 +41,7 @@ class PassAccessor {
     PassAccessInfo(const Pass &pass,
                    const Film &film,
                    const Background &background,
-                   const vector<Pass> &passes);
+                   const vector<Pass *> &passes);
 
     PassType type = PASS_NONE;
     PassMode mode = PassMode::NOISY;

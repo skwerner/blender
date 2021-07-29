@@ -347,7 +347,7 @@ void Session::do_delayed_reset()
   }
   delayed_reset.do_reset = false;
 
-  scene->update_passes();
+  scene->film->update_passes(scene);
 
   buffer_params_ = delayed_reset.params;
   buffer_params_.update_passes(scene->passes);
@@ -598,7 +598,7 @@ bool Session::get_render_tile_pixels(const string &pass_name, int num_components
     }
   }
 
-  pass = Film::get_actual_display_pass(scene, pass);
+  pass = scene->film->get_actual_display_pass(scene, pass);
 
   const float exposure = scene->film->get_exposure();
   const int num_samples = render_scheduler_.get_num_rendered_samples();

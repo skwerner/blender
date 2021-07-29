@@ -495,29 +495,18 @@ void BlenderSync::sync_images()
 
 /* Passes */
 
-class BlenderPassInfo {
- public:
-  explicit BlenderPassInfo(PassType type = PASS_NONE, PassMode mode = PassMode::NOISY)
-      : type(type), mode(mode)
-  {
-  }
-
-  PassType type = PASS_NONE;
-  PassMode mode = PassMode::NOISY;
-};
-
-static BlenderPassInfo get_blender_pass_info(BL::RenderPass &b_pass)
+static PassType get_blender_pass_type(BL::RenderPass &b_pass)
 {
   string name = b_pass.name();
-#define MAP_PASS(passname, ...) \
+#define MAP_PASS(passname, passtype) \
   if (name == passname) { \
-    return BlenderPassInfo(__VA_ARGS__); \
+    return passtype; \
   } \
   ((void)0)
 
   /* NOTE: Keep in sync with defined names from DNA_scene_types.h */
 
-  MAP_PASS("Combined", PASS_COMBINED, PassMode::DENOISED);
+  MAP_PASS("Combined", PASS_COMBINED);
   MAP_PASS("Noisy Image", PASS_COMBINED);
 
   MAP_PASS("Depth", PASS_DEPTH);
@@ -553,7 +542,7 @@ static BlenderPassInfo get_blender_pass_info(BL::RenderPass &b_pass)
   MAP_PASS("Denoising Normal", PASS_DENOISING_NORMAL);
   MAP_PASS("Denoising Albedo", PASS_DENOISING_ALBEDO);
 
-  MAP_PASS("Shadow Catcher", PASS_SHADOW_CATCHER, PassMode::DENOISED);
+  MAP_PASS("Shadow Catcher", PASS_SHADOW_CATCHER);
   MAP_PASS("Noisy Shadow Catcher", PASS_SHADOW_CATCHER);
 
   MAP_PASS("Debug Render Time", PASS_RENDER_TIME);
@@ -562,12 +551,26 @@ static BlenderPassInfo get_blender_pass_info(BL::RenderPass &b_pass)
   MAP_PASS("Debug Sample Count", PASS_SAMPLE_COUNT);
 
   if (string_startswith(name, cryptomatte_prefix)) {
-    return BlenderPassInfo(PASS_CRYPTOMATTE);
+    return PASS_CRYPTOMATTE;
   }
 
 #undef MAP_PASS
 
-  return BlenderPassInfo(PASS_NONE);
+  return PASS_NONE;
+}
+
+static Pass *pass_add(Scene *scene,
+                      PassType type,
+                      const char *name,
+                      PassMode mode = PassMode::DENOISED)
+{
+  Pass *pass = scene->create_node<Pass>();
+
+  pass->type = type;
+  pass->name = name;
+  pass->mode = mode;
+
+  return pass;
 }
 
 void BlenderSync::sync_render_passes(BL::RenderLayer &b_rlay, BL::ViewLayer &b_view_layer)
@@ -576,28 +579,28 @@ void BlenderSync::sync_render_passes(BL::RenderLayer &b_rlay, BL::ViewLayer &b_v
 
   bool add_denoised_passes = false;
 
-  vector<Pass> passes;
+  /* Delete all existing passes. */
+  set<Pass *> clear_passes(scene->passes.begin(), scene->passes.end());
+  scene->delete_nodes(clear_passes);
+
+  /* Always add combined pass. */
+  pass_add(scene, PASS_COMBINED, "Combined");
 
   /* loop over passes */
   for (BL::RenderPass &b_pass : b_rlay.passes) {
-    const BlenderPassInfo pass_info = get_blender_pass_info(b_pass);
+    const PassType pass_type = get_blender_pass_type(b_pass);
 
-    if (pass_info.type == PASS_NONE) {
+    if (pass_type == PASS_NONE) {
       LOG(ERROR) << "Unknown pass " << b_pass.name();
       continue;
     }
 
-    if (pass_info.type == PASS_MOTION &&
+    if (pass_type == PASS_MOTION &&
         (b_view_layer.use_motion_blur() && b_scene.render().use_motion_blur())) {
       continue;
     }
 
-    if (pass_info.mode == PassMode::DENOISED) {
-      Pass::add_denoising_read(passes, pass_info.type, b_pass.name().c_str());
-    }
-    else {
-      Pass::add(passes, pass_info.type, b_pass.name().c_str());
-    }
+    pass_add(scene, pass_type, b_pass.name().c_str());
   }
 
   PointerRNA crl = RNA_pointer_get(&b_view_layer.ptr, "cycles");
@@ -606,45 +609,45 @@ void BlenderSync::sync_render_passes(BL::RenderLayer &b_rlay, BL::ViewLayer &b_v
     add_denoised_passes = true;
 
     b_engine.add_pass("Noisy Image", 4, "RGBA", b_view_layer.name().c_str());
-    Pass::add(passes, PASS_COMBINED, "Noisy Image");
+    pass_add(scene, PASS_COMBINED, "Noisy Image", PassMode::NOISY);
 
     b_engine.add_pass("Denoising Normal", 3, "XYZ", b_view_layer.name().c_str());
-    Pass::add(passes, PASS_DENOISING_NORMAL, "Denoising Normal");
+    pass_add(scene, PASS_DENOISING_NORMAL, "Denoising Normal", PassMode::NOISY);
 
     b_engine.add_pass("Denoising Albedo", 3, "RGB", b_view_layer.name().c_str());
-    Pass::add(passes, PASS_DENOISING_ALBEDO, "Denoising Albedo");
+    pass_add(scene, PASS_DENOISING_ALBEDO, "Denoising Albedo", PassMode::NOISY);
   }
   else if (get_boolean(cscene, "use_denoising")) {
     add_denoised_passes = true;
 
     b_engine.add_pass("Noisy Image", 4, "RGBA", b_view_layer.name().c_str());
-    Pass::add(passes, PASS_COMBINED, "Noisy Image");
+    pass_add(scene, PASS_COMBINED, "Noisy Image", PassMode::NOISY);
   }
 
   if (get_boolean(crl, "pass_debug_render_time")) {
     b_engine.add_pass("Debug Render Time", 1, "X", b_view_layer.name().c_str());
-    Pass::add(passes, PASS_RENDER_TIME, "Debug Render Time");
+    pass_add(scene, PASS_RENDER_TIME, "Debug Render Time");
   }
   if (get_boolean(crl, "pass_debug_sample_count")) {
     b_engine.add_pass("Debug Sample Count", 1, "X", b_view_layer.name().c_str());
-    Pass::add(passes, PASS_SAMPLE_COUNT, "Debug Sample Count");
+    pass_add(scene, PASS_SAMPLE_COUNT, "Debug Sample Count");
   }
   if (get_boolean(crl, "use_pass_volume_direct")) {
     b_engine.add_pass("VolumeDir", 3, "RGB", b_view_layer.name().c_str());
-    Pass::add(passes, PASS_VOLUME_DIRECT, "VolumeDir");
+    pass_add(scene, PASS_VOLUME_DIRECT, "VolumeDir");
   }
   if (get_boolean(crl, "use_pass_volume_indirect")) {
     b_engine.add_pass("VolumeInd", 3, "RGB", b_view_layer.name().c_str());
-    Pass::add(passes, PASS_VOLUME_INDIRECT, "VolumeInd");
+    pass_add(scene, PASS_VOLUME_INDIRECT, "VolumeInd");
   }
 
   if (get_boolean(crl, "use_pass_shadow_catcher")) {
     b_engine.add_pass("Shadow Catcher", 3, "RGB", b_view_layer.name().c_str());
-    Pass::add_denoising_read(passes, PASS_SHADOW_CATCHER, "Shadow Catcher");
+    pass_add(scene, PASS_SHADOW_CATCHER, "Shadow Catcher");
 
     if (add_denoised_passes) {
       b_engine.add_pass("Noisy Shadow Catcher", 3, "RGB", b_view_layer.name().c_str());
-      Pass::add(passes, PASS_SHADOW_CATCHER, "Noisy Shadow Catcher");
+      pass_add(scene, PASS_SHADOW_CATCHER, "Noisy Shadow Catcher", PassMode::NOISY);
     }
   }
 
@@ -657,7 +660,7 @@ void BlenderSync::sync_render_passes(BL::RenderLayer &b_rlay, BL::ViewLayer &b_v
     for (int i = 0; i < crypto_depth; i++) {
       string passname = cryptomatte_prefix + string_printf("Object%02d", i);
       b_engine.add_pass(passname.c_str(), 4, "RGBA", b_view_layer.name().c_str());
-      Pass::add(passes, PASS_CRYPTOMATTE, passname.c_str());
+      pass_add(scene, PASS_CRYPTOMATTE, passname.c_str());
     }
     cryptomatte_passes = (CryptomatteType)(cryptomatte_passes | CRYPT_OBJECT);
   }
@@ -665,7 +668,7 @@ void BlenderSync::sync_render_passes(BL::RenderLayer &b_rlay, BL::ViewLayer &b_v
     for (int i = 0; i < crypto_depth; i++) {
       string passname = cryptomatte_prefix + string_printf("Material%02d", i);
       b_engine.add_pass(passname.c_str(), 4, "RGBA", b_view_layer.name().c_str());
-      Pass::add(passes, PASS_CRYPTOMATTE, passname.c_str());
+      pass_add(scene, PASS_CRYPTOMATTE, passname.c_str());
     }
     cryptomatte_passes = (CryptomatteType)(cryptomatte_passes | CRYPT_MATERIAL);
   }
@@ -673,7 +676,7 @@ void BlenderSync::sync_render_passes(BL::RenderLayer &b_rlay, BL::ViewLayer &b_v
     for (int i = 0; i < crypto_depth; i++) {
       string passname = cryptomatte_prefix + string_printf("Asset%02d", i);
       b_engine.add_pass(passname.c_str(), 4, "RGBA", b_view_layer.name().c_str());
-      Pass::add(passes, PASS_CRYPTOMATTE, passname.c_str());
+      pass_add(scene, PASS_CRYPTOMATTE, passname.c_str());
     }
     cryptomatte_passes = (CryptomatteType)(cryptomatte_passes | CRYPT_ASSET);
   }
@@ -694,17 +697,15 @@ void BlenderSync::sync_render_passes(BL::RenderLayer &b_rlay, BL::ViewLayer &b_v
 
     if (is_color) {
       b_engine.add_pass(name.c_str(), 4, "RGBA", b_view_layer.name().c_str());
-      Pass::add(passes, PASS_AOV_COLOR, name.c_str());
+      pass_add(scene, PASS_AOV_COLOR, name.c_str());
     }
     else {
       b_engine.add_pass(name.c_str(), 1, "X", b_view_layer.name().c_str());
-      Pass::add(passes, PASS_AOV_VALUE, name.c_str());
+      pass_add(scene, PASS_AOV_VALUE, name.c_str());
     }
   }
 
   scene->film->set_pass_alpha_threshold(b_view_layer.pass_alpha_threshold());
-  scene->film->assign_and_tag_passes_update(scene, passes);
-  scene->integrator->tag_update(scene, Integrator::UPDATE_ALL);
 }
 
 void BlenderSync::free_data_after_sync(BL::Depsgraph &b_depsgraph)

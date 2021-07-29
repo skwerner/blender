@@ -642,11 +642,11 @@ void BlenderSync::sync_render_passes(BL::RenderLayer &b_rlay, BL::ViewLayer &b_v
   }
 
   if (get_boolean(crl, "use_pass_shadow_catcher")) {
-    b_engine.add_pass("Shadow Catcher", 4, "RGBA", b_view_layer.name().c_str());
+    b_engine.add_pass("Shadow Catcher", 3, "RGB", b_view_layer.name().c_str());
     Pass::add_denoising_read(passes, PASS_SHADOW_CATCHER, "Shadow Catcher");
 
     if (add_denoised_passes) {
-      b_engine.add_pass("Noisy Shadow Catcher", 4, "RGBA", b_view_layer.name().c_str());
+      b_engine.add_pass("Noisy Shadow Catcher", 3, "RGB", b_view_layer.name().c_str());
       Pass::add(passes, PASS_SHADOW_CATCHER, "Noisy Shadow Catcher");
     }
   }

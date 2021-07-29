@@ -779,6 +779,7 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
                                          int pass_noisy,
                                          int pass_denoised,
                                          int pass_sample_count,
+                                         int num_components,
                                          bool use_compositing)
 {
   const int work_index = ccl_global_id(0);
@@ -806,10 +807,13 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
   denoised_pixel[1] *= pixel_scale;
   denoised_pixel[2] *= pixel_scale;
 
-  /* Currently compositing passes are either 3-component (derived by dividing light passes)
-   * or do not have transparency (shadow catcher). Implicitly rely on this logic, as it
-   * simplifies logic and avoids extra memory allocation. */
-  if (!use_compositing) {
+  if (num_components == 3) {
+    /* Pass without alpha channel. */
+  }
+  else if (!use_compositing) {
+    /* Currently compositing passes are either 3-component (derived by dividing light passes)
+     * or do not have transparency (shadow catcher). Implicitly rely on this logic, as it
+     * simplifies logic and avoids extra memory allocation. */
     const float *noisy_pixel = buffer + pass_noisy;
     denoised_pixel[3] = noisy_pixel[3];
   }

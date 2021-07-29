@@ -214,7 +214,7 @@ def list_render_passes(scene, srl):
     if crl.pass_debug_sample_count:            yield ("Debug Sample Count",  "X",    'VALUE')
     if crl.use_pass_volume_direct:             yield ("VolumeDir",           "RGB",  'COLOR')
     if crl.use_pass_volume_indirect:           yield ("VolumeInd",           "RGB",  'COLOR')
-    if crl.use_pass_shadow_catcher:            yield ("Shadow Catcher",      "RGBA", 'COLOR')
+    if crl.use_pass_shadow_catcher:            yield ("Shadow Catcher",      "RGB",  'COLOR')
 
     # Cryptomatte passes.
     crypto_depth = (srl.pass_cryptomatte_depth + 1) // 2

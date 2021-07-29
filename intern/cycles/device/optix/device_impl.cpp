@@ -598,6 +598,7 @@ class OptiXDevice::DenoisePass {
     denoised_offset = buffer_params.get_pass_offset(type, PassMode::DENOISED);
 
     const PassInfo pass_info = Pass::get_info(type);
+    num_components = pass_info.num_components;
     use_compositing = pass_info.use_compositing;
     use_denoising_albedo = pass_info.use_denoising_albedo;
   }
@@ -607,6 +608,7 @@ class OptiXDevice::DenoisePass {
   int noisy_offset;
   int denoised_offset;
 
+  int num_components;
   bool use_compositing;
   bool use_denoising_albedo;
 };
@@ -797,6 +799,7 @@ bool OptiXDevice::denoise_filter_color_postprocess(DenoiseContext &context,
                   const_cast<int *>(&pass.noisy_offset),
                   const_cast<int *>(&pass.denoised_offset),
                   const_cast<int *>(&context.pass_sample_count),
+                  const_cast<int *>(&pass.num_components),
                   const_cast<bool *>(&pass.use_compositing)};
 
   return denoiser_.queue.enqueue(DEVICE_KERNEL_FILTER_COLOR_POSTPROCESS, work_size, args);

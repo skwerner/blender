@@ -129,6 +129,7 @@ class OIDNPass {
     need_scale = (type == PASS_DENOISING_ALBEDO || type == PASS_DENOISING_NORMAL);
 
     const PassInfo pass_info = Pass::get_info(type);
+    num_components = pass_info.num_components;
     use_compositing = pass_info.use_compositing;
     use_denoising_albedo = pass_info.use_denoising_albedo;
   }
@@ -145,6 +146,7 @@ class OIDNPass {
 
   PassType type = PASS_NONE;
   PassMode mode = PassMode::NOISY;
+  int num_components = -1;
   bool use_compositing = false;
   bool use_denoising_albedo = true;
 
@@ -426,6 +428,8 @@ class OIDNDenoiseContext {
    * back. */
   void postprocess_output(const OIDNPass &oidn_input_pass, const OIDNPass &oidn_output_pass)
   {
+    kernel_assert(oidn_input_pass.num_components == oidn_output_pass.num_components);
+
     const int64_t x = buffer_params_.full_x;
     const int64_t y = buffer_params_.full_y;
     const int64_t width = buffer_params_.width;
@@ -459,10 +463,13 @@ class OIDNDenoiseContext {
           denoised_pixel[2] = denoised_pixel[2] * pixel_scale;
         }
 
-        /* Currently compositing passes are either 3-component (derived by dividing light passes)
-         * or do not have transparency (shadow catcher). Implicitly rely on this logic, as it
-         * simplifies logic and avoids extra memory allocation. */
-        if (!oidn_input_pass.use_compositing) {
+        if (oidn_output_pass.num_components == 3) {
+          /* Pass without alpha channel. */
+        }
+        else if (!oidn_input_pass.use_compositing) {
+          /* Currently compositing passes are either 3-component (derived by dividing light passes)
+           * or do not have transparency (shadow catcher). Implicitly rely on this logic, as it
+           * simplifies logic and avoids extra memory allocation. */
           const float *noisy_pixel = buffer_pixel + oidn_input_pass.offset;
           denoised_pixel[3] = noisy_pixel[3];
         }

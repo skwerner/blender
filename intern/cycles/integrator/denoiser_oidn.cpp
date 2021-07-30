@@ -201,6 +201,7 @@ class OIDNDenoiseContext {
     set_pass(oidn_filter, oidn_pass);
     set_output_pass(oidn_filter, oidn_pass);
     oidn_filter.commit();
+    oidn_filter.execute();
   }
 
   /* Make pixels of a guiding pass available by the denoiser. */

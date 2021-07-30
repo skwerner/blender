@@ -167,6 +167,13 @@ bool GeometryManager::displace(
     return false;
   }
 
+  const size_t num_verts = mesh->verts.size();
+  const size_t num_triangles = mesh->num_triangles();
+
+  if (num_triangles == 0) {
+    return false;
+  }
+
   string msg = string_printf("Computing Displacement %s", mesh->name.c_str());
   progress.set_status("Updating Mesh", msg);
 
@@ -184,9 +191,6 @@ bool GeometryManager::displace(
   device->const_copy_to("__data", &dscene->data, sizeof(dscene->data));
 
   /* Evaluate shader on device. */
-  const size_t num_verts = mesh->verts.size();
-  const size_t num_triangles = mesh->num_triangles();
-
   ShaderEval shader_eval(device, progress);
   if (!shader_eval.eval(SHADER_EVAL_DISPLACE,
                         num_verts,

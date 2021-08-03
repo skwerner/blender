@@ -620,32 +620,32 @@ void Scene::update_passes()
 static void log_kernel_features(const uint features)
 {
   VLOG(2) << "Requested features:\n";
-  VLOG(2) << "Use BSDF" << string_from_bool(features & KERNEL_FEATURE_NODE_BSDF) << "\n";
-  VLOG(2) << "Use Principled BSDF" << string_from_bool(features & KERNEL_FEATURE_PRINCIPLED)
+  VLOG(2) << "Use BSDF " << string_from_bool(features & KERNEL_FEATURE_NODE_BSDF) << "\n";
+  VLOG(2) << "Use Principled BSDF " << string_from_bool(features & KERNEL_FEATURE_PRINCIPLED)
           << "\n";
-  VLOG(2) << "Use Emission" << string_from_bool(features & KERNEL_FEATURE_NODE_EMISSION) << "\n";
-  VLOG(2) << "Use Volume" << string_from_bool(features & KERNEL_FEATURE_NODE_VOLUME) << "\n";
-  VLOG(2) << "Use Hair" << string_from_bool(features & KERNEL_FEATURE_NODE_HAIR) << "\n";
-  VLOG(2) << "Use Bump" << string_from_bool(features & KERNEL_FEATURE_NODE_BUMP) << "\n";
-  VLOG(2) << "Use Voronoi" << string_from_bool(features & KERNEL_FEATURE_NODE_VORONOI_EXTRA)
+  VLOG(2) << "Use Emission " << string_from_bool(features & KERNEL_FEATURE_NODE_EMISSION) << "\n";
+  VLOG(2) << "Use Volume " << string_from_bool(features & KERNEL_FEATURE_NODE_VOLUME) << "\n";
+  VLOG(2) << "Use Hair " << string_from_bool(features & KERNEL_FEATURE_NODE_HAIR) << "\n";
+  VLOG(2) << "Use Bump " << string_from_bool(features & KERNEL_FEATURE_NODE_BUMP) << "\n";
+  VLOG(2) << "Use Voronoi " << string_from_bool(features & KERNEL_FEATURE_NODE_VORONOI_EXTRA)
           << "\n";
-  VLOG(2) << "Use Shader Raytrace" << string_from_bool(features & KERNEL_FEATURE_NODE_RAYTRACE)
+  VLOG(2) << "Use Shader Raytrace " << string_from_bool(features & KERNEL_FEATURE_NODE_RAYTRACE)
           << "\n";
-  VLOG(2) << "Use Transparent" << string_from_bool(features & KERNEL_FEATURE_TRANSPARENT) << "\n";
-  VLOG(2) << "Use Denoising" << string_from_bool(features & KERNEL_FEATURE_DENOISING) << "\n";
-  VLOG(2) << "Use Path Tracing" << string_from_bool(features & KERNEL_FEATURE_PATH_TRACING)
+  VLOG(2) << "Use Transparent " << string_from_bool(features & KERNEL_FEATURE_TRANSPARENT) << "\n";
+  VLOG(2) << "Use Denoising " << string_from_bool(features & KERNEL_FEATURE_DENOISING) << "\n";
+  VLOG(2) << "Use Path Tracing " << string_from_bool(features & KERNEL_FEATURE_PATH_TRACING)
           << "\n";
-  VLOG(2) << "Use Hair" << string_from_bool(features & KERNEL_FEATURE_HAIR) << "\n";
-  VLOG(2) << "Use Object Motion" << string_from_bool(features & KERNEL_FEATURE_OBJECT_MOTION)
+  VLOG(2) << "Use Hair " << string_from_bool(features & KERNEL_FEATURE_HAIR) << "\n";
+  VLOG(2) << "Use Object Motion " << string_from_bool(features & KERNEL_FEATURE_OBJECT_MOTION)
           << "\n";
-  VLOG(2) << "Use Camera Motion" << string_from_bool(features & KERNEL_FEATURE_CAMERA_MOTION)
+  VLOG(2) << "Use Camera Motion " << string_from_bool(features & KERNEL_FEATURE_CAMERA_MOTION)
           << "\n";
-  VLOG(2) << "Use Baking" << string_from_bool(features & KERNEL_FEATURE_BAKING) << "\n";
-  VLOG(2) << "Use Subsurface" << string_from_bool(features & KERNEL_FEATURE_SUBSURFACE) << "\n";
-  VLOG(2) << "Use Volume" << string_from_bool(features & KERNEL_FEATURE_VOLUME) << "\n";
-  VLOG(2) << "Use Patch Evaluation" << string_from_bool(features & KERNEL_FEATURE_PATCH_EVALUATION)
-          << "\n";
-  VLOG(2) << "Use Shadow Catcher" << string_from_bool(features & KERNEL_FEATURE_SHADOW_CATCHER)
+  VLOG(2) << "Use Baking " << string_from_bool(features & KERNEL_FEATURE_BAKING) << "\n";
+  VLOG(2) << "Use Subsurface " << string_from_bool(features & KERNEL_FEATURE_SUBSURFACE) << "\n";
+  VLOG(2) << "Use Volume " << string_from_bool(features & KERNEL_FEATURE_VOLUME) << "\n";
+  VLOG(2) << "Use Patch Evaluation "
+          << string_from_bool(features & KERNEL_FEATURE_PATCH_EVALUATION) << "\n";
+  VLOG(2) << "Use Shadow Catcher " << string_from_bool(features & KERNEL_FEATURE_SHADOW_CATCHER)
           << "\n";
 }
 

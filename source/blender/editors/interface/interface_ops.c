@@ -1557,7 +1557,7 @@ static int edittranslation_exec(bContext *C, wmOperator *op)
   }
   /* Try to find a valid po file for current language... */
   edittranslation_find_po_file(root, uilng, popath, FILE_MAX);
-  /* printf("po path: %s\n", popath); */
+  // printf("po path: %s\n", popath);
   if (popath[0] == '\0') {
     BKE_reportf(
         op->reports, RPT_ERROR, "No valid po found for language '%s' under %s", uilng, root);
@@ -1759,10 +1759,7 @@ static void UI_OT_button_string_clear(wmOperatorType *ot)
 /** \name Drop Color Operator
  * \{ */
 
-bool UI_drop_color_poll(struct bContext *C,
-                        wmDrag *drag,
-                        const wmEvent *UNUSED(event),
-                        const char **UNUSED(r_tooltip))
+bool UI_drop_color_poll(struct bContext *C, wmDrag *drag, const wmEvent *UNUSED(event))
 {
   /* should only return true for regions that include buttons, for now
    * return true always */

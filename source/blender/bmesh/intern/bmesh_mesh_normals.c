@@ -50,6 +50,8 @@ static void bm_edge_tag_from_smooth(const float (*fnos)[3],
                                     BMEdge *e,
                                     const float split_angle_cos);
 
+static void bm_edge_tag_clear(BMEdge *e);
+
 /* -------------------------------------------------------------------- */
 /** \name Update Vertex & Face Normals
  * \{ */
@@ -754,7 +756,7 @@ static int bm_mesh_loops_calc_normals_for_loop(BMesh *bm,
             /* Fix/update all clnors of this fan with computed average value. */
 
             /* Prints continuously when merge custom normals, so commenting. */
-            /* printf("Invalid clnors in this fan!\n"); */
+            // printf("Invalid clnors in this fan!\n");
 
             while ((clnor = BLI_SMALLSTACK_POP(clnors))) {
               // print_v2("org clnor", clnor);
@@ -820,9 +822,10 @@ BLI_INLINE bool bm_edge_is_smooth_no_angle_test(const BMEdge *e,
                                                 const BMLoop *l_a,
                                                 const BMLoop *l_b)
 {
+  BLI_assert(l_a->radial_next == l_b);
   return (
       /* The face is manifold. */
-      (l_a->radial_next == l_b) &&
+      (l_b->radial_next == l_a) &&
       /* Faces have winding that faces the same way. */
       (l_a->v != l_b->v) &&
       /* The edge is smooth. */
@@ -861,6 +864,13 @@ static void bm_edge_tag_from_smooth(const float (*fnos)[3], BMEdge *e, const flo
   else {
     *hflag_p = *hflag_p & ~BM_ELEM_TAG;
   }
+}
+
+static void bm_edge_tag_clear(BMEdge *e)
+{
+  /* No need for atomics here as this is a single byte. */
+  char *hflag_p = &e->head.hflag;
+  *hflag_p = *hflag_p & ~BM_ELEM_TAG;
 }
 
 /**
@@ -944,8 +954,12 @@ static void bm_mesh_loops_calc_normals_for_vert_with_clnors(BMesh *bm,
         continue;
       }
 
+      /* Always set as #bm_mesh_loops_calc_normals_for_loop checks the tag. */
       if (do_edge_tag) {
         bm_edge_tag_from_smooth(fnos, e_curr_iter, split_angle_cos);
+      }
+      else {
+        bm_edge_tag_clear(e_curr_iter);
       }
 
       do { /* Radial loops. */
@@ -1052,8 +1066,12 @@ static void bm_mesh_loops_calc_normals_for_vert_without_clnors(
       continue;
     }
 
+    /* Always set as #bm_mesh_loops_calc_normals_for_loop checks the tag. */
     if (do_edge_tag) {
       bm_edge_tag_from_smooth(fnos, e_curr_iter, split_angle_cos);
+    }
+    else {
+      bm_edge_tag_clear(e_curr_iter);
     }
 
     do { /* Radial loops. */
@@ -1816,8 +1834,8 @@ void BM_lnorspace_invalidate(BMesh *bm, const bool do_invalidate_all)
   BM_mesh_elem_index_ensure(bm, BM_VERT);
 
   /* When we affect a given vertex, we may affect following smooth fans:
-   *     - all smooth fans of said vertex;
-   *     - all smooth fans of all immediate loop-neighbors vertices;
+   * - all smooth fans of said vertex;
+   * - all smooth fans of all immediate loop-neighbors vertices;
    * This can be simplified as 'all loops of selected vertices and their immediate neighbors'
    * need to be tagged for update.
    */

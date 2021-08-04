@@ -181,7 +181,8 @@ void Integrator::device_update(Device *device, DeviceScene *dscene, Scene *scene
                                            FLT_MAX :
                                            sample_clamp_indirect * 3.0f;
 
-  kintegrator->sampling_pattern = sampling_pattern;
+  kintegrator->sampling_pattern = (use_adaptive_sampling) ? SAMPLING_PATTERN_PMJ :
+                                                            sampling_pattern;
 
   if (light_sampling_threshold > 0.0f) {
     kintegrator->light_inv_rr_threshold = 1.0f / light_sampling_threshold;
@@ -198,7 +199,7 @@ void Integrator::device_update(Device *device, DeviceScene *dscene, Scene *scene
   dimensions = min(dimensions, SOBOL_MAX_DIMENSIONS);
 
   if (need_update_lut) {
-    if (sampling_pattern == SAMPLING_PATTERN_SOBOL) {
+    if (kintegrator->sampling_pattern == SAMPLING_PATTERN_SOBOL) {
       uint *directions = dscene->sample_pattern_lut.alloc(SOBOL_BITS * dimensions);
 
       sobol_generate_direction_vectors((uint(*)[SOBOL_BITS])directions, dimensions);
@@ -263,7 +264,7 @@ AdaptiveSampling Integrator::get_adaptive_sampling() const
 {
   AdaptiveSampling adaptive_sampling;
 
-  adaptive_sampling.use = (get_sampling_pattern() == SAMPLING_PATTERN_PMJ);
+  adaptive_sampling.use = use_adaptive_sampling;
 
   if (!adaptive_sampling.use) {
     return adaptive_sampling;

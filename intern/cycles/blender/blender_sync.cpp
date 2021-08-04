@@ -335,15 +335,11 @@ void BlenderSync::sync_integrator(BL::ViewLayer &b_view_layer, bool background)
 
   integrator->set_light_sampling_threshold(get_float(cscene, "light_sampling_threshold"));
 
-  const bool use_adaptive_sampling = RNA_boolean_get(&cscene, "use_adaptive_sampling");
-
   SamplingPattern sampling_pattern = (SamplingPattern)get_enum(
       cscene, "sampling_pattern", SAMPLING_NUM_PATTERNS, SAMPLING_PATTERN_SOBOL);
-  if (use_adaptive_sampling) {
-    sampling_pattern = SAMPLING_PATTERN_PMJ;
-  }
   integrator->set_sampling_pattern(sampling_pattern);
 
+  const bool use_adaptive_sampling = RNA_boolean_get(&cscene, "use_adaptive_sampling");
   integrator->set_use_adaptive_sampling(use_adaptive_sampling);
   integrator->set_adaptive_threshold(get_float(cscene, "adaptive_threshold"));
 

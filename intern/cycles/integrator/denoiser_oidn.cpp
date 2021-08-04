@@ -187,6 +187,12 @@ class OIDNDenoiseContext {
     /* Filter the beauty image. */
     oidn_filter.execute();
 
+    /* Check for errors. */
+    const char *error_message;
+    if (oidn_device.getError(error_message) != oidn::Error::None) {
+      LOG(ERROR) << "OpenImageDenoise error: " << error_message;
+    }
+
     postprocess_output(oidn_color_pass, oidn_output_pass);
   }
 

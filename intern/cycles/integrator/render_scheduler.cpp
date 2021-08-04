@@ -156,6 +156,11 @@ void RenderScheduler::reset(const BufferParams &buffer_params, int num_samples)
   rebalance_time_.reset();
 }
 
+void RenderScheduler::reset_for_next_tile()
+{
+  reset(buffer_params_, num_samples_);
+}
+
 bool RenderScheduler::render_work_reschedule_on_converge(RenderWork &render_work)
 {
   /* Move to the next resolution divider. Assume adaptive filtering is not needed during

@@ -43,9 +43,7 @@
 CCL_NAMESPACE_BEGIN
 
 Session::Session(const SessionParams &params_, const SceneParams &scene_params)
-    : params(params_),
-      tile_manager_(make_int2(4096, 4096)),
-      render_scheduler_(params.headless, params.background, params.pixel_size)
+    : params(params_), render_scheduler_(params.headless, params.background, params.pixel_size)
 {
   TaskScheduler::init(params.threads);
 
@@ -245,6 +243,7 @@ RenderWork Session::run_update_for_next_iteration()
   thread_scoped_lock reset_lock(delayed_reset_.mutex);
 
   bool have_tiles = true;
+  bool switched_to_new_tile = false;
 
   if (delayed_reset_.do_reset) {
     thread_scoped_lock buffers_lock(buffers_mutex_);
@@ -252,6 +251,7 @@ RenderWork Session::run_update_for_next_iteration()
 
     /* After reset make sure the tile manager is at the first big tile. */
     have_tiles = tile_manager_.next();
+    switched_to_new_tile = true;
   }
 
   /* Update number of samples in the integrator.
@@ -280,12 +280,30 @@ RenderWork Session::run_update_for_next_iteration()
       break;
     }
 
-    /* TODO(sergey): Add support of the multiple big tile. */
-    break;
+    have_tiles = tile_manager_.next();
+    if (have_tiles) {
+      render_scheduler_.reset_for_next_tile();
+      switched_to_new_tile = true;
+    }
   }
 
   if (render_work) {
     scoped_timer update_timer;
+
+    if (switched_to_new_tile) {
+      BufferParams tile_params = buffer_params_;
+
+      const Tile &tile = tile_manager_.get_current_tile();
+      tile_params.width = tile.width;
+      tile_params.height = tile.height;
+      tile_params.full_x = tile.x + buffer_params_.full_x;
+      tile_params.full_y = tile.y + buffer_params_.full_y;
+      tile_params.full_width = buffer_params_.full_width;
+      tile_params.full_height = buffer_params_.full_height;
+      tile_params.update_offset_stride();
+
+      path_trace_->reset(tile_params);
+    }
 
     const int resolution = render_work.resolution_divider;
     const int width = max(1, buffer_params_.full_width / resolution);
@@ -349,8 +367,9 @@ void Session::do_delayed_reset()
   buffer_params_.update_passes(scene->passes);
 
   render_scheduler_.reset(buffer_params_, delayed_reset_.samples);
-  path_trace_->reset(buffer_params_);
-  tile_manager_.reset(buffer_params_);
+
+  /* TODO(sergey): Use real big tile size. */
+  tile_manager_.reset(buffer_params_, make_int2(buffer_params_.width, buffer_params_.height));
 
   progress.reset_sample();
 
@@ -570,7 +589,7 @@ int2 Session::get_render_tile_offset() const
 {
   const Tile &tile = tile_manager_.get_current_tile();
 
-  return make_int2(tile.x - tile.full_x, tile.y - tile.full_y);
+  return make_int2(tile.x, tile.y);
 }
 
 bool Session::copy_render_tile_from_device()

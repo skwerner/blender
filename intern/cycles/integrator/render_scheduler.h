@@ -126,6 +126,11 @@ class RenderScheduler {
    * Resets current rendered state, as well as scheduling information. */
   void reset(const BufferParams &buffer_params, int num_samples);
 
+  /* Reset scheduler upon switching to a next tile.
+   * Will keep the same number of samples and full-frame render parameters, but will reset progress
+   * and allow schedule renders works from the beginning of the new tile. */
+  void reset_for_next_tile();
+
   /* Reschedule adaptive sampling work when all pixels did converge.
    * If there is nothing else to be done for the adaptive sampling (pixels did converge to the
    * final threshold) then false is returned and the render scheduler will stop scheduling path

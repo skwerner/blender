@@ -27,8 +27,6 @@ class Tile {
   int x = 0, y = 0;
   int width = 0, height = 0;
 
-  int full_x = 0, full_y = 0;
-
   Tile()
   {
   }
@@ -38,9 +36,13 @@ class Tile {
 
 class TileManager {
  public:
-  explicit TileManager(int2 tile_size);
+  TileManager() = default;
 
-  void reset(BufferParams &params);
+  /* Reset current progress and start new rendering of the full-frame parameters in tiles of the
+   * given size. */
+  /* TODO(sergey): Consider using tile area instead of exact size to help dealing with extreme
+   * cases of stretched renders. */
+  void reset(const BufferParams &params, int2 tile_size);
 
   bool next();
   bool done();
@@ -48,7 +50,10 @@ class TileManager {
   const Tile &get_current_tile() const;
 
  protected:
-  int2 tile_size_;
+  int2 tile_size_ = make_int2(0, 0);
+  int num_tiles_x_ = 0;
+  int num_tiles_y_ = 0;
+
   BufferParams buffer_params_;
 
   struct {

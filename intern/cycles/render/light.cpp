@@ -129,6 +129,7 @@ NODE_DEFINE(Light)
 
   SOCKET_BOOLEAN(cast_shadow, "Cast Shadow", true);
   SOCKET_BOOLEAN(use_mis, "Use Mis", false);
+  SOCKET_BOOLEAN(use_camera, "Use Camera", true);
   SOCKET_BOOLEAN(use_diffuse, "Use Diffuse", true);
   SOCKET_BOOLEAN(use_glossy, "Use Glossy", true);
   SOCKET_BOOLEAN(use_transmission, "Use Transmission", true);
@@ -137,6 +138,7 @@ NODE_DEFINE(Light)
   SOCKET_INT(max_bounces, "Max Bounces", 1024);
   SOCKET_UINT(random_id, "Random ID", 0);
 
+  SOCKET_BOOLEAN(is_shadow_catcher, "Shadow Catcher", true);
   SOCKET_BOOLEAN(is_portal, "Is Portal", false);
   SOCKET_BOOLEAN(is_enabled, "Is Enabled", true);
 
@@ -341,6 +343,9 @@ void LightManager::device_update_distribution(Device *,
     int object_id = j;
     int shader_flag = 0;
 
+    if (!(object->get_visibility() & PATH_RAY_CAMERA)) {
+      shader_flag |= SHADER_EXCLUDE_CAMERA;
+    }
     if (!(object->get_visibility() & PATH_RAY_DIFFUSE)) {
       shader_flag |= SHADER_EXCLUDE_DIFFUSE;
       use_light_visibility = true;
@@ -356,6 +361,9 @@ void LightManager::device_update_distribution(Device *,
     if (!(object->get_visibility() & PATH_RAY_VOLUME_SCATTER)) {
       shader_flag |= SHADER_EXCLUDE_SCATTER;
       use_light_visibility = true;
+    }
+    if (!(object->get_is_shadow_catcher())) {
+      shader_flag |= SHADER_EXCLUDE_SHADOW_CATCHER;
     }
 
     size_t mesh_num_triangles = mesh->num_triangles();
@@ -749,6 +757,9 @@ void LightManager::device_update_points(Device *, DeviceScene *dscene, Scene *sc
     if (!light->cast_shadow)
       shader_id &= ~SHADER_CAST_SHADOW;
 
+    if (!light->use_camera) {
+      shader_id |= SHADER_EXCLUDE_CAMERA;
+    }
     if (!light->use_diffuse) {
       shader_id |= SHADER_EXCLUDE_DIFFUSE;
       use_light_visibility = true;
@@ -764,6 +775,9 @@ void LightManager::device_update_points(Device *, DeviceScene *dscene, Scene *sc
     if (!light->use_scatter) {
       shader_id |= SHADER_EXCLUDE_SCATTER;
       use_light_visibility = true;
+    }
+    if (!light->is_shadow_catcher) {
+      shader_id |= SHADER_EXCLUDE_SHADOW_CATCHER;
     }
 
     klights[light_index].type = light->light_type;

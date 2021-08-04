@@ -179,12 +179,15 @@ ccl_device void integrator_intersect_closest(INTEGRATOR_STATE_ARGS)
   }
 
   /* Light intersection for MIS. */
-  if (kernel_data.integrator.use_lamp_mis && !(INTEGRATOR_STATE(path, flag) & PATH_RAY_CAMERA)) {
+  if (kernel_data.integrator.use_lamp_mis) {
     /* NOTE: if we make lights visible to camera rays, we'll need to initialize
      * these in the path_state_init. */
     const int last_type = INTEGRATOR_STATE(isect, type);
+    const int path_flag = INTEGRATOR_STATE(path, flag);
 
-    hit = lights_intersect(kg, &ray, &isect, last_isect_prim, last_isect_object, last_type) || hit;
+    hit = lights_intersect(
+              kg, &ray, &isect, last_isect_prim, last_isect_object, last_type, path_flag) ||
+          hit;
   }
 
   /* Write intersection result into global integrator state memory. */

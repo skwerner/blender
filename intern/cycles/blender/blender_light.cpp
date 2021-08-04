@@ -149,10 +149,12 @@ void BlenderSync::sync_light(BL::Object &b_parent,
 
   /* visibility */
   uint visibility = object_ray_visibility(b_ob);
+  light->set_use_camera((visibility & PATH_RAY_CAMERA) != 0);
   light->set_use_diffuse((visibility & PATH_RAY_DIFFUSE) != 0);
   light->set_use_glossy((visibility & PATH_RAY_GLOSSY) != 0);
   light->set_use_transmission((visibility & PATH_RAY_TRANSMIT) != 0);
   light->set_use_scatter((visibility & PATH_RAY_VOLUME_SCATTER) != 0);
+  light->set_is_shadow_catcher(b_ob.is_shadow_catcher());
 
   /* tag */
   light->tag_update(scene);

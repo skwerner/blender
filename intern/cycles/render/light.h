@@ -69,11 +69,13 @@ class Light : public Node {
 
   NODE_SOCKET_API(bool, cast_shadow)
   NODE_SOCKET_API(bool, use_mis)
+  NODE_SOCKET_API(bool, use_camera)
   NODE_SOCKET_API(bool, use_diffuse)
   NODE_SOCKET_API(bool, use_glossy)
   NODE_SOCKET_API(bool, use_transmission)
   NODE_SOCKET_API(bool, use_scatter)
 
+  NODE_SOCKET_API(bool, is_shadow_catcher)
   NODE_SOCKET_API(bool, is_portal)
   NODE_SOCKET_API(bool, is_enabled)
 

@@ -149,6 +149,7 @@ ccl_device_inline void integrate_distant_lights(INTEGRATOR_STATE_ARGS,
              ((path_flag & (PATH_RAY_GLOSSY | PATH_RAY_REFLECT)) ==
               (PATH_RAY_GLOSSY | PATH_RAY_REFLECT))) ||
             ((ls.shader & SHADER_EXCLUDE_TRANSMIT) && (path_flag & PATH_RAY_TRANSMIT)) ||
+            ((ls.shader & SHADER_EXCLUDE_CAMERA) && (path_flag & PATH_RAY_CAMERA)) ||
             ((ls.shader & SHADER_EXCLUDE_SCATTER) && (path_flag & PATH_RAY_VOLUME_SCATTER)))
           return;
       }

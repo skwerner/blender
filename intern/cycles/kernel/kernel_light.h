@@ -50,9 +50,16 @@ ccl_device_inline bool light_sample(const KernelGlobals *kg,
                                     const float randu,
                                     const float randv,
                                     const float3 P,
+                                    const int path_flag,
                                     LightSample *ls)
 {
   const ccl_global KernelLight *klight = &kernel_tex_fetch(__lights, lamp);
+  if (path_flag & PATH_RAY_SHADOW_CATCHER_PASS) {
+    if (klight->shader_id & SHADER_EXCLUDE_SHADOW_CATCHER) {
+      return false;
+    }
+  }
+
   LightType type = (LightType)klight->type;
   ls->type = type;
   ls->shader = klight->shader_id;
@@ -207,16 +214,31 @@ ccl_device bool lights_intersect(const KernelGlobals *ccl_restrict kg,
                                  Intersection *ccl_restrict isect,
                                  const int last_prim,
                                  const int last_object,
-                                 const int last_type)
+                                 const int last_type,
+                                 const int path_flag)
 {
   for (int lamp = 0; lamp < kernel_data.integrator.num_all_lights; lamp++) {
     const ccl_global KernelLight *klight = &kernel_tex_fetch(__lights, lamp);
+
+    if (path_flag & PATH_RAY_CAMERA) {
+      if (klight->shader_id & SHADER_EXCLUDE_CAMERA) {
+        continue;
+      }
+    }
+    else {
+      if (!(klight->shader_id & SHADER_USE_MIS)) {
+        continue;
+      }
+    }
+
+    if (path_flag & PATH_RAY_SHADOW_CATCHER_PASS) {
+      if (klight->shader_id & SHADER_EXCLUDE_SHADOW_CATCHER) {
+        continue;
+      }
+    }
+
     LightType type = (LightType)klight->type;
     float t = 0.0f, u = 0.0f, v = 0.0f;
-
-    if (!(klight->shader_id & SHADER_USE_MIS)) {
-      continue;
-    }
 
     if (type == LIGHT_POINT || type == LIGHT_SPOT) {
       /* Sphere light. */
@@ -808,7 +830,7 @@ ccl_device_noinline bool light_distribution_sample(const KernelGlobals *kg,
     return false;
   }
 
-  return light_sample<in_volume_segment>(kg, lamp, randu, randv, P, ls);
+  return light_sample<in_volume_segment>(kg, lamp, randu, randv, P, path_flag, ls);
 }
 
 ccl_device_inline bool light_distribution_sample_from_volume_segment(const KernelGlobals *kg,
@@ -848,7 +870,7 @@ ccl_device_inline bool light_distribution_sample_new_position(const KernelGlobal
     return (ls->pdf > 0.0f);
   }
   else {
-    return light_sample<false>(kg, ls->lamp, randu, randv, P, ls);
+    return light_sample<false>(kg, ls->lamp, randu, randv, P, 0, ls);
   }
 }
 

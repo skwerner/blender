@@ -158,6 +158,13 @@ class OIDNDenoiseContext {
       return;
     }
 
+    if (oidn_color_pass.use_denoising_albedo) {
+      if (albedo_replaced_with_fake_) {
+        LOG(ERROR) << "Pass which requires albedo is denoised after fake albedo has been set.";
+        return;
+      }
+    }
+
     OIDNPass oidn_output_pass(buffer_params_, "output", pass_type, PassMode::DENOISED);
     if (oidn_output_pass.offset == PASS_UNUSED) {
       LOG(DFATAL) << "Missing denoised pass " << pass_type_as_string(pass_type);
@@ -360,13 +367,39 @@ class OIDNDenoiseContext {
 
   void set_guiding_passes(oidn::FilterRef &oidn_filter, OIDNPass &oidn_pass)
   {
-    if (oidn_albedo_pass_ && oidn_pass.use_denoising_albedo) {
-      set_pass(oidn_filter, oidn_albedo_pass_);
+    if (oidn_albedo_pass_) {
+      if (oidn_pass.use_denoising_albedo) {
+        set_pass(oidn_filter, oidn_albedo_pass_);
+      }
+      else {
+        /* NOTE: OpenImageDenoise library implicitly expects albedo pass when normal pass has been
+         * provided. */
+        set_fake_albedo_pass(oidn_filter);
+      }
     }
 
     if (oidn_normal_pass_) {
       set_pass(oidn_filter, oidn_normal_pass_);
     }
+  }
+
+  void set_fake_albedo_pass(oidn::FilterRef &oidn_filter)
+  {
+    const int64_t width = buffer_params_.width;
+    const int64_t height = buffer_params_.height;
+
+    if (!albedo_replaced_with_fake_) {
+      const int64_t num_pixel_components = width * height * 3;
+      oidn_albedo_pass_.scaled_buffer.resize(num_pixel_components);
+
+      for (int i = 0; i < num_pixel_components; ++i) {
+        oidn_albedo_pass_.scaled_buffer[i] = 0.5f;
+      }
+
+      albedo_replaced_with_fake_ = true;
+    }
+
+    set_pass(oidn_filter, oidn_albedo_pass_);
   }
 
   void set_output_pass(oidn::FilterRef &oidn_filter, OIDNPass &oidn_pass)
@@ -500,6 +533,11 @@ class OIDNDenoiseContext {
   /* Optional albedo and normal passes, reused by denoising of different pass types. */
   OIDNPass oidn_albedo_pass_;
   OIDNPass oidn_normal_pass_;
+
+  /* For passes which don't need albedo channel for denoising we replace the actual albedo with
+   * the (0.5, 0.5, 0.5). This flag indicates that the real albedo pass has been replaced with
+   * the fake values and denoising of passes which do need albedo can no longer happen. */
+  bool albedo_replaced_with_fake_ = false;
 };
 #endif
 
@@ -521,7 +559,13 @@ void OIDNDenoiser::denoise_buffer(const BufferParams &buffer_params,
     context.read_guiding_passes();
 
     const std::array<PassType, 3> passes = {
-        {PASS_COMBINED, PASS_SHADOW_CATCHER, PASS_SHADOW_CATCHER_MATTE}};
+        {/* Passes which will use real albedo when it is available. */
+         PASS_COMBINED,
+         PASS_SHADOW_CATCHER_MATTE,
+
+         /* Passes which do not need albedo and hence if real is present it needs to become fake.
+          */
+         PASS_SHADOW_CATCHER}};
 
     for (const PassType pass_type : passes) {
       context.denoise_pass(pass_type);

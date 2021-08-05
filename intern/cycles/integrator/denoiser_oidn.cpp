@@ -199,7 +199,8 @@ class OIDNDenoiseContext {
 
     /* Check for errors. */
     const char *error_message;
-    if (oidn_device.getError(error_message) != oidn::Error::None) {
+    const oidn::Error error = oidn_device.getError(error_message);
+    if (error != oidn::Error::None && error != oidn::Error::Cancelled) {
       LOG(ERROR) << "OpenImageDenoise error: " << error_message;
     }
 

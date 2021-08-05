@@ -152,11 +152,21 @@ ccl_device void integrator_intersect_closest(INTEGRATOR_STATE_ARGS)
   integrator_state_read_ray(INTEGRATOR_STATE_PASS, &ray);
   kernel_assert(ray.t != 0.0f);
 
-  uint visibility = path_state_ray_visibility(INTEGRATOR_STATE_PASS);
+  const uint visibility = path_state_ray_visibility(INTEGRATOR_STATE_PASS);
+  const int last_isect_prim = INTEGRATOR_STATE(isect, prim);
+  const int last_isect_object = INTEGRATOR_STATE(isect, object);
 
   /* Trick to use short AO rays to approximate indirect light at the end of the path. */
   if (path_state_ao_bounce(INTEGRATOR_STATE_PASS)) {
     ray.t = kernel_data.integrator.ao_bounces_distance;
+
+    const int last_object = last_isect_object != OBJECT_NONE ?
+                                last_isect_object :
+                                kernel_tex_fetch(__prim_object, last_isect_prim);
+    const float object_ao_distance = kernel_tex_fetch(__objects, last_object).ao_distance;
+    if (object_ao_distance != 0.0f) {
+      ray.t = object_ao_distance;
+    }
   }
 
   /* Scene Intersection. */
@@ -172,11 +182,9 @@ ccl_device void integrator_intersect_closest(INTEGRATOR_STATE_ARGS)
   if (kernel_data.integrator.use_lamp_mis && !(INTEGRATOR_STATE(path, flag) & PATH_RAY_CAMERA)) {
     /* NOTE: if we make lights visible to camera rays, we'll need to initialize
      * these in the path_state_init. */
-    const int last_prim = INTEGRATOR_STATE(isect, prim);
-    const int last_object = INTEGRATOR_STATE(isect, object);
     const int last_type = INTEGRATOR_STATE(isect, type);
 
-    hit = lights_intersect(kg, &ray, &isect, last_prim, last_object, last_type) || hit;
+    hit = lights_intersect(kg, &ray, &isect, last_isect_prim, last_isect_object, last_type) || hit;
   }
 
   /* Write intersection result into global integrator state memory. */

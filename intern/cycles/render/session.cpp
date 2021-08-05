@@ -317,7 +317,7 @@ bool Session::run_wait_for_work(const RenderWork &render_work)
 
   update_status_time(pause, no_work);
 
-  while (true) {
+  while (pause) {
     scoped_timer pause_timer;
     pause_cond.wait(pause_lock);
     if (pause) {
@@ -326,10 +326,6 @@ bool Session::run_wait_for_work(const RenderWork &render_work)
 
     update_status_time(pause, no_work);
     progress.set_update();
-
-    if (!pause) {
-      break;
-    }
   }
 
   return no_work;

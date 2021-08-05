@@ -35,6 +35,22 @@ const char *denoiserTypeToHumanReadable(DenoiserType type);
 
 typedef int DenoiserTypeMask;
 
+enum DenoiserPrefilter {
+  /* Best quality of the result without extra processing time, but requires guiding passes to be
+   * noise-free. */
+  DENOISER_PREFILTER_NONE = 1,
+
+  /* Denoise color and guiding passes together.
+   * Improves quality when guiding passes are noisy using least amount of extra processing time. */
+  DENOISER_PREFILTER_FAST = 2,
+
+  /* Prefilter noisy guiding passes before denoising color.
+   * Improves quality when guiding passes are noisy using extra processing time. */
+  DENOISER_PREFILTER_ACCURATE = 3,
+
+  DENOISER_PREFILTER_NUM,
+};
+
 class DenoiseParams {
  public:
   /* Apply denoiser to image. */
@@ -55,7 +71,7 @@ class DenoiseParams {
   bool use_pass_albedo = true;
   bool use_pass_normal = false;
 
-  bool use_prefilter = false;
+  DenoiserPrefilter prefilter = DENOISER_PREFILTER_FAST;
 
   DenoiseParams() = default;
 
@@ -63,7 +79,7 @@ class DenoiseParams {
   {
     return !(use == other.use && store_passes == other.store_passes && type == other.type &&
              start_sample == other.start_sample && use_pass_albedo == other.use_pass_albedo &&
-             use_pass_normal == other.use_pass_normal && use_prefilter == other.use_prefilter);
+             use_pass_normal == other.use_pass_normal && prefilter == other.prefilter);
   }
 };
 

@@ -85,6 +85,11 @@ NODE_DEFINE(Integrator)
   denoiser_type_enum.insert("optix", DENOISER_OPTIX);
   denoiser_type_enum.insert("openimagedenoise", DENOISER_OPENIMAGEDENOISE);
 
+  static NodeEnum denoiser_prefilter_enum;
+  denoiser_prefilter_enum.insert("none", DENOISER_PREFILTER_NONE);
+  denoiser_prefilter_enum.insert("fast", DENOISER_PREFILTER_FAST);
+  denoiser_prefilter_enum.insert("accurate", DENOISER_PREFILTER_ACCURATE);
+
   /* Construct default parameters, so that they are the source of truth for defaults. */
   const DenoiseParams default_denoise_params;
 
@@ -99,9 +104,10 @@ NODE_DEFINE(Integrator)
   SOCKET_BOOLEAN(use_denoise_pass_normal,
                  "Use Normal Pass for Denoiser Denoiser",
                  default_denoise_params.use_pass_normal);
-  SOCKET_BOOLEAN(use_denoise_prefilter,
-                 "Prefilter noisy guiding passes",
-                 default_denoise_params.use_pass_normal);
+  SOCKET_ENUM(denoiser_prefilter,
+              "Denoiser Type",
+              denoiser_prefilter_enum,
+              default_denoise_params.prefilter);
 
   return type;
 }
@@ -310,7 +316,7 @@ DenoiseParams Integrator::get_denoise_params() const
   denoise_params.use_pass_albedo = use_denoise_pass_albedo;
   denoise_params.use_pass_normal = use_denoise_pass_normal;
 
-  denoise_params.use_prefilter = use_denoise_prefilter;
+  denoise_params.prefilter = denoiser_prefilter;
 
   return denoise_params;
 }

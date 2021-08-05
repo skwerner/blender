@@ -183,7 +183,7 @@ class CYCLES_RENDER_PT_sampling_viewport(CyclesButtonsPanel, Panel):
 
         effective_preview_denoiser = get_effective_preview_denoiser(context)
         if effective_preview_denoiser == 'OPENIMAGEDENOISE':
-            sub_row.prop(cscene, "use_preview_denoising_prefilter", text="Prefilter")
+            sub_row.prop(cscene, "preview_denoising_prefilter", text="Prefilter")
 
 
 class CYCLES_RENDER_PT_sampling_render(CyclesButtonsPanel, Panel):
@@ -846,7 +846,7 @@ class CYCLES_RENDER_PT_denoising(CyclesButtonsPanel, Panel):
             col.prop(cycles_view_layer, "denoising_optix_input_passes")
         elif denoiser == 'OPENIMAGEDENOISE':
             col.prop(cycles_view_layer, "denoising_openimagedenoise_input_passes")
-            col.prop(cycles_view_layer, "use_denoising_prefilter", text="Prefilter")
+            col.prop(cycles_view_layer, "denoising_prefilter", text="Prefilter")
 
 
 class CYCLES_PT_post_processing(CyclesButtonsPanel, Panel):

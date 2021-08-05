@@ -205,6 +205,11 @@ enum_denoising_input_passes = (
     ('RGB_ALBEDO_NORMAL', "Color + Albedo + Normal", "Use color, albedo and normal data as input", 3),
 )
 
+enum_denoising_prefilter = (
+    ('NONE', "None", "No prefiltering, use when guiding passes are noise-free", 1),
+    ('FAST', "Fast", "Denoise color and guiding passes together. Improves quality when guiding passes are noisy using least amount of extra processing time", 2),
+    ('ACCURATE', "Accurate", "Prefilter noisy guiding passes before denoising color. Improves quality when guiding passes are noisy using extra processing time", 3),
+)
 
 def update_render_passes(self, context):
     scene = context.scene
@@ -248,10 +253,11 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         description="Denoise the image in the 3D viewport",
         default=False,
     )
-    use_preview_denoising_prefilter: BoolProperty(
-        name="Use Denoising Prefilter",
+    preview_denoising_prefilter: EnumProperty(
+        name="Denoising Prefilter",
         description="Prefilter noisy guiding (albedo and normal) passes to improve denoising quality when using OpenImageDenoiser",
-        default=False,
+        items=enum_denoising_prefilter,
+        default=2,
     )
 
     denoiser: EnumProperty(
@@ -1222,10 +1228,11 @@ class CyclesRenderLayerSettings(bpy.types.PropertyGroup):
         items=enum_denoising_input_passes,
         default='RGB_ALBEDO_NORMAL',
     )
-    use_denoising_prefilter: BoolProperty(
-        name="Use Denoising Prefilter",
+    denoising_prefilter: EnumProperty(
+        name="Denoising Prefilter",
         description="Prefilter noisy guiding (albedo and normal) passes to improve denoising quality when using OpenImageDenoiser",
-        default=True,
+        items=enum_denoising_prefilter,
+        default=1,
     )
 
     @classmethod

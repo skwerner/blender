@@ -185,7 +185,10 @@ class OIDNDenoiseContext {
     oidn_filter.setProgressMonitorFunction(oidn_progress_monitor_function, denoiser_);
     oidn_filter.set("hdr", true);
     oidn_filter.set("srgb", false);
-    oidn_filter.set("cleanAux", true);
+    if (denoise_params_.prefilter == DENOISER_PREFILTER_NONE ||
+        denoise_params_.prefilter == DENOISER_PREFILTER_ACCURATE) {
+      oidn_filter.set("cleanAux", true);
+    }
     oidn_filter.commit();
 
     filter_guiding_pass_if_needed(oidn_device, oidn_albedo_pass_);
@@ -206,7 +209,8 @@ class OIDNDenoiseContext {
  protected:
   void filter_guiding_pass_if_needed(oidn::DeviceRef &oidn_device, OIDNPass &oidn_pass)
   {
-    if (!denoise_params_.use_prefilter || !oidn_pass || oidn_pass.is_filtered) {
+    if (denoise_params_.prefilter != DENOISER_PREFILTER_ACCURATE || !oidn_pass ||
+        oidn_pass.is_filtered) {
       return;
     }
 
@@ -228,7 +232,8 @@ class OIDNDenoiseContext {
 
     DCHECK(!oidn_pass.use_compositing);
 
-    if (!denoise_params_.use_prefilter && !is_pass_scale_needed(oidn_pass)) {
+    if (denoise_params_.prefilter != DENOISER_PREFILTER_ACCURATE &&
+        !is_pass_scale_needed(oidn_pass)) {
       /* Pass data is available as-is from the render buffers. */
       return;
     }

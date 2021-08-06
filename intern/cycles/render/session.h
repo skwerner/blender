@@ -195,7 +195,10 @@ class Session {
 
   thread *session_thread_;
 
-  bool pause_;
+  bool pause_ = false;
+  bool cancel_ = false;
+  bool new_work_added_ = false;
+
   thread_condition_variable pause_cond_;
   thread_mutex pause_mutex_;
   thread_mutex tile_mutex_;

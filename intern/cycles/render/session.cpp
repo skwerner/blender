@@ -53,6 +53,8 @@ Session::Session(const SessionParams &params_, const SceneParams &scene_params)
   delayed_reset_.samples = 0;
 
   pause_ = false;
+  cancel_ = false;
+  new_work_added_ = false;
 
   device = Device::create(params.device, stats, profiler);
 
@@ -142,6 +144,7 @@ void Session::cancel(bool quick)
     {
       thread_scoped_lock pause_lock(pause_mutex_);
       pause_ = false;
+      cancel_ = true;
     }
     pause_cond_.notify_all();
 
@@ -327,17 +330,26 @@ bool Session::run_wait_for_work(const RenderWork &render_work)
 
   thread_scoped_lock pause_lock(pause_mutex_);
 
-  const bool no_work = !render_work;
-
-  if (!pause_ && !no_work) {
+  if (!pause_ && render_work) {
+    /* Rendering is not paused and there is work to be done. No need to wait for anything. */
     return false;
   }
 
+  const bool no_work = !render_work;
   update_status_time(pause_, no_work);
 
-  while (pause_) {
+  /* Only leave the loop when rendering is not paused. But even if the current render is un-paused
+   * but there is nothing to render keep waiting until new work is added. */
+  while (!cancel_) {
     scoped_timer pause_timer;
+
+    if (!pause_ && (render_work || new_work_added_ || delayed_reset_.do_reset)) {
+      break;
+    }
+
+    /* Wait for either pause state changed, or extra samples added to render. */
     pause_cond_.wait(pause_lock);
+
     if (pause_) {
       progress.add_skip_time(pause_timer, params.background);
     }
@@ -345,6 +357,8 @@ bool Session::run_wait_for_work(const RenderWork &render_work)
     update_status_time(pause_, no_work);
     progress.set_update();
   }
+
+  new_work_added_ = false;
 
   return no_work;
 }
@@ -387,35 +401,50 @@ void Session::do_delayed_reset()
 
 void Session::reset(BufferParams &buffer_params, int samples)
 {
+  {
+    thread_scoped_lock reset_lock(delayed_reset_.mutex);
+    thread_scoped_lock pause_lock(pause_mutex_);
 
-  thread_scoped_lock reset_lock(delayed_reset_.mutex);
-  thread_scoped_lock pause_lock(pause_mutex_);
+    delayed_reset_.params = buffer_params;
+    delayed_reset_.samples = samples;
+    delayed_reset_.do_reset = true;
 
-  delayed_reset_.params = buffer_params;
-  delayed_reset_.samples = samples;
-  delayed_reset_.do_reset = true;
-
-  path_trace_->cancel();
+    path_trace_->cancel();
+  }
 
   pause_cond_.notify_all();
 }
 
 void Session::set_samples(int samples)
 {
-  if (samples != params.samples) {
-    params.samples = samples;
-
-    pause_cond_.notify_all();
+  if (samples == params.samples) {
+    return;
   }
+
+  params.samples = samples;
+
+  {
+    thread_scoped_lock pause_lock(pause_mutex_);
+    new_work_added_ = true;
+  }
+
+  pause_cond_.notify_all();
 }
 
 void Session::set_time_limit(double time_limit)
 {
-  if (time_limit != params.time_limit) {
-    params.time_limit = time_limit;
-
-    pause_cond_.notify_all();
+  if (time_limit == params.time_limit) {
+    return;
   }
+
+  params.time_limit = time_limit;
+
+  {
+    thread_scoped_lock pause_lock(pause_mutex_);
+    new_work_added_ = true;
+  }
+
+  pause_cond_.notify_all();
 }
 
 void Session::set_pause(bool pause)

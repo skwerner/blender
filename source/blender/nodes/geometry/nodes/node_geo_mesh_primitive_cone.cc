@@ -318,9 +318,9 @@ Mesh *create_cylinder_or_cone_mesh(const float radius_top,
   /* Calculate vertex positions. */
   const int top_verts_start = 0;
   const int bottom_verts_start = top_verts_start + (!top_is_point ? verts_num : 1);
-  float angle = 0.0f;
-  const float angle_delta = 2.0f * M_PI / static_cast<float>(verts_num);
+  const float angle_delta = 2.0f * (M_PI / static_cast<float>(verts_num));
   for (const int i : IndexRange(verts_num)) {
+    const float angle = i * angle_delta;
     const float x = std::cos(angle);
     const float y = std::sin(angle);
     if (!top_is_point) {
@@ -330,7 +330,6 @@ Mesh *create_cylinder_or_cone_mesh(const float radius_top,
       copy_v3_v3(verts[bottom_verts_start + i].co,
                  float3(x * radius_bottom, y * radius_bottom, -height));
     }
-    angle += angle_delta;
   }
   if (top_is_point) {
     copy_v3_v3(verts[top_verts_start].co, float3(0.0f, 0.0f, height));
@@ -551,6 +550,7 @@ static void geo_node_mesh_primitive_cone_exec(GeoNodeExecParams params)
 
   const int verts_num = params.extract_input<int>("Vertices");
   if (verts_num < 3) {
+    params.error_message_add(NodeWarningType::Info, TIP_("Vertices must be at least 3"));
     params.set_output("Geometry", GeometrySet());
     return;
   }

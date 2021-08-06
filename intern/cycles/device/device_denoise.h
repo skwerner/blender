@@ -56,9 +56,6 @@ class DenoiseParams {
   /* Apply denoiser to image. */
   bool use = false;
 
-  /* Output denoising data passes (possibly without applying the denoiser). */
-  bool store_passes = false;
-
   /* Denoiser type. */
   DenoiserType type = DENOISER_OPENIMAGEDENOISE;
 
@@ -77,8 +74,8 @@ class DenoiseParams {
 
   bool modified(const DenoiseParams &other) const
   {
-    return !(use == other.use && store_passes == other.store_passes && type == other.type &&
-             start_sample == other.start_sample && use_pass_albedo == other.use_pass_albedo &&
+    return !(use == other.use && type == other.type && start_sample == other.start_sample &&
+             use_pass_albedo == other.use_pass_albedo &&
              use_pass_normal == other.use_pass_normal && prefilter == other.prefilter);
   }
 };

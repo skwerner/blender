@@ -368,7 +368,6 @@ void BlenderSync::sync_integrator(BL::ViewLayer &b_view_layer, bool background)
    * denoiser parameters before enabling it without render resetting on every change. The downside
    * is that the interface and the integrator are technically out of sync. */
   if (denoise_params.use) {
-    integrator->set_denoise_store_passes(denoise_params.store_passes);
     integrator->set_denoiser_type(denoise_params.type);
     integrator->set_denoise_start_sample(denoise_params.start_sample);
     integrator->set_use_denoise_pass_albedo(denoise_params.use_pass_albedo);
@@ -606,18 +605,13 @@ void BlenderSync::sync_render_passes(BL::RenderLayer &b_rlay, BL::ViewLayer &b_v
   PointerRNA crl = RNA_pointer_get(&b_view_layer.ptr, "cycles");
 
   if (get_boolean(crl, "denoising_store_passes")) {
-    add_denoised_passes = true;
-
-    b_engine.add_pass("Noisy Image", 4, "RGBA", b_view_layer.name().c_str());
-    pass_add(scene, PASS_COMBINED, "Noisy Image", PassMode::NOISY);
-
     b_engine.add_pass("Denoising Normal", 3, "XYZ", b_view_layer.name().c_str());
     pass_add(scene, PASS_DENOISING_NORMAL, "Denoising Normal", PassMode::NOISY);
 
     b_engine.add_pass("Denoising Albedo", 3, "RGB", b_view_layer.name().c_str());
     pass_add(scene, PASS_DENOISING_ALBEDO, "Denoising Albedo", PassMode::NOISY);
   }
-  else if (get_boolean(cscene, "use_denoising")) {
+  if (get_boolean(cscene, "use_denoising")) {
     add_denoised_passes = true;
 
     b_engine.add_pass("Noisy Image", 4, "RGBA", b_view_layer.name().c_str());
@@ -901,8 +895,6 @@ DenoiseParams BlenderSync::get_denoise_params(BL::Scene &b_scene,
                                                  "denoising_openimagedenoise_input_passes",
                                              DENOISER_INPUT_NUM,
                                              DENOISER_INPUT_RGB_ALBEDO_NORMAL);
-
-      denoising.store_passes = get_boolean(clayer, "denoising_store_passes");
 
       denoising.prefilter = (DenoiserPrefilter)get_enum(
           clayer, "denoising_prefilter", DENOISER_PREFILTER_NUM, DENOISER_PREFILTER_NONE);

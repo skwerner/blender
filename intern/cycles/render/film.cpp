@@ -522,14 +522,11 @@ void Film::update_passes(Scene *scene)
 
   /* Create passes needed for denoising. */
   const bool use_denoise = integrator->get_use_denoise();
-  const bool denoise_store_passes = integrator->get_denoise_store_passes();
-  const bool add_denoised_passes = use_denoise || denoise_store_passes;
-  if (add_denoised_passes) {
-    if (denoise_store_passes || integrator->get_use_denoise_pass_normal()) {
+  if (use_denoise) {
+    if (integrator->get_use_denoise_pass_normal()) {
       add_auto_pass(scene, PASS_DENOISING_NORMAL);
     }
-
-    if (denoise_store_passes || integrator->get_use_denoise_pass_albedo()) {
+    if (integrator->get_use_denoise_pass_albedo()) {
       add_auto_pass(scene, PASS_DENOISING_ALBEDO);
     }
   }
@@ -562,7 +559,7 @@ void Film::update_passes(Scene *scene)
 
     /* NOTE: Enable all denoised passes when storage is requested.
      * This way it is possible to tweak denoiser parameters later on. */
-    if (info.support_denoise && add_denoised_passes) {
+    if (info.support_denoise && use_denoise) {
       add_auto_pass(scene, pass->type, PassMode::DENOISED);
     }
   }
@@ -716,8 +713,8 @@ uint Film::get_kernel_features(const Scene *scene) const
       continue;
     }
 
-    if ((pass->type == PASS_COMBINED && pass->mode == PassMode::DENOISED) ||
-        pass->type == PASS_DENOISING_NORMAL || pass->type == PASS_DENOISING_ALBEDO) {
+    if (pass->mode == PassMode::DENOISED || pass->type == PASS_DENOISING_NORMAL ||
+        pass->type == PASS_DENOISING_ALBEDO) {
       kernel_features |= KERNEL_FEATURE_DENOISING;
     }
 

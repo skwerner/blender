@@ -94,8 +94,6 @@ NODE_DEFINE(Integrator)
   const DenoiseParams default_denoise_params;
 
   SOCKET_BOOLEAN(use_denoise, "Use Denoiser", default_denoise_params.use);
-  SOCKET_BOOLEAN(
-      denoise_store_passes, "Store Denoiser Passes", default_denoise_params.store_passes);
   SOCKET_ENUM(denoiser_type, "Denoiser Type", denoiser_type_enum, default_denoise_params.type);
   SOCKET_INT(denoise_start_sample, "Start Sample to Denoise", default_denoise_params.start_sample);
   SOCKET_BOOLEAN(use_denoise_pass_albedo,
@@ -306,8 +304,6 @@ DenoiseParams Integrator::get_denoise_params() const
   DenoiseParams denoise_params;
 
   denoise_params.use = use_denoise;
-
-  denoise_params.store_passes = denoise_store_passes;
 
   denoise_params.type = denoiser_type;
 

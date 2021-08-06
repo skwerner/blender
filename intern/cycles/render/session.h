@@ -160,7 +160,7 @@ class Session {
     bool do_reset;
     BufferParams params;
     int samples;
-  } delayed_reset;
+  } delayed_reset_;
 
   void run();
 
@@ -193,13 +193,13 @@ class Session {
 
   void do_delayed_reset();
 
-  thread *session_thread;
+  thread *session_thread_;
 
-  bool pause;
-  thread_condition_variable pause_cond;
-  thread_mutex pause_mutex;
-  thread_mutex tile_mutex;
-  thread_mutex buffers_mutex;
+  bool pause_;
+  thread_condition_variable pause_cond_;
+  thread_mutex pause_mutex_;
+  thread_mutex tile_mutex_;
+  thread_mutex buffers_mutex_;
 
   TileManager tile_manager_;
   BufferParams buffer_params_;

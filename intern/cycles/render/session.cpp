@@ -49,12 +49,12 @@ Session::Session(const SessionParams &params_, const SceneParams &scene_params)
 {
   TaskScheduler::init(params.threads);
 
-  session_thread = NULL;
+  session_thread_ = nullptr;
 
-  delayed_reset.do_reset = false;
-  delayed_reset.samples = 0;
+  delayed_reset_.do_reset = false;
+  delayed_reset_.samples = 0;
 
-  pause = false;
+  pause_ = false;
 
   device = Device::create(params.device, stats, profiler);
 
@@ -126,8 +126,8 @@ Session::~Session()
 
 void Session::start()
 {
-  if (!session_thread) {
-    session_thread = new thread(function_bind(&Session::run, this));
+  if (!session_thread_) {
+    session_thread_ = new thread(function_bind(&Session::run, this));
   }
 }
 
@@ -137,15 +137,15 @@ void Session::cancel(bool quick)
     path_trace_->cancel();
   }
 
-  if (session_thread) {
+  if (session_thread_) {
     /* wait for session thread to end */
     progress.set_cancel("Exiting");
 
     {
-      thread_scoped_lock pause_lock(pause_mutex);
-      pause = false;
+      thread_scoped_lock pause_lock(pause_mutex_);
+      pause_ = false;
     }
-    pause_cond.notify_all();
+    pause_cond_.notify_all();
 
     wait();
   }
@@ -188,7 +188,7 @@ void Session::run_main_render_loop()
       /* buffers mutex is locked entirely while rendering each
        * sample, and released/reacquired on each iteration to allow
        * reset and draw in between */
-      thread_scoped_lock buffers_lock(buffers_mutex);
+      thread_scoped_lock buffers_lock(buffers_mutex_);
 
       /* update status and timing */
       update_status_time();
@@ -242,12 +242,12 @@ RenderWork Session::run_update_for_next_iteration()
   RenderWork render_work;
 
   thread_scoped_lock scene_lock(scene->mutex);
-  thread_scoped_lock reset_lock(delayed_reset.mutex);
+  thread_scoped_lock reset_lock(delayed_reset_.mutex);
 
   bool have_tiles = true;
 
-  if (delayed_reset.do_reset) {
-    thread_scoped_lock buffers_lock(buffers_mutex);
+  if (delayed_reset_.do_reset) {
+    thread_scoped_lock buffers_lock(buffers_mutex_);
     do_delayed_reset();
 
     /* After reset make sure the tile manager is at the first big tile. */
@@ -307,24 +307,24 @@ bool Session::run_wait_for_work(const RenderWork &render_work)
     return false;
   }
 
-  thread_scoped_lock pause_lock(pause_mutex);
+  thread_scoped_lock pause_lock(pause_mutex_);
 
   const bool no_work = !render_work;
 
-  if (!pause && !no_work) {
+  if (!pause_ && !no_work) {
     return false;
   }
 
-  update_status_time(pause, no_work);
+  update_status_time(pause_, no_work);
 
-  while (pause) {
+  while (pause_) {
     scoped_timer pause_timer;
-    pause_cond.wait(pause_lock);
-    if (pause) {
+    pause_cond_.wait(pause_lock);
+    if (pause_) {
       progress.add_skip_time(pause_timer, params.background);
     }
 
-    update_status_time(pause, no_work);
+    update_status_time(pause_, no_work);
     progress.set_update();
   }
 
@@ -338,17 +338,17 @@ void Session::draw()
 
 void Session::do_delayed_reset()
 {
-  if (!delayed_reset.do_reset) {
+  if (!delayed_reset_.do_reset) {
     return;
   }
-  delayed_reset.do_reset = false;
+  delayed_reset_.do_reset = false;
 
   scene->film->update_passes(scene);
 
-  buffer_params_ = delayed_reset.params;
+  buffer_params_ = delayed_reset_.params;
   buffer_params_.update_passes(scene->passes);
 
-  render_scheduler_.reset(buffer_params_, delayed_reset.samples);
+  render_scheduler_.reset(buffer_params_, delayed_reset_.samples);
   path_trace_->reset(buffer_params_);
   tile_manager_.reset(buffer_params_);
 
@@ -369,16 +369,16 @@ void Session::do_delayed_reset()
 void Session::reset(BufferParams &buffer_params, int samples)
 {
 
-  thread_scoped_lock reset_lock(delayed_reset.mutex);
-  thread_scoped_lock pause_lock(pause_mutex);
+  thread_scoped_lock reset_lock(delayed_reset_.mutex);
+  thread_scoped_lock pause_lock(pause_mutex_);
 
-  delayed_reset.params = buffer_params;
-  delayed_reset.samples = samples;
-  delayed_reset.do_reset = true;
+  delayed_reset_.params = buffer_params;
+  delayed_reset_.samples = samples;
+  delayed_reset_.do_reset = true;
 
   path_trace_->cancel();
 
-  pause_cond.notify_all();
+  pause_cond_.notify_all();
 }
 
 void Session::set_samples(int samples)
@@ -386,7 +386,7 @@ void Session::set_samples(int samples)
   if (samples != params.samples) {
     params.samples = samples;
 
-    pause_cond.notify_all();
+    pause_cond_.notify_all();
   }
 }
 
@@ -395,26 +395,26 @@ void Session::set_time_limit(double time_limit)
   if (time_limit != params.time_limit) {
     params.time_limit = time_limit;
 
-    pause_cond.notify_all();
+    pause_cond_.notify_all();
   }
 }
 
-void Session::set_pause(bool pause_)
+void Session::set_pause(bool pause)
 {
   bool notify = false;
 
   {
-    thread_scoped_lock pause_lock(pause_mutex);
+    thread_scoped_lock pause_lock(pause_mutex_);
 
     if (pause != pause_) {
-      pause = pause_;
+      pause_ = pause;
       notify = true;
     }
   }
 
-  if (session_thread) {
+  if (session_thread_) {
     if (notify) {
-      pause_cond.notify_all();
+      pause_cond_.notify_all();
     }
   }
   else if (pause_) {
@@ -429,12 +429,12 @@ void Session::set_gpu_display(unique_ptr<GPUDisplay> gpu_display)
 
 void Session::wait()
 {
-  if (session_thread) {
-    session_thread->join();
-    delete session_thread;
+  if (session_thread_) {
+    session_thread_->join();
+    delete session_thread_;
   }
 
-  session_thread = NULL;
+  session_thread_ = nullptr;
 }
 
 bool Session::update_scene(int width, int height)

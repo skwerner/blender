@@ -109,8 +109,6 @@ class LightManager {
     UPDATE_NONE = 0u,
   };
 
-  bool use_light_visibility;
-
   /* Need to update background (including multiple importance map) */
   bool need_update_background;
 

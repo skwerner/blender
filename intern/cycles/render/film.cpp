@@ -116,8 +116,6 @@ NODE_DEFINE(Film)
   SOCKET_FLOAT(mist_depth, "Mist Depth", 100.0f);
   SOCKET_FLOAT(mist_falloff, "Mist Falloff", 1.0f);
 
-  SOCKET_BOOLEAN(use_light_visibility, "Use Light Visibility", false);
-
   const NodeEnum *pass_type_enum = Pass::get_type_enum();
   SOCKET_ENUM(display_pass, "Display Pass", *pass_type_enum, PASS_COMBINED);
 
@@ -173,6 +171,7 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
 
   /* update __data */
   kfilm->exposure = exposure;
+  kfilm->pass_alpha_threshold = pass_alpha_threshold;
   kfilm->pass_flag = 0;
 
   kfilm->display_pass_type = display_pass->type;
@@ -183,7 +182,6 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
 
   kfilm->light_pass_flag = 0;
   kfilm->pass_stride = 0;
-  kfilm->use_light_pass = use_light_visibility;
 
   /* Mark with PASS_UNUSED to avoid mask test in the kernel. */
   kfilm->pass_background = PASS_UNUSED;
@@ -242,9 +240,6 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
 
     int pass_flag = (1 << (pass->type % 32));
     if (pass->type <= PASS_CATEGORY_LIGHT_END) {
-      if (pass->type != PASS_COMBINED) {
-        kfilm->use_light_pass = 1;
-      }
       kfilm->light_pass_flag |= pass_flag;
     }
     else if (pass->type <= PASS_CATEGORY_DATA_END) {
@@ -395,19 +390,6 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
     }
 
     kfilm->pass_stride += pass->get_info().num_components;
-  }
-
-  /* When displaying the normal/uv pass in the viewport we need to disable
-   * transparency.
-   *
-   * We also don't need to perform light accumulations. Later we want to optimize this to suppress
-   * light calculations. */
-  if (display_pass->type == PASS_NORMAL || display_pass->type == PASS_UV ||
-      display_pass->type == PASS_ROUGHNESS) {
-    kfilm->use_light_pass = 0;
-  }
-  else {
-    kfilm->pass_alpha_threshold = pass_alpha_threshold;
   }
 
   /* update filter table */

@@ -955,7 +955,6 @@ typedef struct KernelFilm {
 
   int light_pass_flag;
   int pass_stride;
-  int use_light_pass;
 
   int pass_combined;
   int pass_depth;
@@ -1030,6 +1029,9 @@ typedef struct KernelFilm {
   int display_pass_denoised_offset;
   int show_active_pixels;
   int use_approximate_shadow_catcher;
+
+  /* padding */
+  int pad1;
 } KernelFilm;
 static_assert_align(KernelFilm, 16);
 

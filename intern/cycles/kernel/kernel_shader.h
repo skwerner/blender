@@ -228,7 +228,7 @@ ccl_device_inline
                      BsdfEval *bsdf_eval,
                      const uint light_shader_flags)
 {
-  bsdf_eval_init(bsdf_eval, false, zero_float3(), kernel_data.film.use_light_pass);
+  bsdf_eval_init(bsdf_eval, false, zero_float3());
 
   return _shader_bsdf_multi_eval(
       kg, sd, omega_in, is_transmission, NULL, bsdf_eval, 0.0f, 0.0f, light_shader_flags);
@@ -322,7 +322,7 @@ ccl_device int shader_bsdf_sample_closure(const KernelGlobals *kg,
   if (*pdf != 0.0f) {
     const bool is_diffuse = (CLOSURE_IS_BSDF_DIFFUSE(sc->type) ||
                              CLOSURE_IS_BSDF_BSSRDF(sc->type));
-    bsdf_eval_init(bsdf_eval, is_diffuse, eval * sc->weight, kernel_data.film.use_light_pass);
+    bsdf_eval_init(bsdf_eval, is_diffuse, eval * sc->weight);
 
     if (sd->num_closure > 1) {
       const bool is_transmission = shader_bsdf_is_transmission(sd, *omega_in);
@@ -662,7 +662,7 @@ ccl_device float shader_volume_phase_eval(const KernelGlobals *kg,
                                           const float3 omega_in,
                                           BsdfEval *phase_eval)
 {
-  bsdf_eval_init(phase_eval, false, zero_float3(), kernel_data.film.use_light_pass);
+  bsdf_eval_init(phase_eval, false, zero_float3());
 
   return _shader_volume_phase_multi_eval(sd, phases, omega_in, -1, phase_eval, 0.0f, 0.0f);
 }
@@ -720,7 +720,7 @@ ccl_device int shader_volume_phase_sample(const KernelGlobals *kg,
   label = volume_phase_sample(sd, svc, randu, randv, &eval, omega_in, domega_in, pdf);
 
   if (*pdf != 0.0f) {
-    bsdf_eval_init(phase_eval, false, eval, kernel_data.film.use_light_pass);
+    bsdf_eval_init(phase_eval, false, eval);
   }
 
   return label;
@@ -743,7 +743,7 @@ ccl_device int shader_phase_sample_closure(const KernelGlobals *kg,
   label = volume_phase_sample(sd, sc, randu, randv, &eval, omega_in, domega_in, pdf);
 
   if (*pdf != 0.0f)
-    bsdf_eval_init(phase_eval, false, eval, kernel_data.film.use_light_pass);
+    bsdf_eval_init(phase_eval, false, eval);
 
   return label;
 }

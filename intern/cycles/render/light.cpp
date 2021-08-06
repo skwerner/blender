@@ -179,7 +179,6 @@ LightManager::LightManager()
 {
   update_flags = UPDATE_ALL;
   need_update_background = true;
-  use_light_visibility = false;
   last_background_enabled = false;
   last_background_resolution = 0;
 }
@@ -348,19 +347,15 @@ void LightManager::device_update_distribution(Device *,
     }
     if (!(object->get_visibility() & PATH_RAY_DIFFUSE)) {
       shader_flag |= SHADER_EXCLUDE_DIFFUSE;
-      use_light_visibility = true;
     }
     if (!(object->get_visibility() & PATH_RAY_GLOSSY)) {
       shader_flag |= SHADER_EXCLUDE_GLOSSY;
-      use_light_visibility = true;
     }
     if (!(object->get_visibility() & PATH_RAY_TRANSMIT)) {
       shader_flag |= SHADER_EXCLUDE_TRANSMIT;
-      use_light_visibility = true;
     }
     if (!(object->get_visibility() & PATH_RAY_VOLUME_SCATTER)) {
       shader_flag |= SHADER_EXCLUDE_SCATTER;
-      use_light_visibility = true;
     }
     if (!(object->get_is_shadow_catcher())) {
       shader_flag |= SHADER_EXCLUDE_SHADOW_CATCHER;
@@ -762,19 +757,15 @@ void LightManager::device_update_points(Device *, DeviceScene *dscene, Scene *sc
     }
     if (!light->use_diffuse) {
       shader_id |= SHADER_EXCLUDE_DIFFUSE;
-      use_light_visibility = true;
     }
     if (!light->use_glossy) {
       shader_id |= SHADER_EXCLUDE_GLOSSY;
-      use_light_visibility = true;
     }
     if (!light->use_transmission) {
       shader_id |= SHADER_EXCLUDE_TRANSMIT;
-      use_light_visibility = true;
     }
     if (!light->use_scatter) {
       shader_id |= SHADER_EXCLUDE_SCATTER;
-      use_light_visibility = true;
     }
     if (!light->is_shadow_catcher) {
       shader_id |= SHADER_EXCLUDE_SHADOW_CATCHER;
@@ -832,19 +823,15 @@ void LightManager::device_update_points(Device *, DeviceScene *dscene, Scene *sc
 
       if (!(visibility & PATH_RAY_DIFFUSE)) {
         shader_id |= SHADER_EXCLUDE_DIFFUSE;
-        use_light_visibility = true;
       }
       if (!(visibility & PATH_RAY_GLOSSY)) {
         shader_id |= SHADER_EXCLUDE_GLOSSY;
-        use_light_visibility = true;
       }
       if (!(visibility & PATH_RAY_TRANSMIT)) {
         shader_id |= SHADER_EXCLUDE_TRANSMIT;
-        use_light_visibility = true;
       }
       if (!(visibility & PATH_RAY_VOLUME_SCATTER)) {
         shader_id |= SHADER_EXCLUDE_SCATTER;
-        use_light_visibility = true;
       }
     }
     else if (light->light_type == LIGHT_AREA) {
@@ -994,8 +981,6 @@ void LightManager::device_update(Device *device,
 
   device_free(device, dscene, need_update_background);
 
-  use_light_visibility = false;
-
   device_update_points(device, dscene, scene);
   if (progress.get_cancel())
     return;
@@ -1013,8 +998,6 @@ void LightManager::device_update(Device *device,
   device_update_ies(dscene);
   if (progress.get_cancel())
     return;
-
-  scene->film->set_use_light_visibility(use_light_visibility);
 
   update_flags = UPDATE_NONE;
   need_update_background = false;

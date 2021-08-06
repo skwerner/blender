@@ -56,7 +56,6 @@ class Film : public Node {
   NODE_SOCKET_API(float, mist_depth)
   NODE_SOCKET_API(float, mist_falloff)
 
-  NODE_SOCKET_API(bool, use_light_visibility)
   NODE_SOCKET_API(CryptomatteType, cryptomatte_passes)
   NODE_SOCKET_API(int, cryptomatte_depth)
 

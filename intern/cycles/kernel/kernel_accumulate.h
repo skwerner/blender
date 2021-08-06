@@ -32,10 +32,7 @@ CCL_NAMESPACE_BEGIN
  * that only one of those can happen at a bounce, and so do not need to accumulate
  * them separately. */
 
-ccl_device_inline void bsdf_eval_init(BsdfEval *eval,
-                                      const bool is_diffuse,
-                                      float3 value,
-                                      const bool use_light_pass)
+ccl_device_inline void bsdf_eval_init(BsdfEval *eval, const bool is_diffuse, float3 value)
 {
   eval->diffuse = zero_float3();
   eval->glossy = zero_float3();

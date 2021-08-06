@@ -256,7 +256,6 @@ void Scene::device_update(Device *device_, Progress &progress)
    * - Camera may be used for adaptive subdivision.
    * - Displacement shader must have all shader data available.
    * - Light manager needs lookup tables and final mesh data to compute emission CDF.
-   * - Film needs light manager to run for use_light_visibility
    * - Lookup tables are done a second time to handle film tables
    */
 

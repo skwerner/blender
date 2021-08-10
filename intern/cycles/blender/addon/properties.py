@@ -156,6 +156,7 @@ enum_view3d_shading_render_pass = (
 
     ('', "Data", ""),
 
+    ('POSITION', "Position", "Show the Position render pass"),
     ('NORMAL', "Normal", "Show the Normal render pass"),
     ('UV', "UV", "Show the UV render pass"),
     ('MIST', "Mist", "Show the Mist render pass"),
@@ -598,17 +599,18 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         default='COMBINED',
         description="Type of pass to bake",
         items=(
-            ('COMBINED', "Combined", ""),
-            ('AO', "Ambient Occlusion", ""),
-            ('SHADOW', "Shadow", ""),
-            ('NORMAL', "Normal", ""),
-            ('UV', "UV", ""),
-            ('ROUGHNESS', "Roughness", ""),
-            ('EMIT', "Emit", ""),
-            ('ENVIRONMENT', "Environment", ""),
-            ('DIFFUSE', "Diffuse", ""),
-            ('GLOSSY', "Glossy", ""),
-            ('TRANSMISSION', "Transmission", ""),
+            ('COMBINED', "Combined", "", 0),
+            ('AO', "Ambient Occlusion", "", 1),
+            ('SHADOW', "Shadow", "", 2),
+            ('POSITION', "Position", "", 11),
+            ('NORMAL', "Normal", "", 3),
+            ('UV', "UV", "", 4),
+            ('ROUGHNESS', "Roughness", "", 5),
+            ('EMIT', "Emit", "", 6),
+            ('ENVIRONMENT', "Environment", "", 7),
+            ('DIFFUSE', "Diffuse", "", 8),
+            ('GLOSSY', "Glossy", "", 9),
+            ('TRANSMISSION', "Transmission", "", 10),
         ),
     )
 

@@ -259,6 +259,9 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
       case PASS_NORMAL:
         kfilm->pass_normal = kfilm->pass_stride;
         break;
+      case PASS_POSITION:
+        kfilm->pass_position = kfilm->pass_stride;
+        break;
       case PASS_ROUGHNESS:
         kfilm->pass_roughness = kfilm->pass_stride;
         break;

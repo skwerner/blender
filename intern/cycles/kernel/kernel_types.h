@@ -352,6 +352,7 @@ typedef enum PassType {
 
   /* Data passes */
   PASS_DEPTH = 32,
+  PASS_POSITION,
   PASS_NORMAL,
   PASS_ROUGHNESS,
   PASS_UV,
@@ -962,6 +963,7 @@ typedef struct KernelFilm {
 
   int pass_combined;
   int pass_depth;
+  int pass_position;
   int pass_normal;
   int pass_roughness;
   int pass_motion;
@@ -1033,9 +1035,6 @@ typedef struct KernelFilm {
   int display_pass_denoised_offset;
   int show_active_pixels;
   int use_approximate_shadow_catcher;
-
-  /* padding */
-  int pad1;
 } KernelFilm;
 static_assert_align(KernelFilm, 16);
 

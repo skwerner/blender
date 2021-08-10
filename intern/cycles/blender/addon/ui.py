@@ -739,6 +739,7 @@ class CYCLES_RENDER_PT_passes_data(CyclesButtonsPanel, Panel):
         col.prop(view_layer, "use_pass_combined")
         col.prop(view_layer, "use_pass_z")
         col.prop(view_layer, "use_pass_mist")
+        col.prop(view_layer, "use_pass_position")
         col.prop(view_layer, "use_pass_normal")
         sub = col.column()
         sub.active = not rd.use_motion_blur

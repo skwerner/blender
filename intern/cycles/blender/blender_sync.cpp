@@ -510,6 +510,7 @@ static PassType get_blender_pass_type(BL::RenderPass &b_pass)
 
   MAP_PASS("Depth", PASS_DEPTH);
   MAP_PASS("Mist", PASS_MIST);
+  MAP_PASS("Position", PASS_POSITION);
   MAP_PASS("Normal", PASS_NORMAL);
   MAP_PASS("IndexOB", PASS_OBJECT_ID);
   MAP_PASS("UV", PASS_UV);

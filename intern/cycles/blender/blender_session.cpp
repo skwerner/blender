@@ -550,7 +550,10 @@ static PassType bake_type_to_pass(const string &bake_type_str, const int bake_fi
   const char *bake_type = bake_type_str.c_str();
 
   /* data passes */
-  if (strcmp(bake_type, "NORMAL") == 0) {
+  if (strcmp(bake_type, "POSITION") == 0) {
+    return PASS_POSITION;
+  }
+  else if (strcmp(bake_type, "NORMAL") == 0) {
     return PASS_NORMAL;
   }
   else if (strcmp(bake_type, "UV") == 0) {

@@ -192,6 +192,7 @@ def list_render_passes(scene, srl):
     # Data passes.
     if srl.use_pass_z:                     yield ("Depth",         "Z",    'VALUE')
     if srl.use_pass_mist:                  yield ("Mist",          "Z",    'VALUE')
+    if srl.use_pass_position:              yield ("Position",      "XYZ",  'VECTOR')
     if srl.use_pass_normal:                yield ("Normal",        "XYZ",  'VECTOR')
     if srl.use_pass_vector:                yield ("Vector",        "XYZW", 'VECTOR')
     if srl.use_pass_uv:                    yield ("UV",            "UVA",  'VECTOR')

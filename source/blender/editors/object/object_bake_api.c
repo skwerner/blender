@@ -412,6 +412,7 @@ static bool is_noncolor_pass(eScenePassType pass_type)
 {
   return ELEM(pass_type,
               SCE_PASS_Z,
+              SCE_PASS_POSITION,
               SCE_PASS_NORMAL,
               SCE_PASS_VECTOR,
               SCE_PASS_INDEXOB,

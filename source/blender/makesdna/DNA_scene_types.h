@@ -261,7 +261,7 @@ typedef enum eScenePassType {
   SCE_PASS_UNUSED_3 = (1 << 4), /* SPEC */
   SCE_PASS_SHADOW = (1 << 5),
   SCE_PASS_AO = (1 << 6),
-  SCE_PASS_UNUSED_4 = (1 << 7), /* REFLECT */
+  SCE_PASS_POSITION = (1 << 7),
   SCE_PASS_NORMAL = (1 << 8),
   SCE_PASS_VECTOR = (1 << 9),
   SCE_PASS_UNUSED_5 = (1 << 10), /* REFRACT */
@@ -293,6 +293,7 @@ typedef enum eScenePassType {
 #define RE_PASSNAME_COMBINED "Combined"
 #define RE_PASSNAME_Z "Depth"
 #define RE_PASSNAME_VECTOR "Vector"
+#define RE_PASSNAME_POSITION "Position"
 #define RE_PASSNAME_NORMAL "Normal"
 #define RE_PASSNAME_UV "UV"
 #define RE_PASSNAME_EMIT "Emit"

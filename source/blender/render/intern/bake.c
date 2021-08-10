@@ -1041,6 +1041,7 @@ int RE_pass_depth(const eScenePassType pass_type)
     }
     case SCE_PASS_COMBINED:
     case SCE_PASS_SHADOW:
+    case SCE_PASS_POSITION:
     case SCE_PASS_NORMAL:
     case SCE_PASS_VECTOR:
     case SCE_PASS_INDEXOB: /* XXX double check */

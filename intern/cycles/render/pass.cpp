@@ -81,6 +81,7 @@ const NodeEnum *Pass::get_type_enum()
 
     /* Data passes. */
     pass_type_enum.insert("depth", PASS_DEPTH);
+    pass_type_enum.insert("position", PASS_POSITION);
     pass_type_enum.insert("normal", PASS_NORMAL);
     pass_type_enum.insert("roughness", PASS_ROUGHNESS);
     pass_type_enum.insert("uv", PASS_UV);
@@ -178,6 +179,9 @@ PassInfo Pass::get_info(const PassType type, const bool include_albedo)
       break;
     case PASS_MIST:
       pass_info.num_components = 1;
+      break;
+    case PASS_POSITION:
+      pass_info.num_components = 3;
       break;
     case PASS_NORMAL:
       pass_info.num_components = 3;

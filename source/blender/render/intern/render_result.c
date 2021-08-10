@@ -374,6 +374,9 @@ RenderResult *render_result_new(
       if (view_layer->passflag & SCE_PASS_NORMAL) {
         RENDER_LAYER_ADD_PASS_SAFE(rr, rl, 3, RE_PASSNAME_NORMAL, view, "XYZ");
       }
+      if (view_layer->passflag & SCE_PASS_POSITION) {
+        RENDER_LAYER_ADD_PASS_SAFE(rr, rl, 3, RE_PASSNAME_POSITION, view, "XYZ");
+      }
       if (view_layer->passflag & SCE_PASS_UV) {
         RENDER_LAYER_ADD_PASS_SAFE(rr, rl, 3, RE_PASSNAME_UV, view, "UVA");
       }

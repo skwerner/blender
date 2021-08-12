@@ -2736,12 +2736,12 @@ NODE_DEFINE(PrincipledBsdfNode)
       distribution, "Distribution", distribution_enum, CLOSURE_BSDF_MICROFACET_MULTI_GGX_GLASS_ID);
 
   static NodeEnum subsurface_method_enum;
-  subsurface_method_enum.insert("burley", CLOSURE_BSSRDF_PRINCIPLED_ID);
-  subsurface_method_enum.insert("random_walk", CLOSURE_BSSRDF_PRINCIPLED_RANDOM_WALK_ID);
+  subsurface_method_enum.insert("diffusion", CLOSURE_BSSRDF_DIFFUSION_ID);
+  subsurface_method_enum.insert("random_walk", CLOSURE_BSSRDF_RANDOM_WALK_ID);
   SOCKET_ENUM(subsurface_method,
               "Subsurface Method",
               subsurface_method_enum,
-              CLOSURE_BSSRDF_PRINCIPLED_ID);
+              CLOSURE_BSSRDF_RANDOM_WALK_ID);
 
   SOCKET_IN_COLOR(base_color, "Base Color", make_float3(0.8f, 0.8f, 0.8f));
   SOCKET_IN_COLOR(subsurface_color, "Subsurface Color", make_float3(0.8f, 0.8f, 0.8f));
@@ -3049,15 +3049,12 @@ NODE_DEFINE(SubsurfaceScatteringNode)
   SOCKET_IN_FLOAT(surface_mix_weight, "SurfaceMixWeight", 0.0f, SocketType::SVM_INTERNAL);
 
   static NodeEnum falloff_enum;
-  falloff_enum.insert("cubic", CLOSURE_BSSRDF_CUBIC_ID);
-  falloff_enum.insert("gaussian", CLOSURE_BSSRDF_GAUSSIAN_ID);
-  falloff_enum.insert("burley", CLOSURE_BSSRDF_BURLEY_ID);
+  falloff_enum.insert("diffusion", CLOSURE_BSSRDF_DIFFUSION_ID);
   falloff_enum.insert("random_walk", CLOSURE_BSSRDF_RANDOM_WALK_ID);
-  SOCKET_ENUM(falloff, "Falloff", falloff_enum, CLOSURE_BSSRDF_BURLEY_ID);
+  SOCKET_ENUM(falloff, "Falloff", falloff_enum, CLOSURE_BSSRDF_RANDOM_WALK_ID);
+
   SOCKET_IN_FLOAT(scale, "Scale", 0.01f);
   SOCKET_IN_VECTOR(radius, "Radius", make_float3(0.1f, 0.1f, 0.1f));
-  SOCKET_IN_FLOAT(sharpness, "Sharpness", 0.0f);
-  SOCKET_IN_FLOAT(texture_blur, "Texture Blur", 1.0f);
 
   SOCKET_OUT_CLOSURE(BSSRDF, "BSSRDF");
 
@@ -3066,14 +3063,13 @@ NODE_DEFINE(SubsurfaceScatteringNode)
 
 SubsurfaceScatteringNode::SubsurfaceScatteringNode() : BsdfNode(get_node_type())
 {
-  closure = falloff;
+  closure = CLOSURE_BSSRDF_DIFFUSION_ID;
 }
 
 void SubsurfaceScatteringNode::compile(SVMCompiler &compiler)
 {
   closure = falloff;
-  BsdfNode::compile(
-      compiler, input("Scale"), input("Texture Blur"), input("Radius"), input("Sharpness"));
+  BsdfNode::compile(compiler, input("Scale"), NULL, input("Radius"));
 }
 
 void SubsurfaceScatteringNode::compile(OSLCompiler &compiler)

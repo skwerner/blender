@@ -34,65 +34,6 @@ CCL_NAMESPACE_BEGIN
 
 #ifdef __SUBSURFACE__
 
-/* TODO: restore or remove this.
- * If we reevaluate the shader for the normal and color, it should happen in
- * the shade_surface kernel. */
-
-#  if 0
-/* optionally do blurring of color and/or bump mapping, at the cost of a shader evaluation */
-ccl_device float3 subsurface_color_pow(float3 color, float exponent)
-{
-  color = max(color, zero_float3());
-
-  if (exponent == 1.0f) {
-    /* nothing to do */
-  }
-  else if (exponent == 0.5f) {
-    color.x = sqrtf(color.x);
-    color.y = sqrtf(color.y);
-    color.z = sqrtf(color.z);
-  }
-  else {
-    color.x = powf(color.x, exponent);
-    color.y = powf(color.y, exponent);
-    color.z = powf(color.z, exponent);
-  }
-
-  return color;
-}
-
-ccl_device void subsurface_color_bump_blur(const KernelGlobals *kg,
-                                           ShaderData *sd,
-                                           ccl_addr_space PathState *state,
-                                           float3 *eval,
-                                           float3 *N)
-{
-  /* average color and texture blur at outgoing point */
-  float texture_blur;
-  float3 out_color = shader_bssrdf_sum(sd, NULL, &texture_blur);
-
-  /* do we have bump mapping? */
-  bool bump = (sd->flag & SD_HAS_BSSRDF_BUMP) != 0;
-
-  if (bump || texture_blur > 0.0f) {
-    /* average color and normal at incoming point */
-    shader_eval_surface(kg, sd, state, NULL, state->flag);
-    float3 in_color = shader_bssrdf_sum(sd, (bump) ? N : NULL, NULL);
-
-    /* we simply divide out the average color and multiply with the average
-     * of the other one. we could try to do this per closure but it's quite
-     * tricky to match closures between shader evaluations, their number and
-     * order may change, this is simpler */
-    if (texture_blur > 0.0f) {
-      out_color = subsurface_color_pow(out_color, texture_blur);
-      in_color = subsurface_color_pow(in_color, texture_blur);
-
-      *eval *= safe_divide_color(in_color, out_color);
-    }
-  }
-}
-#  endif
-
 ccl_device int subsurface_bounce(INTEGRATOR_STATE_ARGS, ShaderData *sd, const ShaderClosure *sc)
 {
   /* We should never have two consecutive BSSRDF bounces, the second one should
@@ -123,13 +64,9 @@ ccl_device int subsurface_bounce(INTEGRATOR_STATE_ARGS, ShaderData *sd, const Sh
     }
   }
 
-  const float roughness = (sc->type == CLOSURE_BSSRDF_PRINCIPLED_ID ||
-                           sc->type == CLOSURE_BSSRDF_PRINCIPLED_RANDOM_WALK_ID) ?
-                              bssrdf->roughness :
-                              FLT_MAX;
   INTEGRATOR_STATE_WRITE(subsurface, albedo) = bssrdf->albedo;
   INTEGRATOR_STATE_WRITE(subsurface, radius) = bssrdf->radius;
-  INTEGRATOR_STATE_WRITE(subsurface, roughness) = roughness;
+  INTEGRATOR_STATE_WRITE(subsurface, roughness) = bssrdf->roughness;
 
   return LABEL_SUBSURFACE_SCATTER;
 }
@@ -306,11 +243,11 @@ ccl_device_inline bool subsurface_random_walk(INTEGRATOR_STATE_ARGS,
   ray.dP = ray_dP;
   ray.dD = differential_zero_compact();
 
-#ifndef __KERNEL_OPTIX__
+#  ifndef __KERNEL_OPTIX__
   /* Compute or fetch object transforms. */
   Transform ob_itfm ccl_optional_struct_init;
   Transform ob_tfm = object_fetch_transform_motion_test(kg, object, time, &ob_itfm);
-#endif
+#  endif
 
   /* Convert subsurface to volume coefficients.
    * The single-scattering albedo is named alpha to avoid confusion with the surface albedo. */
@@ -439,15 +376,15 @@ ccl_device_inline bool subsurface_random_walk(INTEGRATOR_STATE_ARGS,
     hit = (ss_isect.num_hits > 0);
 
     if (hit) {
-#ifdef __KERNEL_OPTIX__
+#  ifdef __KERNEL_OPTIX__
       /* t is always in world space with OptiX. */
       ray.t = ss_isect.hits[0].t;
-#else
+#  else
       /* Compute world space distance to surface hit. */
       float3 D = transform_direction(&ob_itfm, ray.D);
       D = normalize(D) * ss_isect.hits[0].t;
       ray.t = len(transform_direction(&ob_tfm, D));
-#endif
+#  endif
     }
 
     if (bounce == 0) {
@@ -535,7 +472,7 @@ ccl_device_inline bool subsurface_scatter(INTEGRATOR_STATE_ARGS)
     return false;
   }
 
-#ifdef __VOLUME__
+#  ifdef __VOLUME__
   /* Update volume stack if needed. */
   if (kernel_data.integrator.use_volumes) {
     const int object = intersection_get_object(kg, &ss_isect.hits[0]);
@@ -549,7 +486,7 @@ ccl_device_inline bool subsurface_scatter(INTEGRATOR_STATE_ARGS)
       integrator_volume_stack_update_for_subsurface(INTEGRATOR_STATE_PASS, offset_P, ray.P);
     }
   }
-#endif /* __VOLUME__ */
+#  endif /* __VOLUME__ */
 
   /* Pretend ray is coming from the outside towards the exit point. This ensures
    * correct front/back facing normals.

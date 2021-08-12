@@ -703,8 +703,6 @@ class SubsurfaceScatteringNode : public BsdfNode {
 
   NODE_SOCKET_API(float, scale)
   NODE_SOCKET_API(float3, radius)
-  NODE_SOCKET_API(float, sharpness)
-  NODE_SOCKET_API(float, texture_blur)
   NODE_SOCKET_API(ClosureType, falloff)
 };
 

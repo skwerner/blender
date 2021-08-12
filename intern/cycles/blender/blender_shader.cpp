@@ -476,14 +476,8 @@ static ShaderNode *add_node(Scene *scene,
     SubsurfaceScatteringNode *subsurface = graph->create_node<SubsurfaceScatteringNode>();
 
     switch (b_subsurface_node.falloff()) {
-      case BL::ShaderNodeSubsurfaceScattering::falloff_CUBIC:
-        subsurface->set_falloff(CLOSURE_BSSRDF_CUBIC_ID);
-        break;
-      case BL::ShaderNodeSubsurfaceScattering::falloff_GAUSSIAN:
-        subsurface->set_falloff(CLOSURE_BSSRDF_GAUSSIAN_ID);
-        break;
-      case BL::ShaderNodeSubsurfaceScattering::falloff_BURLEY:
-        subsurface->set_falloff(CLOSURE_BSSRDF_BURLEY_ID);
+      case BL::ShaderNodeSubsurfaceScattering::falloff_DIFFUSION:
+        subsurface->set_falloff(CLOSURE_BSSRDF_DIFFUSION_ID);
         break;
       case BL::ShaderNodeSubsurfaceScattering::falloff_RANDOM_WALK:
         subsurface->set_falloff(CLOSURE_BSSRDF_RANDOM_WALK_ID);
@@ -598,11 +592,11 @@ static ShaderNode *add_node(Scene *scene,
         break;
     }
     switch (b_principled_node.subsurface_method()) {
-      case BL::ShaderNodeBsdfPrincipled::subsurface_method_BURLEY:
-        principled->set_subsurface_method(CLOSURE_BSSRDF_PRINCIPLED_ID);
+      case BL::ShaderNodeBsdfPrincipled::subsurface_method_DIFFUSION:
+        principled->set_subsurface_method(CLOSURE_BSSRDF_DIFFUSION_ID);
         break;
       case BL::ShaderNodeBsdfPrincipled::subsurface_method_RANDOM_WALK:
-        principled->set_subsurface_method(CLOSURE_BSSRDF_PRINCIPLED_RANDOM_WALK_ID);
+        principled->set_subsurface_method(CLOSURE_BSSRDF_RANDOM_WALK_ID);
         break;
     }
     node = principled;

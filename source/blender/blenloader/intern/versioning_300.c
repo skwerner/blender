@@ -398,6 +398,16 @@ static void do_version_constraints_spline_ik_joint_bindings(ListBase *lb)
   }
 }
 
+static void do_version_subsurface_methods(bNode *node)
+{
+  if (node->type == SH_NODE_SUBSURFACE_SCATTERING) {
+    if (ELEM(node->custom1, SHD_SUBSURFACE_CUBIC, SHD_SUBSURFACE_GAUSSIAN)) {
+      node->custom1 = SHD_SUBSURFACE_DIFFUSION;
+    }
+    node->custom2 = true;
+  }
+}
+
 /* NOLINTNEXTLINE: readability-function-size */
 void blo_do_versions_300(FileData *fd, Library *UNUSED(lib), Main *bmain)
 {
@@ -787,5 +797,15 @@ void blo_do_versions_300(FileData *fd, Library *UNUSED(lib), Main *bmain)
    */
   {
     /* Keep this block, even when empty. */
+
+    /* TODO: move to specific subversion when merging into master. */
+    FOREACH_NODETREE_BEGIN (bmain, ntree, id) {
+      if (ntree->type == NTREE_SHADER) {
+        LISTBASE_FOREACH (bNode *, node, &ntree->nodes) {
+          do_version_subsurface_methods(node);
+        }
+      }
+    }
+    FOREACH_NODETREE_END;
   }
 }

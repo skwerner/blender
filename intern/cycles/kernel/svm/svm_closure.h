@@ -218,11 +218,9 @@ ccl_device_noinline int svm_node_closure_bsdf(
 
           if (bssrdf) {
             bssrdf->radius = subsurface_radius * subsurface;
-            bssrdf->albedo = (subsurface_method == CLOSURE_BSSRDF_PRINCIPLED_ID) ?
+            bssrdf->albedo = (CLOSURE_IS_DIFFUSION_BSSRDF(subsurface_method)) ?
                                  subsurface_color :
                                  mixed_ss_base_color;
-            bssrdf->texture_blur = 0.0f;
-            bssrdf->sharpness = 0.0f;
             bssrdf->N = N;
             bssrdf->roughness = roughness;
 
@@ -874,9 +872,7 @@ ccl_device_noinline int svm_node_closure_bsdf(
 #endif /* __HAIR__ */
 
 #ifdef __SUBSURFACE__
-    case CLOSURE_BSSRDF_CUBIC_ID:
-    case CLOSURE_BSSRDF_GAUSSIAN_ID:
-    case CLOSURE_BSSRDF_BURLEY_ID:
+    case CLOSURE_BSSRDF_DIFFUSION_ID:
     case CLOSURE_BSSRDF_RANDOM_WALK_ID: {
       float3 weight = sd->svm_closure_weight * mix_weight;
       Bssrdf *bssrdf = bssrdf_alloc(sd, weight);
@@ -890,10 +886,8 @@ ccl_device_noinline int svm_node_closure_bsdf(
 
         bssrdf->radius = stack_load_float3(stack, data_node.z) * param1;
         bssrdf->albedo = sd->svm_closure_weight;
-        bssrdf->texture_blur = param2;
-        bssrdf->sharpness = stack_load_float(stack, data_node.w);
         bssrdf->N = N;
-        bssrdf->roughness = 0.0f;
+        bssrdf->roughness = FLT_MAX;
         sd->flag |= bssrdf_setup(sd, bssrdf, (ClosureType)type);
       }
 

@@ -74,7 +74,7 @@ static bNodeSocketTemplate sh_node_bsdf_principled_out[] = {
 static void node_shader_init_principled(bNodeTree *UNUSED(ntree), bNode *node)
 {
   node->custom1 = SHD_GLOSSY_GGX;
-  node->custom2 = SHD_SUBSURFACE_BURLEY;
+  node->custom2 = SHD_SUBSURFACE_RANDOM_WALK;
 }
 
 #define socket_not_zero(sock) (in[sock].link || (clamp_f(in[sock].vec[0], 0.0f, 1.0f) > 1e-5f))
@@ -120,11 +120,10 @@ static int node_shader_gpu_bsdf_principled(GPUMaterial *mat,
 
   /* SSS Profile */
   if (use_subsurf) {
-    static short profile = SHD_SUBSURFACE_BURLEY;
     bNodeSocket *socket = BLI_findlink(&node->original->inputs, 2);
     bNodeSocketValueRGBA *socket_data = socket->default_value;
     /* For some reason it seems that the socket value is in ARGB format. */
-    GPU_material_sss_profile_create(mat, &socket_data->value[1], &profile, NULL);
+    GPU_material_sss_profile_create(mat, &socket_data->value[1]);
   }
 
   if (in[2].link) {

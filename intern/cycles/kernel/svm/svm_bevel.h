@@ -22,6 +22,73 @@ CCL_NAMESPACE_BEGIN
 
 #ifdef __SHADER_RAYTRACE__
 
+/* Planar Cubic BSSRDF falloff, reused for bevel.
+ *
+ * This is basically (Rm - x)^3, with some factors to normalize it. For sampling
+ * we integrate 2*pi*x * (Rm - x)^3, which gives us a quintic equation that as
+ * far as I can tell has no closed form solution. So we get an iterative solution
+ * instead with newton-raphson. */
+
+ccl_device float svm_bevel_cubic_eval(const float radius, float r)
+{
+  const float Rm = radius;
+
+  if (r >= Rm)
+    return 0.0f;
+
+  /* integrate (2*pi*r * 10*(R - r)^3)/(pi * R^5) from 0 to R = 1 */
+  const float Rm5 = (Rm * Rm) * (Rm * Rm) * Rm;
+  const float f = Rm - r;
+  const float num = f * f * f;
+
+  return (10.0f * num) / (Rm5 * M_PI_F);
+}
+
+ccl_device float svm_bevel_cubic_pdf(const float radius, float r)
+{
+  return svm_bevel_cubic_eval(radius, r);
+}
+
+/* solve 10x^2 - 20x^3 + 15x^4 - 4x^5 - xi == 0 */
+ccl_device_forceinline float svm_bevel_cubic_quintic_root_find(float xi)
+{
+  /* newton-raphson iteration, usually succeeds in 2-4 iterations, except
+   * outside 0.02 ... 0.98 where it can go up to 10, so overall performance
+   * should not be too bad */
+  const float tolerance = 1e-6f;
+  const int max_iteration_count = 10;
+  float x = 0.25f;
+  int i;
+
+  for (i = 0; i < max_iteration_count; i++) {
+    float x2 = x * x;
+    float x3 = x2 * x;
+    float nx = (1.0f - x);
+
+    float f = 10.0f * x2 - 20.0f * x3 + 15.0f * x2 * x2 - 4.0f * x2 * x3 - xi;
+    float f_ = 20.0f * (x * nx) * (nx * nx);
+
+    if (fabsf(f) < tolerance || f_ == 0.0f)
+      break;
+
+    x = saturate(x - f / f_);
+  }
+
+  return x;
+}
+
+ccl_device void svm_bevel_cubic_sample(const float radius, float xi, float *r, float *h)
+{
+  float Rm = radius;
+  float r_ = svm_bevel_cubic_quintic_root_find(xi);
+
+  r_ *= Rm;
+  *r = r_;
+
+  /* h^2 + r^2 = Rm^2 */
+  *h = safe_sqrtf(Rm * Rm - r_ * r_);
+}
+
 /* Bevel shader averaging normals from nearby surfaces.
  *
  * Sampling strategy from: BSSRDF Importance Sampling, SIGGRAPH 2013
@@ -106,7 +173,7 @@ ccl_device float3 svm_bevel(INTEGRATOR_STATE_CONST_ARGS,
     float disk_height;
 
     /* Perhaps find something better than Cubic BSSRDF, but happens to work well. */
-    bssrdf_cubic_sample(radius, 0.0f, disk_r, &disk_r, &disk_height);
+    svm_bevel_cubic_sample(radius, disk_r, &disk_r, &disk_height);
 
     float3 disk_P = (disk_r * cosf(phi)) * disk_T + (disk_r * sinf(phi)) * disk_B;
 
@@ -194,8 +261,8 @@ ccl_device float3 svm_bevel(INTEGRATOR_STATE_CONST_ARGS,
       float r = len(hit_P - sd->P);
 
       /* Compute weight. */
-      float pdf = bssrdf_cubic_pdf(radius, 0.0f, r);
-      float disk_pdf = bssrdf_cubic_pdf(radius, 0.0f, disk_r);
+      float pdf = svm_bevel_cubic_pdf(radius, r);
+      float disk_pdf = svm_bevel_cubic_pdf(radius, disk_r);
 
       w *= pdf / disk_pdf;
 

@@ -4654,16 +4654,17 @@ static const EnumPropertyItem node_principled_distribution_items[] = {
 };
 
 static const EnumPropertyItem node_subsurface_method_items[] = {
-    {SHD_SUBSURFACE_BURLEY,
-     "BURLEY",
+    {SHD_SUBSURFACE_DIFFUSION,
+     "DIFFUSION",
      0,
-     "Christensen-Burley",
-     "Approximation to physically based volume scattering"},
+     "Diffusion",
+     "Subsurface scattering by light diffusion across surface"},
     {SHD_SUBSURFACE_RANDOM_WALK,
      "RANDOM_WALK",
      0,
      "Random Walk",
-     "Volumetric approximation to physically based volume scattering"},
+     "Subsurface scattering by volumetric scattering below the surface. Most physically accurate, "
+     "but requires accurate internal geometry and closed volume"},
     {0, NULL, 0, NULL, NULL}};
 
 /* -- Common nodes ---------------------------------------------------------- */
@@ -6131,31 +6132,11 @@ static void def_sh_ambient_occlusion(StructRNA *srna)
 
 static void def_sh_subsurface(StructRNA *srna)
 {
-  static const EnumPropertyItem prop_subsurface_falloff_items[] = {
-      {SHD_SUBSURFACE_CUBIC, "CUBIC", 0, "Cubic", "Simple cubic falloff function"},
-      {SHD_SUBSURFACE_GAUSSIAN,
-       "GAUSSIAN",
-       0,
-       "Gaussian",
-       "Normal distribution, multiple can be combined to fit more complex profiles"},
-      {SHD_SUBSURFACE_BURLEY,
-       "BURLEY",
-       0,
-       "Christensen-Burley",
-       "Approximation to physically based volume scattering"},
-      {SHD_SUBSURFACE_RANDOM_WALK,
-       "RANDOM_WALK",
-       0,
-       "Random Walk",
-       "Volumetric approximation to physically based volume scattering"},
-      {0, NULL, 0, NULL, NULL},
-  };
-
   PropertyRNA *prop;
 
   prop = RNA_def_property(srna, "falloff", PROP_ENUM, PROP_NONE);
   RNA_def_property_enum_sdna(prop, NULL, "custom1");
-  RNA_def_property_enum_items(prop, prop_subsurface_falloff_items);
+  RNA_def_property_enum_items(prop, node_subsurface_method_items);
   RNA_def_property_ui_text(prop,
                            "Falloff",
                            "Function to determine how much light nearby points contribute based "

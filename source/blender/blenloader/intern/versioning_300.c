@@ -401,10 +401,14 @@ static void do_version_constraints_spline_ik_joint_bindings(ListBase *lb)
 static void do_version_subsurface_methods(bNode *node)
 {
   if (node->type == SH_NODE_SUBSURFACE_SCATTERING) {
-    node->custom1 = SHD_SUBSURFACE_RANDOM_WALK;
+    if (node->custom1 != SHD_SUBSURFACE_RANDOM_WALK) {
+      node->custom1 = SHD_SUBSURFACE_RANDOM_WALK_FIXED_RADIUS;
+    }
   }
   else if (node->type == SH_NODE_BSDF_PRINCIPLED) {
-    node->custom2 = SHD_SUBSURFACE_RANDOM_WALK;
+    if (node->custom2 != SHD_SUBSURFACE_RANDOM_WALK) {
+      node->custom2 = SHD_SUBSURFACE_RANDOM_WALK_FIXED_RADIUS;
+    }
   }
 }
 

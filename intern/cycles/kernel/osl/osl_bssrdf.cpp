@@ -50,21 +50,28 @@ CCL_NAMESPACE_BEGIN
 
 using namespace OSL;
 
+static ustring u_random_walk_fixed_radius("random_walk_fixed_radius");
 static ustring u_random_walk("random_walk");
 
 class CBSSRDFClosure : public CClosurePrimitive {
  public:
   Bssrdf params;
+  float ior;
   ustring method;
 
   CBSSRDFClosure()
   {
     params.roughness = FLT_MAX;
+    params.anisotropy = 1.0f;
+    ior = 1.4f;
   }
 
   void setup(ShaderData *sd, int path_flag, float3 weight)
   {
-    if (method == u_random_walk) {
+    if (method == u_random_walk_fixed_radius) {
+      alloc(sd, path_flag, weight, CLOSURE_BSSRDF_RANDOM_WALK_FIXED_RADIUS_ID);
+    }
+    else if (method == u_random_walk) {
       alloc(sd, path_flag, weight, CLOSURE_BSSRDF_RANDOM_WALK_ID);
     }
   }
@@ -86,7 +93,8 @@ class CBSSRDFClosure : public CClosurePrimitive {
       bssrdf->albedo = params.albedo;
       bssrdf->N = params.N;
       bssrdf->roughness = params.roughness;
-      sd->flag |= bssrdf_setup(sd, bssrdf, (ClosureType)type);
+      bssrdf->anisotropy = params.anisotropy;
+      sd->flag |= bssrdf_setup(sd, bssrdf, (ClosureType)type, ior);
     }
   }
 };
@@ -99,6 +107,8 @@ ClosureParam *closure_bssrdf_params()
       CLOSURE_FLOAT3_PARAM(CBSSRDFClosure, params.radius),
       CLOSURE_FLOAT3_PARAM(CBSSRDFClosure, params.albedo),
       CLOSURE_FLOAT_KEYPARAM(CBSSRDFClosure, params.roughness, "roughness"),
+      CLOSURE_FLOAT_KEYPARAM(CBSSRDFClosure, ior, "ior"),
+      CLOSURE_FLOAT_KEYPARAM(CBSSRDFClosure, params.anisotropy, "anisotropy"),
       CLOSURE_STRING_KEYPARAM(CBSSRDFClosure, label, "label"),
       CLOSURE_FINISH_PARAM(CBSSRDFClosure)};
   return params;

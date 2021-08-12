@@ -1049,6 +1049,7 @@ static void node_shader_buts_glossy(uiLayout *layout, bContext *UNUSED(C), Point
 static void node_shader_buts_principled(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
 {
   uiItemR(layout, ptr, "distribution", DEFAULT_FLAGS, "", ICON_NONE);
+  uiItemR(layout, ptr, "subsurface_method", DEFAULT_FLAGS, "", ICON_NONE);
 }
 
 static void node_shader_buts_anisotropic(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
@@ -1058,6 +1059,7 @@ static void node_shader_buts_anisotropic(uiLayout *layout, bContext *UNUSED(C), 
 
 static void node_shader_buts_subsurface(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
 {
+  uiItemR(layout, ptr, "falloff", DEFAULT_FLAGS, "", ICON_NONE);
 }
 
 static void node_shader_buts_toon(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)

@@ -24,16 +24,66 @@ typedef ccl_addr_space struct Bssrdf {
   float3 radius;
   float3 albedo;
   float roughness;
+  float anisotropy;
 } Bssrdf;
 
 static_assert(sizeof(ShaderClosure) >= sizeof(Bssrdf), "Bssrdf is too large!");
 
-/* Scale mean free path length so it gives similar looking result to older
- * to Cubic, Gaussian and Burley models.
- */
-ccl_device_inline float3 bssrdf_burley_compatible_mfp(float3 r)
+ccl_device float bssrdf_dipole_compute_Rd(float alpha_prime, float fourthirdA)
 {
-  return 0.25f * M_1_PI_F * r;
+  float s = sqrtf(3.0f * (1.0f - alpha_prime));
+  return 0.5f * alpha_prime * (1.0f + expf(-fourthirdA * s)) * expf(-s);
+}
+
+ccl_device float bssrdf_dipole_compute_alpha_prime(float rd, float fourthirdA)
+{
+  /* Little Newton solver. */
+  if (rd < 1e-4f) {
+    return 0.0f;
+  }
+  if (rd >= 0.995f) {
+    return 0.999999f;
+  }
+
+  float x0 = 0.0f;
+  float x1 = 1.0f;
+  float xmid, fmid;
+
+  constexpr const int max_num_iterations = 12;
+  for (int i = 0; i < max_num_iterations; ++i) {
+    xmid = 0.5f * (x0 + x1);
+    fmid = bssrdf_dipole_compute_Rd(xmid, fourthirdA);
+    if (fmid < rd) {
+      x0 = xmid;
+    }
+    else {
+      x1 = xmid;
+    }
+  }
+
+  return xmid;
+}
+
+ccl_device void bssrdf_setup_radius(Bssrdf *bssrdf, const ClosureType type, const float eta)
+{
+  /* Scale mean free path length so it gives similar looking result to older
+   * to Cubic, Gaussian and Burley models. */
+  bssrdf->radius *= 0.25f * M_1_PI_F;
+
+  if (type != CLOSURE_BSSRDF_RANDOM_WALK_FIXED_RADIUS_ID) {
+    /* Adjust radius based on IOR and albedo. */
+    const float inv_eta = 1.0f / eta;
+    const float F_dr = inv_eta * (-1.440f * inv_eta + 0.710f) + 0.668f + 0.0636f * eta;
+    const float fourthirdA = (4.0f / 3.0f) * (1.0f + F_dr) /
+                             (1.0f - F_dr); /* From Jensen's Fdr ratio formula. */
+
+    const float3 alpha_prime = make_float3(
+        bssrdf_dipole_compute_alpha_prime(bssrdf->albedo.x, fourthirdA),
+        bssrdf_dipole_compute_alpha_prime(bssrdf->albedo.y, fourthirdA),
+        bssrdf_dipole_compute_alpha_prime(bssrdf->albedo.z, fourthirdA));
+
+    bssrdf->radius *= sqrt(3.0f * (one_float3() - alpha_prime));
+  }
 }
 
 /* Setup */
@@ -51,7 +101,7 @@ ccl_device_inline Bssrdf *bssrdf_alloc(ShaderData *sd, float3 weight)
   return (sample_weight >= CLOSURE_WEIGHT_CUTOFF) ? bssrdf : NULL;
 }
 
-ccl_device int bssrdf_setup(ShaderData *sd, Bssrdf *bssrdf, ClosureType type)
+ccl_device int bssrdf_setup(ShaderData *sd, Bssrdf *bssrdf, ClosureType type, const float ior)
 {
   int flag = 0;
   int bssrdf_channels = 3;
@@ -112,8 +162,7 @@ ccl_device int bssrdf_setup(ShaderData *sd, Bssrdf *bssrdf, ClosureType type)
     bssrdf->type = type;
     bssrdf->sample_weight = fabsf(average(bssrdf->weight)) * bssrdf_channels;
 
-    /* Mean free path length. */
-    bssrdf->radius = bssrdf_burley_compatible_mfp(bssrdf->radius);
+    bssrdf_setup_radius(bssrdf, type, ior);
 
     flag |= SD_BSSRDF;
   }

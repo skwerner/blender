@@ -67,6 +67,7 @@ ccl_device int subsurface_bounce(INTEGRATOR_STATE_ARGS, ShaderData *sd, const Sh
   INTEGRATOR_STATE_WRITE(subsurface, albedo) = bssrdf->albedo;
   INTEGRATOR_STATE_WRITE(subsurface, radius) = bssrdf->radius;
   INTEGRATOR_STATE_WRITE(subsurface, roughness) = bssrdf->roughness;
+  INTEGRATOR_STATE_WRITE(subsurface, anisotropy) = bssrdf->anisotropy;
 
   return LABEL_SUBSURFACE_SCATTER;
 }
@@ -123,25 +124,72 @@ ccl_device void subsurface_shader_data_setup(INTEGRATOR_STATE_ARGS, ShaderData *
  * "Practical and Controllable Subsurface Scattering for Production Path
  *  Tracing". Matt Jen-Yuan Chiang, Peter Kutz, Brent Burley. SIGGRAPH 2016. */
 
-ccl_device void subsurface_random_walk_remap(const float A,
-                                             const float d,
-                                             float *sigma_t,
-                                             float *alpha)
+/* Support for anisotropy from:
+ * "Path Traced Subsurface Scattering using Anisotropic Phase Functions
+ * and Non-Exponential Free Flights".
+ * Magnus Wrenninge, Ryusuke Villemin, Christophe Hery.
+ * https://graphics.pixar.com/library/PathTracedSubsurface/ */
+
+ccl_device void subsurface_random_walk_remap(
+    const float albedo, const float d, float g, float *sigma_t, float *alpha)
 {
+  /* Not well defined for negative anisotropy, just clamp for now. */
+  g = fmaxf(g, 0.0f);
+
   /* Compute attenuation and scattering coefficients from albedo. */
-  *alpha = 1.0f - expf(A * (-5.09406f + A * (2.61188f - A * 4.31805f)));
-  *sigma_t = 1.0f / fmaxf(d, 1e-16f);
+  const float g2 = g * g;
+  const float g3 = g2 * g;
+  const float g4 = g3 * g;
+  const float g5 = g4 * g;
+  const float g6 = g5 * g;
+  const float g7 = g6 * g;
+
+  const float A = 1.8260523782f + -1.28451056436f * g + -1.79904629312f * g2 +
+                  9.19393289202f * g3 + -22.8215585862f * g4 + 32.0234874259f * g5 +
+                  -23.6264803333f * g6 + 7.21067002658f * g7;
+  const float B = 4.98511194385f +
+                  0.127355959438f *
+                      expf(31.1491581433f * g + -201.847017512f * g2 + 841.576016723f * g3 +
+                           -2018.09288505f * g4 + 2731.71560286f * g5 + -1935.41424244f * g6 +
+                           559.009054474f * g7);
+  const float C = 1.09686102424f + -0.394704063468f * g + 1.05258115941f * g2 +
+                  -8.83963712726f * g3 + 28.8643230661f * g4 + -46.8802913581f * g5 +
+                  38.5402837518f * g6 + -12.7181042538f * g7;
+  const float D = 0.496310210422f + 0.360146581622f * g + -2.15139309747f * g2 +
+                  17.8896899217f * g3 + -55.2984010333f * g4 + 82.065982243f * g5 +
+                  -58.5106008578f * g6 + 15.8478295021f * g7;
+  const float E = 4.23190299701f +
+                  0.00310603949088f *
+                      expf(76.7316253952f * g + -594.356773233f * g2 + 2448.8834203f * g3 +
+                           -5576.68528998f * g4 + 7116.60171912f * g5 + -4763.54467887f * g6 +
+                           1303.5318055f * g7);
+  const float F = 2.40602999408f + -2.51814844609f * g + 9.18494908356f * g2 +
+                  -79.2191708682f * g3 + 259.082868209f * g4 + -403.613804597f * g5 +
+                  302.85712436f * g6 + -87.4370473567f * g7;
+
+  const float blend = powf(albedo, 0.25f);
+
+  *alpha = (1.0f - blend) * A * powf(atanf(B * albedo), C) +
+           blend * D * powf(atanf(E * albedo), F);
+  *alpha = clamp(*alpha, 0.0f, 0.999999f);  // because of numerical precision
+
+  float sigma_t_prime = 1.0f / fmaxf(d, 1e-16f);
+  *sigma_t = sigma_t_prime / (1.0f - g);
 }
 
-ccl_device void subsurface_random_walk_coefficients(
-    const float3 albedo, const float3 radius, float3 *sigma_t, float3 *alpha, float3 *throughput)
+ccl_device void subsurface_random_walk_coefficients(const float3 albedo,
+                                                    const float3 radius,
+                                                    const float anisotropy,
+                                                    float3 *sigma_t,
+                                                    float3 *alpha,
+                                                    float3 *throughput)
 {
   float sigma_t_x, sigma_t_y, sigma_t_z;
   float alpha_x, alpha_y, alpha_z;
 
-  subsurface_random_walk_remap(albedo.x, radius.x, &sigma_t_x, &alpha_x);
-  subsurface_random_walk_remap(albedo.y, radius.y, &sigma_t_y, &alpha_y);
-  subsurface_random_walk_remap(albedo.z, radius.z, &sigma_t_z, &alpha_z);
+  subsurface_random_walk_remap(albedo.x, radius.x, anisotropy, &sigma_t_x, &alpha_x);
+  subsurface_random_walk_remap(albedo.y, radius.y, anisotropy, &sigma_t_y, &alpha_y);
+  subsurface_random_walk_remap(albedo.z, radius.z, anisotropy, &sigma_t_z, &alpha_z);
 
   *sigma_t = make_float3(sigma_t_x, sigma_t_y, sigma_t_z);
   *alpha = make_float3(alpha_x, alpha_y, alpha_z);
@@ -178,7 +226,7 @@ ccl_device_forceinline float sample_phase_dwivedi(float v, float phase_log, floa
   /* Based on Eq. 10 from [2]: `v - (v + 1) * pow((v - 1) / (v + 1), rand)`
    * Since we're already pre-computing `phase_log = log((v + 1) / (v - 1))` for the evaluation,
    * we can implement the power function like this. */
-  return v - (v + 1) * expf(-rand * phase_log);
+  return v - (v + 1.0f) * expf(-rand * phase_log);
 }
 
 ccl_device_forceinline float diffusion_length_dwivedi(float alpha)
@@ -209,6 +257,10 @@ ccl_device_forceinline float3 subsurface_random_walk_pdf(float3 sigma_t,
   }
   return hit ? T : sigma_t * T;
 }
+
+/* Define the below variable to get the similarity code active,
+ * and the value represents the cutoff level */
+#  define SUBSURFACE_RANDOM_WALK_SIMILARITY_LEVEL 9
 
 ccl_device_inline bool subsurface_random_walk(INTEGRATOR_STATE_ARGS,
                                               RNGState rng_state,
@@ -251,10 +303,11 @@ ccl_device_inline bool subsurface_random_walk(INTEGRATOR_STATE_ARGS,
    * The single-scattering albedo is named alpha to avoid confusion with the surface albedo. */
   const float3 albedo = INTEGRATOR_STATE(subsurface, albedo);
   const float3 radius = INTEGRATOR_STATE(subsurface, radius);
+  const float anisotropy = INTEGRATOR_STATE(subsurface, anisotropy);
 
   float3 sigma_t, alpha;
   float3 throughput = INTEGRATOR_STATE_WRITE(path, throughput);
-  subsurface_random_walk_coefficients(albedo, radius, &sigma_t, &alpha, &throughput);
+  subsurface_random_walk_coefficients(albedo, radius, anisotropy, &sigma_t, &alpha, &throughput);
   float3 sigma_s = sigma_t * alpha;
 
   /* Theoretically it should be better to use the exact alpha for the channel we're sampling at
@@ -275,7 +328,7 @@ ccl_device_inline bool subsurface_random_walk(INTEGRATOR_STATE_ARGS,
   }
 
   /* Precompute term for phase sampling. */
-  const float phase_log = logf((diffusion_length + 1) / (diffusion_length - 1));
+  const float phase_log = logf((diffusion_length + 1.0f) / (diffusion_length - 1.0f));
 
   /* Modify state for RNGs, decorrelated from other paths. */
   rng_state.rng_hash = cmj_hash(rng_state.rng_hash + rng_state.rng_offset, 0xdeadbeef);
@@ -286,11 +339,39 @@ ccl_device_inline bool subsurface_random_walk(INTEGRATOR_STATE_ARGS,
   float opposite_distance = 0.0f;
 
   /* Todo: Disable for alpha>0.999 or so? */
-  const float guided_fraction = 0.75f;
+  /* Our heuristic, a compromise between guiding and classic. */
+  const float guided_fraction = 1.0f - fmaxf(0.5f, powf(fabsf(anisotropy), 0.125f));
+
+#  ifdef SUBSURFACE_RANDOM_WALK_SIMILARITY_LEVEL
+  float3 sigma_s_star = sigma_s * (1.0f - anisotropy);
+  float3 sigma_t_star = sigma_t - sigma_s + sigma_s_star;
+  float3 sigma_t_org = sigma_t;
+  float3 sigma_s_org = sigma_s;
+  const float anisotropy_org = anisotropy;
+  const float guided_fraction_org = guided_fraction;
+#  endif
 
   for (int bounce = 0; bounce < BSSRDF_MAX_BOUNCES; bounce++) {
     /* Advance random number offset. */
     rng_state.rng_offset += PRNG_BOUNCE_NUM;
+
+#  ifdef SUBSURFACE_RANDOM_WALK_SIMILARITY_LEVEL
+    // shadow with local variables according to depth
+    float anisotropy, guided_fraction;
+    float3 sigma_s, sigma_t;
+    if (bounce <= SUBSURFACE_RANDOM_WALK_SIMILARITY_LEVEL) {
+      anisotropy = anisotropy_org;
+      guided_fraction = guided_fraction_org;
+      sigma_t = sigma_t_org;
+      sigma_s = sigma_s_org;
+    }
+    else {
+      anisotropy = 0.0f;
+      guided_fraction = 0.75f;  // back to isotropic heuristic from Blender
+      sigma_t = sigma_t_star;
+      sigma_s = sigma_s_star;
+    }
+#  endif
 
     /* Sample color channel, use MIS with balance heuristic. */
     float rphase = path_state_rng_1D(kg, &rng_state, PRNG_PHASE_CHANNEL);
@@ -322,7 +403,8 @@ ccl_device_inline bool subsurface_random_walk(INTEGRATOR_STATE_ARGS,
          * and the assumed opposite interface (the parallel plane that contains the point we
          * found in our ray query for the opposite side). */
         float x = clamp(dot(ray.P - P, -N), 0.0f, opposite_distance);
-        backward_fraction = 1.0f / (1.0f + expf((opposite_distance - 2 * x) / diffusion_length));
+        backward_fraction = 1.0f /
+                            (1.0f + expf((opposite_distance - 2.0f * x) / diffusion_length));
         guide_backward = path_state_rng_1D(kg, &rng_state, PRNG_TERMINATE) < backward_fraction;
       }
 
@@ -330,6 +412,7 @@ ccl_device_inline bool subsurface_random_walk(INTEGRATOR_STATE_ARGS,
       float scatter_u, scatter_v;
       path_state_rng_2D(kg, &rng_state, PRNG_BSDF_U, &scatter_u, &scatter_v);
       float cos_theta;
+      float hg_pdf;
       if (guided) {
         cos_theta = sample_phase_dwivedi(diffusion_length, phase_log, scatter_u);
         /* The backwards guiding distribution is just mirrored along sd->N, so swapping the
@@ -337,11 +420,15 @@ ccl_device_inline bool subsurface_random_walk(INTEGRATOR_STATE_ARGS,
         if (guide_backward) {
           cos_theta = -cos_theta;
         }
+        float3 newD = direction_from_cosine(N, cos_theta, scatter_v);
+        hg_pdf = single_peaked_henyey_greenstein(dot(ray.D, newD), anisotropy);
+        ray.D = newD;
       }
       else {
-        cos_theta = 2.0f * scatter_u - 1.0f;
+        float3 newD = henyey_greenstrein_sample(ray.D, anisotropy, scatter_u, scatter_v, &hg_pdf);
+        cos_theta = dot(newD, N);
+        ray.D = newD;
       }
-      ray.D = direction_from_cosine(N, cos_theta, scatter_v);
 
       /* Compute PDF factor caused by phase sampling (as the ratio of guided / classic).
        * Since phase sampling is channel-independent, we can get away with applying a factor
@@ -349,8 +436,10 @@ ccl_device_inline bool subsurface_random_walk(INTEGRATOR_STATE_ARGS,
        * it cancel with an equivalent term in the numerator of the full estimator.
        * For the backward PDF, we again reuse the same probability distribution with a sign swap.
        */
-      forward_pdf_factor = 2.0f * eval_phase_dwivedi(diffusion_length, phase_log, cos_theta);
-      backward_pdf_factor = 2.0f * eval_phase_dwivedi(diffusion_length, phase_log, -cos_theta);
+      forward_pdf_factor = M_1_2PI_F * eval_phase_dwivedi(diffusion_length, phase_log, cos_theta) /
+                           hg_pdf;
+      backward_pdf_factor = M_1_2PI_F *
+                            eval_phase_dwivedi(diffusion_length, phase_log, -cos_theta) / hg_pdf;
 
       /* Prepare distance sampling.
        * For the backwards case, this also needs the sign swapped since now directions against

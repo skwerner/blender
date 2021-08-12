@@ -546,6 +546,8 @@ class PrincipledBsdfNode : public BsdfBaseNode {
                ShaderInput *metallic,
                ShaderInput *subsurface,
                ShaderInput *subsurface_radius,
+               ShaderInput *subsurface_ior,
+               ShaderInput *subsurface_anisotropy,
                ShaderInput *specular,
                ShaderInput *roughness,
                ShaderInput *specular_tint,
@@ -562,6 +564,8 @@ class PrincipledBsdfNode : public BsdfBaseNode {
   NODE_SOCKET_API(float3, base_color)
   NODE_SOCKET_API(float3, subsurface_color)
   NODE_SOCKET_API(float3, subsurface_radius)
+  NODE_SOCKET_API(float, subsurface_ior)
+  NODE_SOCKET_API(float, subsurface_anisotropy)
   NODE_SOCKET_API(float, metallic)
   NODE_SOCKET_API(float, subsurface)
   NODE_SOCKET_API(float, specular)
@@ -581,6 +585,7 @@ class PrincipledBsdfNode : public BsdfBaseNode {
   NODE_SOCKET_API(float3, tangent)
   NODE_SOCKET_API(float, surface_mix_weight)
   NODE_SOCKET_API(ClosureType, distribution)
+  NODE_SOCKET_API(ClosureType, subsurface_method)
   NODE_SOCKET_API(float3, emission)
   NODE_SOCKET_API(float, emission_strength)
   NODE_SOCKET_API(float, alpha)
@@ -697,11 +702,14 @@ class SubsurfaceScatteringNode : public BsdfNode {
   bool has_bssrdf_bump();
   ClosureType get_closure_type()
   {
-    return CLOSURE_BSSRDF_RANDOM_WALK_ID;
+    return method;
   }
 
   NODE_SOCKET_API(float, scale)
   NODE_SOCKET_API(float3, radius)
+  NODE_SOCKET_API(float, subsurface_ior)
+  NODE_SOCKET_API(float, subsurface_anisotropy)
+  NODE_SOCKET_API(ClosureType, method)
 };
 
 class EmissionNode : public ShaderNode {

@@ -169,6 +169,11 @@ ccl_device_noinline int svm_node_closure_bsdf(
       float3 subsurface_radius = stack_valid(data_cn_ssr.y) ?
                                      stack_load_float3(stack, data_cn_ssr.y) :
                                      make_float3(1.0f, 1.0f, 1.0f);
+      float subsurface_ior = stack_valid(data_cn_ssr.z) ? stack_load_float(stack, data_cn_ssr.z) :
+                                                          1.4f;
+      float subsurface_anisotropy = stack_valid(data_cn_ssr.w) ?
+                                        stack_load_float(stack, data_cn_ssr.w) :
+                                        0.0f;
 
       // get the subsurface color
       uint4 data_subsurface_color = read_node(kg, &offset);
@@ -222,8 +227,12 @@ ccl_device_noinline int svm_node_closure_bsdf(
             bssrdf->N = N;
             bssrdf->roughness = roughness;
 
+            /* Clamps protecting against bad/extreme and non physical values. */
+            subsurface_ior = clamp(subsurface_ior, 1.01f, 3.8f);
+            bssrdf->anisotropy = clamp(subsurface_anisotropy, -0.9f, 0.9f);
+
             /* setup bsdf */
-            sd->flag |= bssrdf_setup(sd, bssrdf, subsurface_method);
+            sd->flag |= bssrdf_setup(sd, bssrdf, subsurface_method, subsurface_ior);
           }
         }
       }
@@ -870,7 +879,8 @@ ccl_device_noinline int svm_node_closure_bsdf(
 #endif /* __HAIR__ */
 
 #ifdef __SUBSURFACE__
-    case CLOSURE_BSSRDF_RANDOM_WALK_ID: {
+    case CLOSURE_BSSRDF_RANDOM_WALK_ID:
+    case CLOSURE_BSSRDF_RANDOM_WALK_FIXED_RADIUS_ID: {
       float3 weight = sd->svm_closure_weight * mix_weight;
       Bssrdf *bssrdf = bssrdf_alloc(sd, weight);
 
@@ -885,7 +895,12 @@ ccl_device_noinline int svm_node_closure_bsdf(
         bssrdf->albedo = sd->svm_closure_weight;
         bssrdf->N = N;
         bssrdf->roughness = FLT_MAX;
-        sd->flag |= bssrdf_setup(sd, bssrdf, (ClosureType)type);
+
+        const float subsurface_ior = clamp(param2, 1.01f, 3.8f);
+        const float subsurface_anisotropy = stack_load_float(stack, data_node.w);
+        bssrdf->anisotropy = clamp(subsurface_anisotropy, -0.9f, 0.9f);
+
+        sd->flag |= bssrdf_setup(sd, bssrdf, (ClosureType)type, subsurface_ior);
       }
 
       break;

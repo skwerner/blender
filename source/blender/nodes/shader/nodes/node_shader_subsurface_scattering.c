@@ -25,6 +25,8 @@ static bNodeSocketTemplate sh_node_subsurface_scattering_in[] = {
     {SOCK_RGBA, N_("Color"), 0.8f, 0.8f, 0.8f, 1.0f, 0.0f, 1.0f},
     {SOCK_FLOAT, N_("Scale"), 1.0, 0.0f, 0.0f, 0.0f, 0.0f, 1000.0f},
     {SOCK_VECTOR, N_("Radius"), 1.0f, 0.2f, 0.1f, 0.0f, 0.0f, 100.0f, PROP_NONE, SOCK_COMPACT},
+    {SOCK_FLOAT, N_("IOR"), 1.4f, 0.0f, 0.0f, 0.0f, 1.01f, 3.8f, PROP_FACTOR},
+    {SOCK_FLOAT, N_("Anisotropy"), 0.0f, 0.0f, 0.0f, 0.0f, -1.0f, 1.0f, PROP_FACTOR},
     {SOCK_VECTOR, N_("Normal"), 0.0f, 0.0f, 0.0f, 1.0f, -1.0f, 1.0f, PROP_NONE, SOCK_HIDE_VALUE},
     {-1, ""},
 };
@@ -46,8 +48,8 @@ static int node_shader_gpu_subsurface_scattering(GPUMaterial *mat,
                                                  GPUNodeStack *in,
                                                  GPUNodeStack *out)
 {
-  if (!in[3].link) {
-    GPU_link(mat, "world_normals_get", &in[3].link);
+  if (!in[5].link) {
+    GPU_link(mat, "world_normals_get", &in[5].link);
   }
 
   if (node->sss_id > 0) {

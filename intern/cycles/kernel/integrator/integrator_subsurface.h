@@ -275,10 +275,11 @@ ccl_device_forceinline float3 subsurface_random_walk_pdf(float3 sigma_t,
   return hit ? T : sigma_t * T;
 }
 
-ccl_device_inline bool subsurface_random_walk(INTEGRATOR_STATE_ARGS)
+ccl_device_inline bool subsurface_random_walk(INTEGRATOR_STATE_ARGS,
+                                              RNGState rng_state,
+                                              Ray &ray,
+                                              LocalIntersection &ss_isect)
 {
-  RNGState rng_state;
-  path_state_rng_load(INTEGRATOR_STATE_PASS, &rng_state);
   float bssrdf_u, bssrdf_v;
   path_state_rng_2D(kg, &rng_state, PRNG_BSDF_U, &bssrdf_u, &bssrdf_v);
 
@@ -297,27 +298,19 @@ ccl_device_inline bool subsurface_random_walk(INTEGRATOR_STATE_ARGS)
     return false;
   }
 
-#  ifndef __KERNEL_OPTIX__
-  /* Compute or fetch object transforms. */
-  Transform ob_itfm ccl_optional_struct_init;
-  Transform ob_tfm = object_fetch_transform_motion_test(kg, object, time, &ob_itfm);
-#  endif
-
-  const float3 ray_start_P = ray_offset(P, -Ng);
-
   /* Setup ray. */
-  Ray ray ccl_optional_struct_init;
-  ray.P = ray_start_P;
+  ray.P = ray_offset(P, -Ng);
   ray.D = D;
   ray.t = FLT_MAX;
   ray.time = time;
   ray.dP = ray_dP;
   ray.dD = differential_zero_compact();
 
-  /* Setup intersections.
-   * TODO: make this more compact if we don't bring back disk based SSS that needs
-   * multiple intersections. */
-  LocalIntersection ss_isect ccl_optional_struct_init;
+#ifndef __KERNEL_OPTIX__
+  /* Compute or fetch object transforms. */
+  Transform ob_itfm ccl_optional_struct_init;
+  Transform ob_tfm = object_fetch_transform_motion_test(kg, object, time, &ob_itfm);
+#endif
 
   /* Convert subsurface to volume coefficients.
    * The single-scattering albedo is named alpha to avoid confusion with the surface albedo. */
@@ -446,15 +439,15 @@ ccl_device_inline bool subsurface_random_walk(INTEGRATOR_STATE_ARGS)
     hit = (ss_isect.num_hits > 0);
 
     if (hit) {
-#  ifdef __KERNEL_OPTIX__
+#ifdef __KERNEL_OPTIX__
       /* t is always in world space with OptiX. */
       ray.t = ss_isect.hits[0].t;
-#  else
+#else
       /* Compute world space distance to surface hit. */
       float3 D = transform_direction(&ob_itfm, ray.D);
       D = normalize(D) * ss_isect.hits[0].t;
       ray.t = len(transform_direction(&ob_tfm, D));
-#  endif
+#endif
     }
 
     if (bounce == 0) {
@@ -522,24 +515,41 @@ ccl_device_inline bool subsurface_random_walk(INTEGRATOR_STATE_ARGS)
     }
   }
 
-  kernel_assert(isfinite3_safe(throughput));
+  if (hit) {
+    kernel_assert(isfinite3_safe(throughput));
+    INTEGRATOR_STATE_WRITE(path, throughput) = throughput;
+  }
 
-  /* Return number of hits in ss_isect. */
-  if (!hit) {
+  return hit;
+}
+
+ccl_device_inline bool subsurface_scatter(INTEGRATOR_STATE_ARGS)
+{
+  RNGState rng_state;
+  path_state_rng_load(INTEGRATOR_STATE_PASS, &rng_state);
+
+  Ray ray ccl_optional_struct_init;
+  LocalIntersection ss_isect ccl_optional_struct_init;
+
+  if (!subsurface_random_walk(INTEGRATOR_STATE_PASS, rng_state, ray, ss_isect)) {
     return false;
   }
 
-#  ifdef __VOLUME__
+#ifdef __VOLUME__
   /* Update volume stack if needed. */
   if (kernel_data.integrator.use_volumes) {
     const int object = intersection_get_object(kg, &ss_isect.hits[0]);
     const int object_flag = kernel_tex_fetch(__object_flag, object);
 
     if (object_flag & SD_OBJECT_INTERSECTS_VOLUME) {
-      integrator_volume_stack_update_for_subsurface(INTEGRATOR_STATE_PASS, ray_start_P, ray.P);
+      float3 P = INTEGRATOR_STATE(ray, P);
+      const float3 Ng = INTEGRATOR_STATE(isect, Ng);
+      const float3 offset_P = ray_offset(P, -Ng);
+
+      integrator_volume_stack_update_for_subsurface(INTEGRATOR_STATE_PASS, offset_P, ray.P);
     }
   }
-#  endif /* __VOLUME__ */
+#endif /* __VOLUME__ */
 
   /* Pretend ray is coming from the outside towards the exit point. This ensures
    * correct front/back facing normals.
@@ -549,7 +559,6 @@ ccl_device_inline bool subsurface_random_walk(INTEGRATOR_STATE_ARGS)
 
   integrator_state_write_isect(INTEGRATOR_STATE_PASS, &ss_isect.hits[0]);
   integrator_state_write_ray(INTEGRATOR_STATE_PASS, &ray);
-  INTEGRATOR_STATE_WRITE(path, throughput) = throughput;
 
   const int shader = intersection_get_shader(kg, &ss_isect.hits[0]);
   const int shader_flags = kernel_tex_fetch(__shaders, shader).flags;

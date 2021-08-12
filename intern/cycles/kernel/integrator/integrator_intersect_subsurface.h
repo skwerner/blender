@@ -25,7 +25,7 @@ ccl_device void integrator_intersect_subsurface(INTEGRATOR_STATE_ARGS)
   PROFILING_INIT(kg, PROFILING_INTERSECT_SUBSURFACE);
 
 #ifdef __SUBSURFACE__
-  if (subsurface_random_walk(INTEGRATOR_STATE_PASS)) {
+  if (subsurface_scatter(INTEGRATOR_STATE_PASS)) {
     return;
   }
 #endif

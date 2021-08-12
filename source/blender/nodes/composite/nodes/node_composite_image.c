@@ -73,7 +73,7 @@ static bNodeSocketTemplate cmp_node_rlayers_out[] = {
     {SOCK_RGBA, N_(RE_PASSNAME_SUBSURFACE_COLOR), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
     {-1, ""},
 };
-#define MAX_LEGACY_SOCKET_INDEX 30
+#define MAX_LEGACY_SOCKET_INDEX 31
 
 static void cmp_node_image_add_pass_output(bNodeTree *ntree,
                                            bNode *node,

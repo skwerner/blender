@@ -23,6 +23,9 @@
 
 CCL_NAMESPACE_BEGIN
 
+class SessionParams;
+class TileManager;
+
 class RenderWork {
  public:
   int resolution_divider = 1;
@@ -52,7 +55,25 @@ class RenderWork {
     bool postprocess = false;
   } cryptomatte;
 
-  bool denoise = false;
+  /* Work related on the current tile. */
+  struct {
+    /* Write render buffers of the current tile.
+     *
+     * It is up to the path trace to decide whether writing should happen via user-provided
+     * callback into the rendering software, or via tile manager into a partial file. */
+    bool write = false;
+
+    bool denoise = false;
+  } tile;
+
+  /* Work related on the full-frame render buffer. */
+  struct {
+    /* Write full render result.
+     * Implies reading the partial file from disk. */
+    bool write;
+
+    bool denoise = false;
+  } full;
 
   /* Display which is used to visualize render result is to be updated for the new render. */
   bool update_display = false;
@@ -62,19 +83,18 @@ class RenderWork {
    * device used, then it is up for the PathTracer to ignore the balancing. */
   bool rebalance = false;
 
-  bool write_final_result = false;
-
   /* Conversion to bool, to simplify checks about whether there is anything to be done for this
    * work. */
   inline operator bool() const
   {
-    return path_trace.num_samples || adaptive_sampling.filter || denoise || update_display;
+    return path_trace.num_samples || adaptive_sampling.filter || update_display || tile.denoise ||
+           tile.write || full.write || full.denoise;
   }
 };
 
 class RenderScheduler {
  public:
-  RenderScheduler(bool headless, bool background, int pixel_size);
+  RenderScheduler(TileManager &tile_manager, const SessionParams &params);
 
   /* Specify whether cryptomatte-related works are to be scheduled. */
   void set_need_schedule_cryptomatte(bool need_schedule_cryptomatte);
@@ -87,6 +107,8 @@ class RenderScheduler {
 
   void set_denoiser_params(const DenoiseParams &params);
   void set_adaptive_sampling(const AdaptiveSampling &adaptive_sampling);
+
+  bool is_adaptive_sampling_used() const;
 
   /* Start sample for path tracing.
    * The scheduler will schedule work using this sample as the first one. */
@@ -183,6 +205,9 @@ class RenderScheduler {
 
   /* Returns true if any work was scheduled. */
   bool set_postprocess_render_work(RenderWork *render_work);
+
+  /*  Set work which is to be performed after all tiles has been rendered. */
+  void set_full_frame_render_work(RenderWork *render_work);
 
   /* Update start resolution divider based on the accumulated timing information, preserving nice
    * feeling navigation feel. */
@@ -336,9 +361,11 @@ class RenderScheduler {
      * noise floor. */
     float adaptive_sampling_threshold = 0.0f;
 
-    bool last_work_was_denoised = false;
-    bool final_result_was_written = false;
+    bool last_work_tile_was_denoised = false;
+    bool tile_result_was_written = false;
     bool postprocess_work_scheduled = false;
+    bool full_frame_work_scheduled = false;
+    bool full_frame_was_written = false;
 
     bool path_trace_finished = false;
     bool time_limit_reached = false;
@@ -390,6 +417,8 @@ class RenderScheduler {
   /* Pixel size is used to force lower resolution render for final pass. Useful for retina or other
    * types of hi-dpi displays. */
   int pixel_size_ = 1;
+
+  TileManager &tile_manager_;
 
   BufferParams buffer_params_;
   DenoiseParams denoiser_params_;

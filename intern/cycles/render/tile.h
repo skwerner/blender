@@ -17,10 +17,18 @@
 #pragma once
 
 #include "render/buffers.h"
+#include "util/util_image.h"
+#include "util/util_string.h"
+#include "util/util_unique_ptr.h"
+#include "util/util_vector.h"
 
 CCL_NAMESPACE_BEGIN
 
-/* Tile */
+class Pass;
+
+/* --------------------------------------------------------------------
+ * Tile.
+ */
 
 class Tile {
  public:
@@ -32,11 +40,19 @@ class Tile {
   }
 };
 
-/* Tile Manager */
+/* --------------------------------------------------------------------
+ * Tile Manager.
+ */
 
 class TileManager {
  public:
-  TileManager() = default;
+  TileManager();
+  ~TileManager();
+
+  TileManager(const TileManager &other) = delete;
+  TileManager(TileManager &&other) noexcept = delete;
+  TileManager &operator=(const TileManager &other) = delete;
+  TileManager &operator=(TileManager &&other) = delete;
 
   /* Reset current progress and start new rendering of the full-frame parameters in tiles of the
    * given size. */
@@ -44,24 +60,100 @@ class TileManager {
    * cases of stretched renders. */
   void reset(const BufferParams &params, int2 tile_size);
 
+  void update_passes(const BufferParams &params, const vector<Pass *> &passes);
+
+  inline int get_num_tiles() const
+  {
+    return tile_state_.num_tiles;
+  }
+
+  inline bool has_multiple_tiles() const
+  {
+    return tile_state_.num_tiles > 1;
+  }
+
   bool next();
   bool done();
 
   const Tile &get_current_tile() const;
 
+  /* Write render buffer of a tile to a file on disk.
+   *
+   * Opens file for write when first tile is written, and closes the file when the last tile has
+   * been written.
+   *
+   * Returns true on success. */
+  bool write_tile(const RenderBuffers &tile_buffers);
+
+  /* Inform the tile manager that no more tiles will be written to disk.
+   * The file will be considered final, all handles to it will be closed. */
+  void finish_write_tiles();
+
+  /* Check whether any tile ahs been written to disk. */
+  inline bool has_written_tiles() const
+  {
+    return write_state_.num_tiles_written != 0;
+  }
+
+  /* Read full frame render buffer from tiles file on disk.
+   *
+   * The render buffer is reset to the full frame parameters. This means that the caller does not
+   * need to worry about keeping track of the full frame parameters.
+   *
+   * Returns true on success. */
+  bool read_full_buffer_from_disk(RenderBuffers *buffers);
+
+  /* Remove file from disk which holds tiles results. */
+  void remove_tile_file() const;
+
  protected:
+  /* Get tile configuration for its index.
+   * The tile index must be within [0, state_.tile_state_). */
+  Tile get_tile_for_index(int index) const;
+
+  /* Configure image specification for tile file storage.
+   * Note that this only configures meta information about the output without actually opening the
+   * file for write. */
+  void configure_image_spec(const vector<Pass *> &passes);
+
+  bool open_tile_output();
+  bool close_tile_output();
+
+  /* Full file name of a file which holds tile results on disk. */
+  string tile_filepath_;
+
   int2 tile_size_ = make_int2(0, 0);
-  int num_tiles_x_ = 0;
-  int num_tiles_y_ = 0;
 
   BufferParams buffer_params_;
 
+  /* Tile scheduling state. */
   struct {
+    int num_tiles_x = 0;
+    int num_tiles_y = 0;
+    int num_tiles = 0;
+
     int next_tile_index;
-    int num_tiles;
 
     Tile current_tile;
-  } state_;
+  } tile_state_;
+
+  /* State of tiles writing to a file on disk. */
+  struct {
+    /* Specification of the tile image which corresponds to the buffer parameters.
+     * Contains channels configured according to the passes configuration in the path traces.
+     *
+     * Output images are saved using this specification, input images are expected to have matched
+     * specification. */
+    ImageSpec image_spec;
+
+    /* Output handle for the tile file.
+     *
+     * This file can not be closed until all tiles has been provided, so the handle is stored in
+     * the state and is created whenever writing is requested. */
+    unique_ptr<ImageOutput> tile_out;
+
+    int num_tiles_written = 0;
+  } write_state_;
 };
 
 CCL_NAMESPACE_END

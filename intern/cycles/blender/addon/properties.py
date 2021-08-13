@@ -736,6 +736,18 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         min=0, max=1024,
     )
 
+    use_auto_tile: BoolProperty(
+        name="Auto Tiles",
+        description="Automatically split image into tiles",
+        default=True,
+    )
+    tile_size: IntProperty(
+        name="Tile Size",
+        default=2048,
+        description="",
+        min=0, max=16384,
+    )
+
     # Various fine-tuning debug flags
 
     def _devices_update_callback(self, context):

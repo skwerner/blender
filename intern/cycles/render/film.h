@@ -88,8 +88,10 @@ class Film : public Node {
                                       PassMode pass_mode = PassMode::NOISY);
   const Pass *get_actual_display_pass(Scene *scene, const Pass *pass);
 
-  /* Update passes so that they contain all passes required for the configured functionality. */
-  void update_passes(Scene *scene);
+  /* Update passes so that they contain all passes required for the configured functionality.
+   *
+   * If `add_sample_count_pass` is true then the SAMPLE_COUNT pass is ensured to be added. */
+  void update_passes(Scene *scene, bool add_sample_count_pass);
 
   uint get_kernel_features(const Scene *scene) const;
 

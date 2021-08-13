@@ -853,6 +853,14 @@ SessionParams BlenderSync::get_session_params(BL::RenderEngine &b_engine,
   params.use_profiling = params.device.has_profiling && !b_engine.is_preview() && background &&
                          BlenderSession::print_render_stats;
 
+  if (background) {
+    params.use_auto_tile = RNA_boolean_get(&cscene, "use_auto_tile");
+    params.tile_size = get_int(cscene, "tile_size");
+  }
+  else {
+    params.use_auto_tile = false;
+  }
+
   return params;
 }
 

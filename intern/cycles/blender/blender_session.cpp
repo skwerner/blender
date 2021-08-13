@@ -164,10 +164,14 @@ void BlenderSession::create_session()
     session->set_gpu_display(make_unique<BlenderGPUDisplay>(b_engine, b_scene));
   }
 
-  /* TODO(sergey): Decide on what is to be communicated to the engine here. There is no tiled
-   * rendering for from visual point of view when render buffer fits big tile. But for huge
-   * render resolutions it might still be helpful to see which big tile is being sampled. */
-  /* b_engine.use_highlight_tiles(session_params.progressive_refine == false); */
+  /* Viewport and preview (as in, material preview) does not do tiled rendering, so can inform
+   * engine that no tracking of the tiles state is needed.
+   * The offline rendering will make a decision when tile is being written. The penalty of asking
+   * the engine to keep track of tiles state is minimal, so there is nothing to worry about here
+   * about possible single-tiled final render. */
+  if (!b_engine.is_preview() && !b_v3d) {
+    b_engine.use_highlight_tiles(true);
+  }
 
   update_resumable_tile_manager(session_params.samples);
 }
@@ -254,13 +258,6 @@ void BlenderSession::reset_session(BL::BlendData &b_data, BL::Depsgraph &b_depsg
       b_null_space_view3d, b_null_region_view3d, scene->camera, width, height);
   session->reset(buffer_params, session_params.samples);
 
-  /* TODO(sergey): Decice on what is to be communicated to the engine here. There is no tiled
-   * rendering for from visual point of view when render buffer fits big tile. But for huge
-   * render resolutions it might still be helpful to see which big tile is being sampled. */
-  /* TODO(sergey): If some logic is needed here, de-duplicate it with the constructor using some
-   * sort of utility function. */
-  /* b_engine.use_highlight_tiles(session_params.progressive_refine == false); */
-
   /* reset time */
   start_resize_time = 0.0;
 
@@ -312,8 +309,6 @@ void BlenderSession::read_render_tile()
   for (BL::RenderPass &b_pass : b_rlay.passes) {
     session->set_render_tile_pixels(b_pass.name(), b_pass.channels(), (float *)b_pass.rect());
   }
-
-  b_engine.end_result(b_rr, false, false, false);
 }
 
 void BlenderSession::write_render_tile()
@@ -529,7 +524,7 @@ void BlenderSession::render(BL::Depsgraph &b_depsgraph_)
   stamp_view_layer_metadata(scene, b_rlay_name);
 
   /* free result without merging */
-  b_engine.end_result(b_rr, true, true, false);
+  b_engine.end_result(b_rr, true, false, false);
 
   double total_time, render_time;
   session->progress.get_time(total_time, render_time);

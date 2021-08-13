@@ -456,7 +456,7 @@ const Pass *Film::get_actual_display_pass(Scene *scene, const Pass *pass)
   return pass;
 }
 
-void Film::update_passes(Scene *scene)
+void Film::update_passes(Scene *scene, bool add_sample_count_pass)
 {
   const Background *background = scene->background;
   const BakeManager *bake_manager = scene->bake_manager;
@@ -542,6 +542,12 @@ void Film::update_passes(Scene *scene)
   if (bake_manager->get_baking()) {
     add_auto_pass(scene, PASS_BAKE_PRIMITIVE, "BakePrimitive");
     add_auto_pass(scene, PASS_BAKE_DIFFERENTIAL, "BakeDifferential");
+  }
+
+  if (add_sample_count_pass) {
+    if (!Pass::contains(scene->passes, PASS_SAMPLE_COUNT)) {
+      add_auto_pass(scene, PASS_SAMPLE_COUNT);
+    }
   }
 
   /* Remove duplicates and initialize internal pass info. */

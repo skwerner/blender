@@ -16,6 +16,8 @@
 
 #include "integrator/render_scheduler.h"
 
+#include "render/session.h"
+#include "render/tile.h"
 #include "util/util_logging.h"
 #include "util/util_math.h"
 #include "util/util_time.h"
@@ -26,11 +28,12 @@ CCL_NAMESPACE_BEGIN
  * Render scheduler.
  */
 
-RenderScheduler::RenderScheduler(bool headless, bool background, int pixel_size)
-    : headless_(headless),
-      background_(background),
-      pixel_size_(pixel_size),
-      default_start_resolution_divider_(pixel_size * 8)
+RenderScheduler::RenderScheduler(TileManager &tile_manager, const SessionParams &params)
+    : headless_(params.headless),
+      background_(params.background),
+      pixel_size_(params.pixel_size),
+      tile_manager_(tile_manager),
+      default_start_resolution_divider_(pixel_size_ * 8)
 {
   use_progressive_noise_floor_ = !background_;
 }
@@ -58,6 +61,11 @@ void RenderScheduler::set_denoiser_params(const DenoiseParams &params)
 void RenderScheduler::set_adaptive_sampling(const AdaptiveSampling &adaptive_sampling)
 {
   adaptive_sampling_ = adaptive_sampling;
+}
+
+bool RenderScheduler::is_adaptive_sampling_used() const
+{
+  return adaptive_sampling_.use;
 }
 
 void RenderScheduler::set_start_sample(int start_sample)
@@ -135,9 +143,11 @@ void RenderScheduler::reset(const BufferParams &buffer_params, int num_samples)
   /* NOTE: The adaptive sampling settings might not be available here yet. */
   state_.adaptive_sampling_threshold = 0.4f;
 
-  state_.last_work_was_denoised = false;
-  state_.final_result_was_written = false;
+  state_.last_work_tile_was_denoised = false;
+  state_.tile_result_was_written = false;
   state_.postprocess_work_scheduled = false;
+  state_.full_frame_work_scheduled = false;
+  state_.full_frame_was_written = false;
 
   state_.path_trace_finished = false;
 
@@ -176,7 +186,7 @@ bool RenderScheduler::render_work_reschedule_on_converge(RenderWork &render_work
   state_.path_trace_finished = true;
 
   bool denoiser_delayed;
-  render_work.denoise = work_need_denoise(denoiser_delayed);
+  render_work.tile.denoise = work_need_denoise(denoiser_delayed);
 
   render_work.update_display = work_need_update_display(denoiser_delayed);
 
@@ -212,13 +222,22 @@ bool RenderScheduler::render_work_reschedule_on_idle(RenderWork &render_work)
 
 void RenderScheduler::render_work_reschedule_on_cancel(RenderWork &render_work)
 {
+  VLOG(3) << "Schedule work for cancel.";
+
   /* Un-schedule samples: they will not be rendered and should not be counted. */
   state_.num_rendered_samples -= render_work.path_trace.num_samples;
 
   render_work = RenderWork();
 
-  if (!state_.final_result_was_written) {
-    render_work.write_final_result = true;
+  /* Do not write tile if it has zero samples it it, treat it similarly to all other tiles which
+   * got cancelled. */
+  if (!state_.tile_result_was_written && get_num_rendered_samples() != 0) {
+    render_work.tile.write = true;
+    render_work.update_display = true;
+  }
+
+  if (!state_.full_frame_was_written) {
+    render_work.full.write = true;
     render_work.update_display = true;
   }
 }
@@ -246,9 +265,11 @@ RenderWork RenderScheduler::get_render_work()
     RenderWork render_work;
 
     if (!set_postprocess_render_work(&render_work)) {
-      if (state_.end_render_time == 0.0) {
-        state_.end_render_time = time_now;
-      }
+      set_full_frame_render_work(&render_work);
+    }
+
+    if (!render_work) {
+      state_.end_render_time = time_now;
     }
 
     update_state_for_render_work(render_work);
@@ -283,9 +304,9 @@ RenderWork RenderScheduler::get_render_work()
   render_work.adaptive_sampling.reset = false;
 
   bool denoiser_delayed;
-  render_work.denoise = work_need_denoise(denoiser_delayed);
+  render_work.tile.denoise = work_need_denoise(denoiser_delayed);
 
-  render_work.write_final_result = done();
+  render_work.tile.write = done();
 
   render_work.update_display = work_need_update_display(denoiser_delayed);
 
@@ -314,8 +335,9 @@ void RenderScheduler::update_state_for_render_work(const RenderWork &render_work
     state_.last_display_update_sample = state_.num_rendered_samples;
   }
 
-  state_.last_work_was_denoised = render_work.denoise;
-  state_.final_result_was_written |= render_work.write_final_result;
+  state_.last_work_tile_was_denoised = render_work.tile.denoise;
+  state_.tile_result_was_written |= render_work.tile.write;
+  state_.full_frame_was_written |= render_work.full.write;
 }
 
 bool RenderScheduler::set_postprocess_render_work(RenderWork *render_work)
@@ -332,13 +354,13 @@ bool RenderScheduler::set_postprocess_render_work(RenderWork *render_work)
     any_scheduled = true;
   }
 
-  if (denoiser_params_.use && !state_.last_work_was_denoised) {
-    render_work->denoise = true;
+  if (denoiser_params_.use && !state_.last_work_tile_was_denoised) {
+    render_work->tile.denoise = true;
     any_scheduled = true;
   }
 
-  if (!state_.final_result_was_written) {
-    render_work->write_final_result = true;
+  if (!state_.tile_result_was_written) {
+    render_work->tile.write = true;
     any_scheduled = true;
   }
 
@@ -347,6 +369,35 @@ bool RenderScheduler::set_postprocess_render_work(RenderWork *render_work)
   }
 
   return any_scheduled;
+}
+
+void RenderScheduler::set_full_frame_render_work(RenderWork *render_work)
+{
+  if (state_.full_frame_work_scheduled) {
+    return;
+  }
+
+  if (!tile_manager_.has_multiple_tiles()) {
+    /* There is only single tile, so all work has been performed already. */
+    return;
+  }
+
+  if (!tile_manager_.done()) {
+    /* There are still tiles to be rendered. */
+    return;
+  }
+
+  if (state_.full_frame_was_written) {
+    return;
+  }
+
+  state_.full_frame_work_scheduled = true;
+
+  render_work->full.write = true;
+
+  if (denoiser_params_.use) {
+    render_work->full.denoise = true;
+  }
 }
 
 /* Knowing time which it took to complete a task at the current resolution divider approximate how

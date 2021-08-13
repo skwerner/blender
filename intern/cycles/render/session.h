@@ -62,6 +62,9 @@ class SessionParams {
 
   bool use_profiling;
 
+  bool use_auto_tile;
+  int tile_size;
+
   ShadingSystem shadingsystem;
 
   function<bool(const uchar *pixels, int width, int height, int channels)> write_render_cb;
@@ -79,6 +82,9 @@ class SessionParams {
 
     use_profiling = false;
 
+    use_auto_tile = true;
+    tile_size = 2048;
+
     shadingsystem = SHADINGSYSTEM_SVM;
   }
 
@@ -89,7 +95,8 @@ class SessionParams {
     return !(device == params.device && headless == params.headless &&
              background == params.background && experimental == params.experimental &&
              pixel_size == params.pixel_size && threads == params.threads &&
-             use_profiling == params.use_profiling && shadingsystem == params.shadingsystem);
+             use_profiling == params.use_profiling && shadingsystem == params.shadingsystem &&
+             use_auto_tile == params.use_auto_tile && tile_size == params.tile_size);
   }
 };
 
@@ -149,6 +156,9 @@ class Session {
   int2 get_render_tile_size() const;
   int2 get_render_tile_offset() const;
 
+  bool get_render_tile_done() const;
+  bool has_multiple_render_tiles() const;
+
   bool copy_render_tile_from_device();
 
   bool get_render_tile_pixels(const string &pass_name, int num_components, float *pixels);
@@ -192,6 +202,8 @@ class Session {
   void update_status_time(bool show_pause = false, bool show_done = false);
 
   void do_delayed_reset();
+
+  int2 get_effective_tile_size() const;
 
   thread *session_thread_;
 

@@ -577,8 +577,6 @@ void BlenderSync::sync_render_passes(BL::RenderLayer &b_rlay, BL::ViewLayer &b_v
 {
   PointerRNA cscene = RNA_pointer_get(&b_scene.ptr, "cycles");
 
-  bool add_denoised_passes = false;
-
   /* Delete all existing passes. */
   set<Pass *> clear_passes(scene->passes.begin(), scene->passes.end());
   scene->delete_nodes(clear_passes);
@@ -586,7 +584,7 @@ void BlenderSync::sync_render_passes(BL::RenderLayer &b_rlay, BL::ViewLayer &b_v
   /* Always add combined pass. */
   pass_add(scene, PASS_COMBINED, "Combined");
 
-  /* loop over passes */
+  /* Blender built-in data and light passes. */
   for (BL::RenderPass &b_pass : b_rlay.passes) {
     const PassType pass_type = get_blender_pass_type(b_pass);
 
@@ -605,20 +603,7 @@ void BlenderSync::sync_render_passes(BL::RenderLayer &b_rlay, BL::ViewLayer &b_v
 
   PointerRNA crl = RNA_pointer_get(&b_view_layer.ptr, "cycles");
 
-  if (get_boolean(crl, "denoising_store_passes")) {
-    b_engine.add_pass("Denoising Normal", 3, "XYZ", b_view_layer.name().c_str());
-    pass_add(scene, PASS_DENOISING_NORMAL, "Denoising Normal", PassMode::NOISY);
-
-    b_engine.add_pass("Denoising Albedo", 3, "RGB", b_view_layer.name().c_str());
-    pass_add(scene, PASS_DENOISING_ALBEDO, "Denoising Albedo", PassMode::NOISY);
-  }
-  if (get_boolean(cscene, "use_denoising")) {
-    add_denoised_passes = true;
-
-    b_engine.add_pass("Noisy Image", 4, "RGBA", b_view_layer.name().c_str());
-    pass_add(scene, PASS_COMBINED, "Noisy Image", PassMode::NOISY);
-  }
-
+  /* Debug passes. */
   if (get_boolean(crl, "pass_debug_render_time")) {
     b_engine.add_pass("Debug Render Time", 1, "X", b_view_layer.name().c_str());
     pass_add(scene, PASS_RENDER_TIME, "Debug Render Time");
@@ -627,6 +612,8 @@ void BlenderSync::sync_render_passes(BL::RenderLayer &b_rlay, BL::ViewLayer &b_v
     b_engine.add_pass("Debug Sample Count", 1, "X", b_view_layer.name().c_str());
     pass_add(scene, PASS_SAMPLE_COUNT, "Debug Sample Count");
   }
+
+  /* Cycles specific passes. */
   if (get_boolean(crl, "use_pass_volume_direct")) {
     b_engine.add_pass("VolumeDir", 3, "RGB", b_view_layer.name().c_str());
     pass_add(scene, PASS_VOLUME_DIRECT, "VolumeDir");
@@ -635,15 +622,9 @@ void BlenderSync::sync_render_passes(BL::RenderLayer &b_rlay, BL::ViewLayer &b_v
     b_engine.add_pass("VolumeInd", 3, "RGB", b_view_layer.name().c_str());
     pass_add(scene, PASS_VOLUME_INDIRECT, "VolumeInd");
   }
-
   if (get_boolean(crl, "use_pass_shadow_catcher")) {
     b_engine.add_pass("Shadow Catcher", 3, "RGB", b_view_layer.name().c_str());
     pass_add(scene, PASS_SHADOW_CATCHER, "Shadow Catcher");
-
-    if (add_denoised_passes) {
-      b_engine.add_pass("Noisy Shadow Catcher", 3, "RGB", b_view_layer.name().c_str());
-      pass_add(scene, PASS_SHADOW_CATCHER, "Noisy Shadow Catcher", PassMode::NOISY);
-    }
   }
 
   /* Cryptomatte stores two ID/weight pairs per RGBA layer.
@@ -680,6 +661,28 @@ void BlenderSync::sync_render_passes(BL::RenderLayer &b_rlay, BL::ViewLayer &b_v
   }
   scene->film->set_cryptomatte_passes(cryptomatte_passes);
 
+  /* Denoising passes. */
+  const bool use_denoising = get_boolean(cscene, "use_denoising") &&
+                             get_boolean(crl, "use_denoising");
+  const bool store_denoising_passes = get_boolean(crl, "denoising_store_passes");
+  if (use_denoising || store_denoising_passes) {
+    b_engine.add_pass("Noisy Image", 4, "RGBA", b_view_layer.name().c_str());
+    pass_add(scene, PASS_COMBINED, "Noisy Image", PassMode::NOISY);
+
+    if (get_boolean(crl, "use_pass_shadow_catcher")) {
+      b_engine.add_pass("Noisy Shadow Catcher", 3, "RGB", b_view_layer.name().c_str());
+      pass_add(scene, PASS_SHADOW_CATCHER, "Noisy Shadow Catcher", PassMode::NOISY);
+    }
+    if (store_denoising_passes) {
+      b_engine.add_pass("Denoising Normal", 3, "XYZ", b_view_layer.name().c_str());
+      pass_add(scene, PASS_DENOISING_NORMAL, "Denoising Normal", PassMode::NOISY);
+
+      b_engine.add_pass("Denoising Albedo", 3, "RGB", b_view_layer.name().c_str());
+      pass_add(scene, PASS_DENOISING_ALBEDO, "Denoising Albedo", PassMode::NOISY);
+    }
+  }
+
+  /* Custom AOV passes. */
   BL::ViewLayer::aovs_iterator b_aov_iter;
   for (b_view_layer.aovs.begin(b_aov_iter); b_aov_iter != b_view_layer.aovs.end(); ++b_aov_iter) {
     BL::AOV b_aov(*b_aov_iter);

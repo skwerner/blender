@@ -19,14 +19,8 @@
 shader node_subsurface_scattering(color Color = 0.8,
                                   float Scale = 1.0,
                                   vector Radius = vector(0.1, 0.1, 0.1),
-                                  string falloff = "cubic",
                                   normal Normal = N,
                                   output closure color BSSRDF = 0)
 {
-  if (falloff == "burley") {
-    BSSRDF = Color * bssrdf("burley", Normal, Scale * Radius, Color);
-  }
-  else {
-    BSSRDF = Color * bssrdf("random_walk", Normal, Scale * Radius, Color);
-  }
+  BSSRDF = Color * bssrdf("random_walk", Normal, Scale * Radius, Color);
 }

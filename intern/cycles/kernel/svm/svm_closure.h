@@ -218,9 +218,7 @@ ccl_device_noinline int svm_node_closure_bsdf(
 
           if (bssrdf) {
             bssrdf->radius = subsurface_radius * subsurface;
-            bssrdf->albedo = (CLOSURE_IS_DIFFUSION_BSSRDF(subsurface_method)) ?
-                                 subsurface_color :
-                                 mixed_ss_base_color;
+            bssrdf->albedo = mixed_ss_base_color;
             bssrdf->N = N;
             bssrdf->roughness = roughness;
 
@@ -872,7 +870,6 @@ ccl_device_noinline int svm_node_closure_bsdf(
 #endif /* __HAIR__ */
 
 #ifdef __SUBSURFACE__
-    case CLOSURE_BSSRDF_DIFFUSION_ID:
     case CLOSURE_BSSRDF_RANDOM_WALK_ID: {
       float3 weight = sd->svm_closure_weight * mix_weight;
       Bssrdf *bssrdf = bssrdf_alloc(sd, weight);

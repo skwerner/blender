@@ -2735,14 +2735,6 @@ NODE_DEFINE(PrincipledBsdfNode)
   SOCKET_ENUM(
       distribution, "Distribution", distribution_enum, CLOSURE_BSDF_MICROFACET_MULTI_GGX_GLASS_ID);
 
-  static NodeEnum subsurface_method_enum;
-  subsurface_method_enum.insert("diffusion", CLOSURE_BSSRDF_DIFFUSION_ID);
-  subsurface_method_enum.insert("random_walk", CLOSURE_BSSRDF_RANDOM_WALK_ID);
-  SOCKET_ENUM(subsurface_method,
-              "Subsurface Method",
-              subsurface_method_enum,
-              CLOSURE_BSSRDF_RANDOM_WALK_ID);
-
   SOCKET_IN_COLOR(base_color, "Base Color", make_float3(0.8f, 0.8f, 0.8f));
   SOCKET_IN_COLOR(subsurface_color, "Subsurface Color", make_float3(0.8f, 0.8f, 0.8f));
   SOCKET_IN_FLOAT(metallic, "Metallic", 0.0f);
@@ -2918,7 +2910,7 @@ void PrincipledBsdfNode::compile(SVMCompiler &compiler,
                                            anisotropic_rotation_offset,
                                            transmission_roughness_offset),
                     distribution,
-                    subsurface_method,
+                    CLOSURE_BSSRDF_RANDOM_WALK_ID,
                     SVM_STACK_INVALID);
 
   float3 bc_default = get_float3(base_color_in->socket_type);
@@ -2970,7 +2962,6 @@ void PrincipledBsdfNode::compile(SVMCompiler &compiler)
 void PrincipledBsdfNode::compile(OSLCompiler &compiler)
 {
   compiler.parameter(this, "distribution");
-  compiler.parameter(this, "subsurface_method");
   compiler.add(this, "node_principled_bsdf");
 }
 
@@ -3048,11 +3039,6 @@ NODE_DEFINE(SubsurfaceScatteringNode)
   SOCKET_IN_NORMAL(normal, "Normal", zero_float3(), SocketType::LINK_NORMAL);
   SOCKET_IN_FLOAT(surface_mix_weight, "SurfaceMixWeight", 0.0f, SocketType::SVM_INTERNAL);
 
-  static NodeEnum falloff_enum;
-  falloff_enum.insert("diffusion", CLOSURE_BSSRDF_DIFFUSION_ID);
-  falloff_enum.insert("random_walk", CLOSURE_BSSRDF_RANDOM_WALK_ID);
-  SOCKET_ENUM(falloff, "Falloff", falloff_enum, CLOSURE_BSSRDF_RANDOM_WALK_ID);
-
   SOCKET_IN_FLOAT(scale, "Scale", 0.01f);
   SOCKET_IN_VECTOR(radius, "Radius", make_float3(0.1f, 0.1f, 0.1f));
 
@@ -3063,18 +3049,16 @@ NODE_DEFINE(SubsurfaceScatteringNode)
 
 SubsurfaceScatteringNode::SubsurfaceScatteringNode() : BsdfNode(get_node_type())
 {
-  closure = CLOSURE_BSSRDF_DIFFUSION_ID;
+  closure = CLOSURE_BSSRDF_RANDOM_WALK_ID;
 }
 
 void SubsurfaceScatteringNode::compile(SVMCompiler &compiler)
 {
-  closure = falloff;
   BsdfNode::compile(compiler, input("Scale"), NULL, input("Radius"));
 }
 
 void SubsurfaceScatteringNode::compile(OSLCompiler &compiler)
 {
-  closure = falloff;
   compiler.parameter(this, "falloff");
   compiler.add(this, "node_subsurface_scattering");
 }

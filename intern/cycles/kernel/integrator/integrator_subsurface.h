@@ -130,9 +130,7 @@ ccl_device void subsurface_random_walk_remap(const float A,
 {
   /* Compute attenuation and scattering coefficients from albedo. */
   *alpha = 1.0f - expf(A * (-5.09406f + A * (2.61188f - A * 4.31805f)));
-  const float s = 1.9f - A + 3.5f * sqr(A - 0.8f);
-
-  *sigma_t = 1.0f / fmaxf(d * s, 1e-16f);
+  *sigma_t = 1.0f / fmaxf(d, 1e-16f);
 }
 
 ccl_device void subsurface_random_walk_coefficients(

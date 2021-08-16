@@ -54,18 +54,6 @@ ccl_device_inline float3 bssrdf_burley_compatible_mfp(float3 r)
   return 0.25f * M_1_PI_F * r;
 }
 
-ccl_device void bssrdf_burley_setup(Bssrdf *bssrdf)
-{
-  /* Mean free path length. */
-  const float3 l = bssrdf_burley_compatible_mfp(bssrdf->radius);
-  /* Surface albedo. */
-  const float3 A = bssrdf->albedo;
-  const float3 s = make_float3(
-      bssrdf_burley_fitting(A.x), bssrdf_burley_fitting(A.y), bssrdf_burley_fitting(A.z));
-
-  bssrdf->radius = l / s;
-}
-
 ccl_device float bssrdf_burley_eval(const float d, float r)
 {
   const float Rm = BURLEY_TRUNCATE * d;
@@ -251,7 +239,8 @@ ccl_device int bssrdf_setup(ShaderData *sd, Bssrdf *bssrdf, ClosureType type)
     bssrdf->channels = bssrdf_channels;
     bssrdf->sample_weight = fabsf(average(bssrdf->weight)) * bssrdf->channels;
 
-    bssrdf_burley_setup(bssrdf);
+    /* Mean free path length. */
+    bssrdf->radius = bssrdf_burley_compatible_mfp(bssrdf->radius);
 
     flag |= SD_BSSRDF;
   }

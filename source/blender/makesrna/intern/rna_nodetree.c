@@ -4653,20 +4653,6 @@ static const EnumPropertyItem node_principled_distribution_items[] = {
     {0, NULL, 0, NULL, NULL},
 };
 
-static const EnumPropertyItem node_subsurface_method_items[] = {
-    {SHD_SUBSURFACE_DIFFUSION,
-     "DIFFUSION",
-     0,
-     "Diffusion",
-     "Subsurface scattering by light diffusion across surface"},
-    {SHD_SUBSURFACE_RANDOM_WALK,
-     "RANDOM_WALK",
-     0,
-     "Random Walk",
-     "Subsurface scattering by volumetric scattering below the surface. Most physically accurate, "
-     "but requires accurate internal geometry and closed volume"},
-    {0, NULL, 0, NULL, NULL}};
-
 /* -- Common nodes ---------------------------------------------------------- */
 
 static void def_group_input(StructRNA *srna)
@@ -5851,13 +5837,6 @@ static void def_principled(StructRNA *srna)
   RNA_def_property_enum_items(prop, node_principled_distribution_items);
   RNA_def_property_ui_text(prop, "Distribution", "");
   RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_ShaderNode_socket_update");
-
-  prop = RNA_def_property(srna, "subsurface_method", PROP_ENUM, PROP_NONE);
-  RNA_def_property_enum_sdna(prop, NULL, "custom2");
-  RNA_def_property_enum_items(prop, node_subsurface_method_items);
-  RNA_def_property_ui_text(
-      prop, "Subsurface Method", "Method for rendering subsurface scattering");
-  RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_ShaderNode_socket_update");
 }
 
 static void def_refraction(StructRNA *srna)
@@ -6128,20 +6107,6 @@ static void def_sh_ambient_occlusion(StructRNA *srna)
   RNA_def_property_ui_text(
       prop, "Only Local", "Only consider the object itself when computing AO");
   RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_Node_update");
-}
-
-static void def_sh_subsurface(StructRNA *srna)
-{
-  PropertyRNA *prop;
-
-  prop = RNA_def_property(srna, "falloff", PROP_ENUM, PROP_NONE);
-  RNA_def_property_enum_sdna(prop, NULL, "custom1");
-  RNA_def_property_enum_items(prop, node_subsurface_method_items);
-  RNA_def_property_ui_text(prop,
-                           "Falloff",
-                           "Function to determine how much light nearby points contribute based "
-                           "on their distance to the shading point");
-  RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_ShaderNode_socket_update");
 }
 
 static void def_sh_tex_ies(StructRNA *srna)

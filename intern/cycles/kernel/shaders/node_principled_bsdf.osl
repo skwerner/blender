@@ -18,7 +18,6 @@
 #include "stdcycles.h"
 
 shader node_principled_bsdf(string distribution = "Multiscatter GGX",
-                            string subsurface_method = "burley",
                             color BaseColor = color(0.8, 0.8, 0.8),
                             float Subsurface = 0.0,
                             vector SubsurfaceRadius = vector(1.0, 1.0, 1.0),
@@ -60,22 +59,12 @@ shader node_principled_bsdf(string distribution = "Multiscatter GGX",
     if (Subsurface > 1e-5) {
       color mixed_ss_base_color = SubsurfaceColor * Subsurface + BaseColor * (1.0 - Subsurface);
 
-      if (subsurface_method == "burley") {
-        BSDF = mixed_ss_base_color * bssrdf("burley",
-                                            Normal,
-                                            Subsurface * SubsurfaceRadius,
-                                            SubsurfaceColor,
-                                            "roughness",
-                                            Roughness);
-      }
-      else {
-        BSDF = mixed_ss_base_color * bssrdf("random_walk",
-                                            Normal,
-                                            Subsurface * SubsurfaceRadius,
-                                            mixed_ss_base_color,
-                                            "roughness",
-                                            Roughness);
-      }
+      BSDF = mixed_ss_base_color * bssrdf("random_walk",
+                                          Normal,
+                                          Subsurface * SubsurfaceRadius,
+                                          mixed_ss_base_color,
+                                          "roughness",
+                                          Roughness);
     }
     else {
       BSDF = BaseColor * principled_diffuse(Normal, Roughness);

@@ -581,7 +581,6 @@ class PrincipledBsdfNode : public BsdfBaseNode {
   NODE_SOCKET_API(float3, tangent)
   NODE_SOCKET_API(float, surface_mix_weight)
   NODE_SOCKET_API(ClosureType, distribution)
-  NODE_SOCKET_API(ClosureType, subsurface_method)
   NODE_SOCKET_API(float3, emission)
   NODE_SOCKET_API(float, emission_strength)
   NODE_SOCKET_API(float, alpha)
@@ -698,12 +697,11 @@ class SubsurfaceScatteringNode : public BsdfNode {
   bool has_bssrdf_bump();
   ClosureType get_closure_type()
   {
-    return falloff;
+    return CLOSURE_BSSRDF_RANDOM_WALK_ID;
   }
 
   NODE_SOCKET_API(float, scale)
   NODE_SOCKET_API(float3, radius)
-  NODE_SOCKET_API(ClosureType, falloff)
 };
 
 class EmissionNode : public ShaderNode {

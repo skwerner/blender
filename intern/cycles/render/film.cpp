@@ -679,6 +679,9 @@ void Film::finalize_passes(Scene *scene, const bool use_denoise)
     if (!duplicate_found) {
       new_passes.push_back(pass);
     }
+    else {
+      delete pass;
+    }
   }
 
   /* Order from by components and type, This is required to for AOVs and cryptomatte passes,

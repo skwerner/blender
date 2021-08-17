@@ -27,6 +27,7 @@ CCL_NAMESPACE_BEGIN
 class BufferParams;
 class Device;
 class DeviceScene;
+class Film;
 class GPUDisplay;
 class RenderBuffers;
 
@@ -38,6 +39,7 @@ class PathTraceWork {
    * possible. This could be, for rexample, request to cancel rendering on camera navigation in
    * viewport. */
   static unique_ptr<PathTraceWork> create(Device *device,
+                                          Film *film,
                                           DeviceScene *device_scene,
                                           bool *cancel_requested_flag);
 
@@ -143,13 +145,20 @@ class PathTraceWork {
   }
 
  protected:
-  PathTraceWork(Device *device, DeviceScene *device_scene, bool *cancel_requested_flag);
+  PathTraceWork(Device *device,
+                Film *film,
+                DeviceScene *device_scene,
+                bool *cancel_requested_flag);
 
   virtual PassAccessor::PassAccessInfo get_display_pass_access_info(PassMode pass_mode) const;
 
   /* Device which will be used for path tracing.
    * Note that it is an actual render device (and never is a multi-device). */
   Device *device_;
+
+  /* Film is used to access display pass configuration for GPU display update.
+   * Note that only fields which are not a part of kernel data can be accessed via the Film. */
+  Film *film_;
 
   /* Device side scene storage, that may be used for integrator logic. */
   DeviceScene *device_scene_;

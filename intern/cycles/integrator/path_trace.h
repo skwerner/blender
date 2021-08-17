@@ -31,6 +31,7 @@ CCL_NAMESPACE_BEGIN
 class AdaptiveSampling;
 class Device;
 class DeviceScene;
+class Film;
 class RenderBuffers;
 class RenderScheduler;
 class RenderWork;
@@ -48,7 +49,10 @@ class PathTrace {
  public:
   /* Render scheduler is used to report timing information and access things like start/finish
    * sample. */
-  PathTrace(Device *device, DeviceScene *device_scene, RenderScheduler &render_scheduler);
+  PathTrace(Device *device,
+            Film *film,
+            DeviceScene *device_scene,
+            RenderScheduler &render_scheduler);
 
   /* Create devices and load kernels which are created on-demand (for example, denoising devices).
    * The progress is reported to the currently configure progress object (via `set_progress`). */

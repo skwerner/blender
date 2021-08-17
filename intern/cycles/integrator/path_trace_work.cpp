@@ -20,6 +20,7 @@
 #include "integrator/path_trace_work_cpu.h"
 #include "integrator/path_trace_work_gpu.h"
 #include "render/buffers.h"
+#include "render/film.h"
 #include "render/scene.h"
 
 #include "kernel/kernel_types.h"
@@ -27,20 +28,23 @@
 CCL_NAMESPACE_BEGIN
 
 unique_ptr<PathTraceWork> PathTraceWork::create(Device *device,
+                                                Film *film,
                                                 DeviceScene *device_scene,
                                                 bool *cancel_requested_flag)
 {
   if (device->info.type == DEVICE_CPU) {
-    return make_unique<PathTraceWorkCPU>(device, device_scene, cancel_requested_flag);
+    return make_unique<PathTraceWorkCPU>(device, film, device_scene, cancel_requested_flag);
   }
 
-  return make_unique<PathTraceWorkGPU>(device, device_scene, cancel_requested_flag);
+  return make_unique<PathTraceWorkGPU>(device, film, device_scene, cancel_requested_flag);
 }
 
 PathTraceWork::PathTraceWork(Device *device,
+                             Film *film,
                              DeviceScene *device_scene,
                              bool *cancel_requested_flag)
     : device_(device),
+      film_(film),
       device_scene_(device_scene),
       buffers_(make_unique<RenderBuffers>(device)),
       effective_buffer_params_(buffers_->params),
@@ -153,22 +157,27 @@ PassAccessor::PassAccessInfo PathTraceWork::get_display_pass_access_info(PassMod
   const KernelFilm &kfilm = device_scene_->data.film;
   const KernelBackground &kbackground = device_scene_->data.background;
 
-  PassAccessor::PassAccessInfo pass_access_info;
-  pass_access_info.type = static_cast<PassType>(kfilm.display_pass_type);
+  const BufferParams &params = buffers_->params;
 
-  if (pass_mode == PassMode::DENOISED && kfilm.display_pass_denoised_offset != PASS_UNUSED) {
+  PassAccessor::PassAccessInfo pass_access_info;
+  pass_access_info.type = film_->get_display_pass();
+  pass_access_info.offset = PASS_UNUSED;
+
+  if (pass_mode == PassMode::DENOISED) {
     pass_access_info.mode = PassMode::DENOISED;
-    pass_access_info.offset = kfilm.display_pass_denoised_offset;
+    pass_access_info.offset = params.get_pass_offset(pass_access_info.type, PassMode::DENOISED);
   }
-  else {
+
+  if (pass_access_info.offset == PASS_UNUSED) {
     pass_access_info.mode = PassMode::NOISY;
-    pass_access_info.offset = kfilm.display_pass_offset;
+    pass_access_info.offset = params.get_pass_offset(pass_access_info.type);
   }
 
   pass_access_info.use_approximate_shadow_catcher = kfilm.use_approximate_shadow_catcher;
   pass_access_info.use_approximate_shadow_catcher_background =
       kfilm.use_approximate_shadow_catcher && !kbackground.transparent;
-  pass_access_info.show_active_pixels = kfilm.show_active_pixels;
+
+  pass_access_info.show_active_pixels = film_->get_show_active_pixels();
 
   return pass_access_info;
 }

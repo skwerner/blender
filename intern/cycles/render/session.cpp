@@ -61,7 +61,7 @@ Session::Session(const SessionParams &params_, const SceneParams &scene_params)
   scene = new Scene(scene_params, device);
 
   /* Configure path tracer. */
-  path_trace_ = make_unique<PathTrace>(device, &scene->dscene, render_scheduler_);
+  path_trace_ = make_unique<PathTrace>(device, scene->film, &scene->dscene, render_scheduler_);
   path_trace_->set_progress(&progress);
   path_trace_->buffer_update_cb = [&]() {
     if (!update_render_tile_cb) {

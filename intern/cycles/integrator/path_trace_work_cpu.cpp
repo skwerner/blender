@@ -52,9 +52,10 @@ static inline CPUKernelThreadGlobals *kernel_thread_globals_get(
 }
 
 PathTraceWorkCPU::PathTraceWorkCPU(Device *device,
+                                   Film *film,
                                    DeviceScene *device_scene,
                                    bool *cancel_requested_flag)
-    : PathTraceWork(device, device_scene, cancel_requested_flag),
+    : PathTraceWork(device, film, device_scene, cancel_requested_flag),
       kernels_(*(device->get_cpu_kernels()))
 {
   DCHECK_EQ(device->info.type, DEVICE_CPU);

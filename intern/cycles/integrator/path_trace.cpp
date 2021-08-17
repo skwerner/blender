@@ -53,7 +53,10 @@ class TempCPURenderBuffers {
 
 }  // namespace
 
-PathTrace::PathTrace(Device *device, DeviceScene *device_scene, RenderScheduler &render_scheduler)
+PathTrace::PathTrace(Device *device,
+                     Film *film,
+                     DeviceScene *device_scene,
+                     RenderScheduler &render_scheduler)
     : device_(device), device_scene_(device_scene), render_scheduler_(render_scheduler)
 {
   DCHECK_NE(device_, nullptr);
@@ -61,8 +64,8 @@ PathTrace::PathTrace(Device *device, DeviceScene *device_scene, RenderScheduler 
   /* Create path tracing work in advance, so that it can be reused by incremental sampling as much
    * as possible. */
   device_->foreach_device([&](Device *path_trace_device) {
-    path_trace_works_.emplace_back(
-        PathTraceWork::create(path_trace_device, device_scene, &render_cancel_.is_requested));
+    path_trace_works_.emplace_back(PathTraceWork::create(
+        path_trace_device, film, device_scene, &render_cancel_.is_requested));
   });
 
   work_balance_infos_.resize(path_trace_works_.size());

@@ -165,19 +165,11 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
 
   KernelFilm *kfilm = &dscene->data.film;
 
-  const Pass *display_pass = get_actual_display_pass(scene, get_display_pass());
-  const Pass *display_pass_denoised = get_actual_display_pass(
-      scene, get_display_pass(), PassMode::DENOISED);
-
   /* update __data */
   kfilm->exposure = exposure;
   kfilm->pass_alpha_threshold = pass_alpha_threshold;
   kfilm->pass_flag = 0;
 
-  kfilm->display_pass_type = display_pass->type;
-  kfilm->display_pass_offset = PASS_UNUSED;
-  kfilm->display_pass_denoised_offset = PASS_UNUSED;
-  kfilm->show_active_pixels = show_active_pixels;
   kfilm->use_approximate_shadow_catcher = get_use_approximate_shadow_catcher();
 
   kfilm->light_pass_flag = 0;
@@ -220,10 +212,6 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
     }
 
     if (pass->mode == PassMode::DENOISED) {
-      if (pass == display_pass_denoised) {
-        kfilm->display_pass_denoised_offset = kfilm->pass_stride;
-      }
-
       /* Generally we only storing offsets of the noisy passes. The display pass is an exception
        * since it is a read operation and not a write. */
       kfilm->pass_stride += pass->get_info().num_components;
@@ -386,10 +374,6 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
       default:
         assert(false);
         break;
-    }
-
-    if (pass == display_pass) {
-      kfilm->display_pass_offset = kfilm->pass_stride;
     }
 
     kfilm->pass_stride += pass->get_info().num_components;

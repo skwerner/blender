@@ -1029,12 +1029,9 @@ typedef struct KernelFilm {
   int pass_bake_primitive;
   int pass_bake_differential;
 
-  /* viewport rendering options */
-  int display_pass_type;
-  int display_pass_offset;
-  int display_pass_denoised_offset;
-  int show_active_pixels;
   int use_approximate_shadow_catcher;
+
+  int pad1, pad2, pad3;
 } KernelFilm;
 static_assert_align(KernelFilm, 16);
 

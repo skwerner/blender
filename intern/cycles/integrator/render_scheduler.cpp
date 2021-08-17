@@ -210,6 +210,19 @@ bool RenderScheduler::render_work_reschedule_on_idle(RenderWork &render_work)
   return false;
 }
 
+void RenderScheduler::render_work_reschedule_on_cancel(RenderWork &render_work)
+{
+  /* Un-schedule samples: they will not be rendered and should not be counted. */
+  state_.num_rendered_samples -= render_work.path_trace.num_samples;
+
+  render_work = RenderWork();
+
+  if (!state_.final_result_was_written) {
+    render_work.write_final_result = true;
+    render_work.update_display = true;
+  }
+}
+
 bool RenderScheduler::done() const
 {
   if (state_.resolution_divider != pixel_size_) {

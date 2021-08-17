@@ -144,6 +144,15 @@ class RenderScheduler {
    * the path tracer is to finish the current pixels) then false is returned. */
   bool render_work_reschedule_on_idle(RenderWork &render_work);
 
+  /* Reschedule work when rendering has been requested to cancel.
+   *
+   * Will skip all work which is not needed anymore because no more samples will be added (for
+   * example, adaptive sampling filtering and convergence check will be skipped).
+   * Will enable all work needed to make sure all passes are communicated to the software.
+   *
+   * NOTE: Should be used before passing work to `PathTrace::render_samples()`. */
+  void render_work_reschedule_on_cancel(RenderWork &render_work);
+
   RenderWork get_render_work();
 
   /* Report that the path tracer started to work, after scene update and loading kernels. */

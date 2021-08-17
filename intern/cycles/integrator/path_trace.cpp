@@ -154,6 +154,9 @@ void PathTrace::render(const RenderWork &render_work)
 
 void PathTrace::render_pipeline(RenderWork render_work)
 {
+  /* NOTE: Only check for "instant" cancel here. Ther user-requested cancel via progress is
+   * checked in Session and the work in the event of cancel is to be finished here. */
+
   render_scheduler_.set_need_schedule_cryptomatte(device_scene_->data.film.cryptomatte_passes !=
                                                   0);
 
@@ -166,22 +169,22 @@ void PathTrace::render_pipeline(RenderWork render_work)
   rebalance(render_work);
 
   path_trace(render_work);
-  if (is_cancel_requested()) {
+  if (render_cancel_.is_requested) {
     return;
   }
 
   adaptive_sample(render_work);
-  if (is_cancel_requested()) {
+  if (render_cancel_.is_requested) {
     return;
   }
 
   cryptomatte_postprocess(render_work);
-  if (is_cancel_requested()) {
+  if (render_cancel_.is_requested) {
     return;
   }
 
   denoise(render_work);
-  if (is_cancel_requested()) {
+  if (render_cancel_.is_requested) {
     return;
   }
 

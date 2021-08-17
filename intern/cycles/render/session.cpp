@@ -159,8 +159,10 @@ bool Session::ready_to_reset()
 
 void Session::run_main_render_loop()
 {
-  while (!progress.get_cancel()) {
-    const RenderWork render_work = run_update_for_next_iteration();
+  while (true) {
+    const bool did_cancel = progress.get_cancel();
+
+    RenderWork render_work = run_update_for_next_iteration();
 
     if (!render_work) {
       if (VLOG_IS_ON(2)) {
@@ -177,12 +179,14 @@ void Session::run_main_render_loop()
       }
     }
 
-    if (run_wait_for_work(render_work)) {
-      continue;
+    if (did_cancel) {
+      render_scheduler_.render_work_reschedule_on_cancel(render_work);
+      if (!render_work) {
+        break;
+      }
     }
-
-    if (progress.get_cancel()) {
-      break;
+    else if (run_wait_for_work(render_work)) {
+      continue;
     }
 
     {
@@ -209,6 +213,10 @@ void Session::run_main_render_loop()
     }
 
     progress.set_update();
+
+    if (did_cancel) {
+      break;
+    }
   }
 }
 

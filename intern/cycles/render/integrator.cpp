@@ -129,16 +129,26 @@ void Integrator::device_update(Device *device, DeviceScene *dscene, Scene *scene
     }
   });
 
+  KernelIntegrator *kintegrator = &dscene->data.integrator;
+
+  /* Adaptive sampling requires PMJ samples.
+   *
+   * This also makes detection of sampling pattern a bit more involved: can not rely on the changed
+   * state of socket, since its value might be different from the effective value used here. So
+   * instead compare with previous value in the KernelIntegrator. Only do it if the device was
+   * updated once (in which case the `sample_pattern_lut` will be allocated to a non-zero size). */
+  const SamplingPattern new_sampling_pattern = (use_adaptive_sampling) ? SAMPLING_PATTERN_PMJ :
+                                                                         sampling_pattern;
+
   const bool need_update_lut = max_bounce_is_modified() || max_transmission_bounce_is_modified() ||
-                               sampling_pattern_is_modified();
+                               dscene->sample_pattern_lut.size() == 0 ||
+                               kintegrator->sampling_pattern != new_sampling_pattern;
 
   if (need_update_lut) {
     dscene->sample_pattern_lut.tag_realloc();
   }
 
   device_free(device, dscene);
-
-  KernelIntegrator *kintegrator = &dscene->data.integrator;
 
   /* integrator parameters */
   kintegrator->min_bounce = min_bounce + 1;
@@ -185,8 +195,7 @@ void Integrator::device_update(Device *device, DeviceScene *dscene, Scene *scene
                                            FLT_MAX :
                                            sample_clamp_indirect * 3.0f;
 
-  kintegrator->sampling_pattern = (use_adaptive_sampling) ? SAMPLING_PATTERN_PMJ :
-                                                            sampling_pattern;
+  kintegrator->sampling_pattern = new_sampling_pattern;
 
   if (light_sampling_threshold > 0.0f) {
     kintegrator->light_inv_rr_threshold = 1.0f / light_sampling_threshold;

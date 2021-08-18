@@ -671,6 +671,10 @@ ccl_device_forceinline void integrate_volume_direct_light(INTEGRATOR_STATE_ARGS,
 {
   PROFILING_INIT(kg, PROFILING_SHADE_VOLUME_DIRECT_LIGHT);
 
+  if (!kernel_data.integrator.use_direct_light) {
+    return;
+  }
+
   /* Sample position on the same light again, now from the shading
    * point where we scattered.
    *

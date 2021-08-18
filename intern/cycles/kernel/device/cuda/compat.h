@@ -21,6 +21,10 @@
 #define CCL_NAMESPACE_BEGIN
 #define CCL_NAMESPACE_END
 
+#ifndef ATTR_FALLTHROUGH
+#  define ATTR_FALLTHROUGH
+#endif
+
 /* Manual definitions so we can compile without CUDA toolkit. */
 
 #ifdef __CUDACC_RTC__
@@ -29,8 +33,6 @@ typedef unsigned long long uint64_t;
 #else
 #  include <stdint.h>
 #endif
-typedef unsigned short half;
-typedef unsigned long long CUtexObject;
 
 #ifdef CYCLES_CUBIN_CC
 #  define FLT_MIN 1.175494350822287507969e-38f
@@ -38,14 +40,7 @@ typedef unsigned long long CUtexObject;
 #  define FLT_EPSILON 1.192092896e-07F
 #endif
 
-__device__ half __float2half(const float f)
-{
-  half val;
-  asm("{  cvt.rn.f16.f32 %0, %1;}\n" : "=h"(val) : "f"(f));
-  return val;
-}
-
-/* Qualifier wrappers for different names on different devices */
+/* Qualifiers */
 
 #define ccl_device __device__ __inline__
 #if __CUDA_ARCH__ < 500
@@ -61,95 +56,57 @@ __device__ half __float2half(const float f)
 #define ccl_static_constant __constant__
 #define ccl_device_constant __constant__ __device__
 #define ccl_constant const
-#define ccl_local __shared__
-#define ccl_local_param
+#define ccl_gpu_shared __shared__
 #define ccl_private
 #define ccl_may_alias
 #define ccl_addr_space
 #define ccl_restrict __restrict__
 #define ccl_loop_no_unroll
-/* TODO(sergey): In theory we might use references with CUDA, however
- * performance impact yet to be investigated.
- */
-#define ccl_ref
 #define ccl_align(n) __align__(n)
 #define ccl_optional_struct_init
-
-#define ccl_attr_maybe_unused [[maybe_unused]]
-
-#define ATTR_FALLTHROUGH
-
-#define CCL_MAX_LOCAL_SIZE CUDA_KERNEL_BLOCK_NUM_THREADS
 
 /* No assert supported for CUDA */
 
 #define kernel_assert(cond)
 
-/* Types */
+/* GPU thread, block, grid size and index */
 
-#include "util/util_half.h"
-#include "util/util_types.h"
+#define ccl_gpu_thread_idx_x (threadIdx.x)
+#define ccl_gpu_block_dim_x (blockDim.x)
+#define ccl_gpu_block_idx_x (blockIdx.x)
+#define ccl_gpu_grid_dim_x (gridDim.x)
+#define ccl_gpu_warp_size (warpSize)
 
-/* Work item functions */
+#define ccl_gpu_global_id_x() (ccl_gpu_block_idx_x * ccl_gpu_block_dim_x + ccl_gpu_thread_idx_x)
+#define ccl_gpu_global_size_x() (ccl_gpu_grid_dim_x * ccl_gpu_block_dim_x)
 
-ccl_device_inline uint ccl_local_id(uint d)
+/* GPU warp synchronizaton */
+
+#define ccl_gpu_syncthreads() __syncthreads()
+#define ccl_gpu_ballot(predicate) __ballot_sync(0xFFFFFFFF, predicate)
+#define ccl_gpu_shfl_down_sync(mask, var, detla) __shfl_down_sync(mask, var, detla)
+#define ccl_gpu_popc(x) __popc(x)
+
+/* GPU texture objects */
+
+typedef unsigned long long CUtexObject;
+typedef CUtexObject ccl_gpu_tex_object;
+
+template<typename T>
+ccl_device_forceinline T ccl_gpu_tex_object_read_2D(const ccl_gpu_tex_object texobj,
+                                                    const float x,
+                                                    const float y)
 {
-  switch (d) {
-    case 0:
-      return threadIdx.x;
-    case 1:
-      return threadIdx.y;
-    case 2:
-      return threadIdx.z;
-    default:
-      return 0;
-  }
+  return tex2D<T>(texobj, x, y);
 }
 
-#define ccl_global_id(d) (ccl_group_id(d) * ccl_local_size(d) + ccl_local_id(d))
-
-ccl_device_inline uint ccl_local_size(uint d)
+template<typename T>
+ccl_device_forceinline T ccl_gpu_tex_object_read_3D(const ccl_gpu_tex_object texobj,
+                                                    const float x,
+                                                    const float y,
+                                                    const float z)
 {
-  switch (d) {
-    case 0:
-      return blockDim.x;
-    case 1:
-      return blockDim.y;
-    case 2:
-      return blockDim.z;
-    default:
-      return 0;
-  }
-}
-
-#define ccl_global_size(d) (ccl_num_groups(d) * ccl_local_size(d))
-
-ccl_device_inline uint ccl_group_id(uint d)
-{
-  switch (d) {
-    case 0:
-      return blockIdx.x;
-    case 1:
-      return blockIdx.y;
-    case 2:
-      return blockIdx.z;
-    default:
-      return 0;
-  }
-}
-
-ccl_device_inline uint ccl_num_groups(uint d)
-{
-  switch (d) {
-    case 0:
-      return gridDim.x;
-    case 1:
-      return gridDim.y;
-    case 2:
-      return gridDim.z;
-    default:
-      return 0;
-  }
+  return tex3D<T>(texobj, x, y, z);
 }
 
 /* Use fast math functions */
@@ -160,3 +117,19 @@ ccl_device_inline uint ccl_num_groups(uint d)
 #define tanf(x) __tanf(((float)(x)))
 #define logf(x) __logf(((float)(x)))
 #define expf(x) __expf(((float)(x)))
+
+/* Half */
+
+typedef unsigned short half;
+
+__device__ half __float2half(const float f)
+{
+  half val;
+  asm("{  cvt.rn.f16.f32 %0, %1;}\n" : "=h"(val) : "f"(f));
+  return val;
+}
+
+/* Types */
+
+#include "util/util_half.h"
+#include "util/util_types.h"

@@ -27,12 +27,11 @@ CCL_NAMESPACE_BEGIN
 
 #include "util/util_atomic.h"
 
-#define CUDA_PARALLEL_PREFIX_SUM_DEFAULT_BLOCK_SIZE 512
+#define GPU_PARALLEL_PREFIX_SUM_DEFAULT_BLOCK_SIZE 512
 
-template<uint blocksize>
-__device__ void cuda_parallel_prefix_sum(int *values, const int num_values)
+template<uint blocksize> __device__ void gpu_parallel_prefix_sum(int *values, const int num_values)
 {
-  if (!(blockIdx.x == 0 && threadIdx.x == 0)) {
+  if (!(ccl_gpu_block_idx_x == 0 && ccl_gpu_thread_idx_x == 0)) {
     return;
   }
 

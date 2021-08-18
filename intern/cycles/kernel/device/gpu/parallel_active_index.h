@@ -25,36 +25,36 @@ CCL_NAMESPACE_BEGIN
 
 #include "util/util_atomic.h"
 
-#define CUDA_PARALLEL_ACTIVE_INDEX_DEFAULT_BLOCK_SIZE 512
+#define GPU_PARALLEL_ACTIVE_INDEX_DEFAULT_BLOCK_SIZE 512
 
 template<uint blocksize, typename IsActiveOp>
-__device__ void cuda_parallel_active_index_array(const uint num_states,
-                                                 int *indices,
-                                                 int *num_indices,
-                                                 IsActiveOp is_active_op)
+__device__ void gpu_parallel_active_index_array(const uint num_states,
+                                                int *indices,
+                                                int *num_indices,
+                                                IsActiveOp is_active_op)
 {
-  extern __shared__ int warp_offset[];
+  extern ccl_gpu_shared int warp_offset[];
 
-  const uint thread_index = threadIdx.x;
-  const uint thread_warp = thread_index % warpSize;
+  const uint thread_index = ccl_gpu_thread_idx_x;
+  const uint thread_warp = thread_index % ccl_gpu_warp_size;
 
-  const uint warp_index = thread_index / warpSize;
-  const uint num_warps = blocksize / warpSize;
+  const uint warp_index = thread_index / ccl_gpu_warp_size;
+  const uint num_warps = blocksize / ccl_gpu_warp_size;
 
   /* Test if state corresponding to this thread is active. */
-  const uint state_index = blockIdx.x * blocksize + thread_index;
+  const uint state_index = ccl_gpu_block_idx_x * blocksize + thread_index;
   const uint is_active = (state_index < num_states) ? is_active_op(state_index) : 0;
 
   /* For each thread within a warp compute how many other active states precede it. */
-  const uint thread_mask = 0xFFFFFFFF >> (warpSize - thread_warp);
-  const uint thread_offset = __popc(__ballot_sync(0xFFFFFFFF, is_active) & thread_mask);
+  const uint thread_mask = 0xFFFFFFFF >> (ccl_gpu_warp_size - thread_warp);
+  const uint thread_offset = ccl_gpu_popc(ccl_gpu_ballot(is_active) & thread_mask);
 
   /* Last thread in warp stores number of active states for each warp. */
-  if (thread_warp == warpSize - 1) {
+  if (thread_warp == ccl_gpu_warp_size - 1) {
     warp_offset[warp_index] = thread_offset + is_active;
   }
 
-  __syncthreads();
+  ccl_gpu_syncthreads();
 
   /* Last thread in block converts per-warp sizes to offsets, increments global size of
    * index array and gets offset to write to. */
@@ -71,7 +71,7 @@ __device__ void cuda_parallel_active_index_array(const uint num_states,
     warp_offset[num_warps] = atomic_fetch_and_add_uint32(num_indices, block_num_active);
   }
 
-  __syncthreads();
+  ccl_gpu_syncthreads();
 
   /* Write to index array. */
   if (is_active) {

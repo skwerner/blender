@@ -33,7 +33,7 @@ void CUDADeviceKernels::load(CUDADevice *device)
       continue;
     }
 
-    const std::string function_name = std::string("kernel_cuda_") +
+    const std::string function_name = std::string("kernel_gpu_") +
                                       device_kernel_as_string((DeviceKernel)i);
     cuda_device_assert(device,
                        cuModuleGetFunction(&kernel.function, cuModule, function_name.c_str()));

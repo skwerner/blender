@@ -21,7 +21,7 @@
 #include <optix.h>
 
 #define __KERNEL_GPU__
-#define __KERNEL_CUDA__  // OptiX kernels are implicitly CUDA kernels too
+#define __KERNEL_CUDA__ /* OptiX kernels are implicitly CUDA kernels too */
 #define __KERNEL_OPTIX__
 #define CCL_NAMESPACE_BEGIN
 #define CCL_NAMESPACE_END
@@ -30,27 +30,20 @@
 #  define ATTR_FALLTHROUGH
 #endif
 
+/* Manual definitions so we can compile without CUDA toolkit. */
+
 #ifdef __CUDACC_RTC__
 typedef unsigned int uint32_t;
 typedef unsigned long long uint64_t;
 #else
 #  include <stdint.h>
 #endif
-typedef unsigned short half;
-typedef unsigned long long CUtexObject;
 
 #ifdef CYCLES_CUBIN_CC
 #  define FLT_MIN 1.175494350822287507969e-38f
 #  define FLT_MAX 340282346638528859811704183484516925440.0f
 #  define FLT_EPSILON 1.192092896e-07F
 #endif
-
-__device__ half __float2half(const float f)
-{
-  half val;
-  asm("{  cvt.rn.f16.f32 %0, %1;}\n" : "=h"(val) : "f"(f));
-  return val;
-}
 
 #define ccl_device \
   __device__ __forceinline__  // Function calls are bad for OptiX performance, so inline everything
@@ -60,23 +53,73 @@ __device__ half __float2half(const float f)
 #define ccl_device_noinline_cpu ccl_device
 #define ccl_global
 #define ccl_static_constant __constant__
+#define ccl_device_constant __constant__ __device__
 #define ccl_constant const
-#define ccl_local
-#define ccl_local_param
+#define ccl_gpu_shared __shared__
 #define ccl_private
 #define ccl_may_alias
 #define ccl_addr_space
-#define ccl_loop_no_unroll
 #define ccl_restrict __restrict__
-#define ccl_ref
+#define ccl_loop_no_unroll
 #define ccl_align(n) __align__(n)
 
-#define ccl_attr_maybe_unused [[maybe_unused]]
-
-// Zero initialize structs to help the compiler figure out scoping
+/* Zero initialize structs to help the compiler figure out scoping */
 #define ccl_optional_struct_init = {}
 
+/* No assert supported for CUDA */
+
 #define kernel_assert(cond)
+
+/* GPU thread, block, grid size and index */
+
+#define ccl_gpu_thread_idx_x (threadIdx.x)
+#define ccl_gpu_block_dim_x (blockDim.x)
+#define ccl_gpu_block_idx_x (blockIdx.x)
+#define ccl_gpu_grid_dim_x (gridDim.x)
+#define ccl_gpu_warp_size (warpSize)
+
+#define ccl_gpu_global_id_x() (ccl_gpu_block_idx_x * ccl_gpu_block_dim_x + ccl_gpu_thread_idx_x)
+#define ccl_gpu_global_size_x() (ccl_gpu_grid_dim_x * ccl_gpu_block_dim_x)
+
+/* GPU warp synchronizaton */
+
+#define ccl_gpu_syncthreads() __syncthreads()
+#define ccl_gpu_ballot(predicate) __ballot_sync(0xFFFFFFFF, predicate)
+#define ccl_gpu_shfl_down_sync(mask, var, detla) __shfl_down_sync(mask, var, detla)
+#define ccl_gpu_popc(x) __popc(x)
+
+/* GPU texture objects */
+
+typedef unsigned long long CUtexObject;
+typedef CUtexObject ccl_gpu_tex_object;
+
+template<typename T>
+ccl_device_forceinline T ccl_gpu_tex_object_read_2D(const ccl_gpu_tex_object texobj,
+                                                    const float x,
+                                                    const float y)
+{
+  return tex2D<T>(texobj, x, y);
+}
+
+template<typename T>
+ccl_device_forceinline T ccl_gpu_tex_object_read_3D(const ccl_gpu_tex_object texobj,
+                                                    const float x,
+                                                    const float y,
+                                                    const float z)
+{
+  return tex3D<T>(texobj, x, y, z);
+}
+
+/* Half */
+
+typedef unsigned short half;
+
+__device__ half __float2half(const float f)
+{
+  half val;
+  asm("{  cvt.rn.f16.f32 %0, %1;}\n" : "=h"(val) : "f"(f));
+  return val;
+}
 
 /* Types */
 

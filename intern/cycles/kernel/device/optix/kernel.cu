@@ -18,10 +18,8 @@
 // clang-format off
 #include "kernel/device/optix/compat.h"
 #include "kernel/device/optix/globals.h"
-#include "kernel/device/cuda/image.h"  // Texture lookup uses normal CUDA intrinsics
-#include "kernel/device/cuda/parallel_active_index.h"
-#include "kernel/device/cuda/parallel_prefix_sum.h"
-#include "kernel/device/cuda/parallel_sorted_index.h"
+
+#include "kernel/device/gpu/image.h"  // Texture lookup uses normal CUDA intrinsics
 
 #include "kernel/integrator/integrator_state.h"
 #include "kernel/integrator/integrator_state_flow.h"
@@ -32,10 +30,6 @@
 #include "kernel/integrator/integrator_intersect_subsurface.h"
 #include "kernel/integrator/integrator_intersect_volume_stack.h"
 
-#include "kernel/kernel_adaptive_sampling.h"
-#include "kernel/kernel_bake.h"
-#include "kernel/kernel_film.h"
-#include "kernel/kernel_work_stealing.h"
 // clang-format on
 
 template<typename T> ccl_device_forceinline T *get_payload_ptr_0()

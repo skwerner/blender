@@ -91,16 +91,19 @@ set(SRC_DEVICE_CPU_HEADERS
   device/cpu/kernel_arch.h
   device/cpu/kernel_arch_impl.h
 )
+set(SRC_DEVICE_GPU_HEADERS
+  device/gpu/image.h
+  device/gpu/kernel.h
+  device/gpu/parallel_active_index.h
+  device/gpu/parallel_prefix_sum.h
+  device/gpu/parallel_reduce.h
+  device/gpu/parallel_sorted_index.h
+)
 
 set(SRC_DEVICE_CUDA_HEADERS
   device/cuda/compat.h
   device/cuda/config.h
   device/cuda/globals.h
-  device/cuda/image.h
-  device/cuda/parallel_active_index.h
-  device/cuda/parallel_prefix_sum.h
-  device/cuda/parallel_reduce.h
-  device/cuda/parallel_sorted_index.h
 )
 
 set(SRC_DEVICE_OPTIX_HEADERS
@@ -316,6 +319,7 @@ if(WITH_CYCLES_CUDA_BINARIES)
   # build for each arch
   set(cuda_sources device/cuda/kernel.cu
     ${SRC_HEADERS}
+    ${SRC_DEVICE_GPU_HEADERS}
     ${SRC_DEVICE_CUDA_HEADERS}
     ${SRC_BVH_HEADERS}
     ${SRC_SVM_HEADERS}
@@ -490,6 +494,7 @@ if(WITH_CYCLES_DEVICE_OPTIX AND WITH_CYCLES_CUDA_BINARIES)
         DEPENDS
           ${input}
           ${SRC_HEADERS}
+          ${SRC_DEVICE_GPU_HEADERS}
           ${SRC_DEVICE_CUDA_HEADERS}
           ${SRC_DEVICE_OPTIX_HEADERS}
           ${SRC_BVH_HEADERS}
@@ -514,6 +519,7 @@ if(WITH_CYCLES_DEVICE_OPTIX AND WITH_CYCLES_CUDA_BINARIES)
         DEPENDS
           ${input}
           ${SRC_HEADERS}
+          ${SRC_DEVICE_GPU_HEADERS}
           ${SRC_DEVICE_CUDA_HEADERS}
           ${SRC_DEVICE_OPTIX_HEADERS}
           ${SRC_BVH_HEADERS}
@@ -599,6 +605,7 @@ cycles_add_library(cycles_kernel "${LIB}"
   ${SRC_DEVICE_OPTIX}
   ${SRC_HEADERS}
   ${SRC_DEVICE_CPU_HEADERS}
+  ${SRC_DEVICE_GPU_HEADERS}
   ${SRC_DEVICE_CUDA_HEADERS}
   ${SRC_DEVICE_OPTIX_HEADERS}
   ${SRC_BVH_HEADERS}
@@ -614,6 +621,7 @@ source_group("geom" FILES ${SRC_GEOM_HEADERS})
 source_group("integrator" FILES ${SRC_INTEGRATOR_HEADERS})
 source_group("kernel" FILES ${SRC_HEADERS})
 source_group("device\\cpu" FILES ${SRC_DEVICE_CPU} ${SRC_DEVICE_CPU_HEADERS})
+source_group("device\\gpu" FILES ${SRC_DEVICE_GPU_HEADERS})
 source_group("device\\cuda" FILES ${SRC_DEVICE_CUDA} ${SRC_DEVICE_CUDA_HEADERS})
 source_group("device\\optix" FILES ${SRC_DEVICE_OPTIX} ${SRC_DEVICE_OPTIX_HEADERS})
 source_group("svm" FILES ${SRC_SVM_HEADERS})

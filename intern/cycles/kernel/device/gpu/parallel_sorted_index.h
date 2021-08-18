@@ -26,21 +26,21 @@ CCL_NAMESPACE_BEGIN
 
 #include "util/util_atomic.h"
 
-#define CUDA_PARALLEL_SORTED_INDEX_DEFAULT_BLOCK_SIZE 512
-#define CUDA_PARALLEL_SORTED_INDEX_INACTIVE_KEY (~0)
+#define GPU_PARALLEL_SORTED_INDEX_DEFAULT_BLOCK_SIZE 512
+#define GPU_PARALLEL_SORTED_INDEX_INACTIVE_KEY (~0)
 
 template<uint blocksize, typename GetKeyOp>
-__device__ void cuda_parallel_sorted_index_array(const uint num_states,
-                                                 int *indices,
-                                                 int *num_indices,
-                                                 int *key_prefix_sum,
-                                                 GetKeyOp get_key_op)
+__device__ void gpu_parallel_sorted_index_array(const uint num_states,
+                                                int *indices,
+                                                int *num_indices,
+                                                int *key_prefix_sum,
+                                                GetKeyOp get_key_op)
 {
-  const uint state_index = blockIdx.x * blocksize + threadIdx.x;
+  const uint state_index = ccl_gpu_block_idx_x * blocksize + ccl_gpu_thread_idx_x;
   const int key = (state_index < num_states) ? get_key_op(state_index) :
-                                               CUDA_PARALLEL_SORTED_INDEX_INACTIVE_KEY;
+                                               GPU_PARALLEL_SORTED_INDEX_INACTIVE_KEY;
 
-  if (key != CUDA_PARALLEL_SORTED_INDEX_INACTIVE_KEY) {
+  if (key != GPU_PARALLEL_SORTED_INDEX_INACTIVE_KEY) {
     const uint index = atomic_fetch_and_add_uint32(&key_prefix_sum[key], 1);
     indices[index] = state_index;
   }

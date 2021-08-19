@@ -81,6 +81,22 @@ ccl_device_noinline void svm_node_attr(const KernelGlobals *kg,
   }
 #endif
 
+  if (node.y == ATTR_STD_GENERATED && desc.element == ATTR_ELEMENT_NONE) {
+    /* No generated attribute, fall back to object coordinates. */
+    float3 f = sd->P;
+    object_inverse_position_transform(kg, sd, &f);
+    if (type == NODE_ATTR_OUTPUT_FLOAT) {
+      stack_store_float(stack, out_offset, average(f));
+    }
+    else if (type == NODE_ATTR_OUTPUT_FLOAT3) {
+      stack_store_float3(stack, out_offset, f);
+    }
+    else {
+      stack_store_float(stack, out_offset, 1.0f);
+    }
+    return;
+  }
+
   /* Surface. */
   if (desc.type == NODE_ATTR_FLOAT) {
     float f = primitive_surface_attribute_float(kg, sd, desc, NULL, NULL);
@@ -156,6 +172,22 @@ ccl_device_noinline void svm_node_attr_bump_dx(const KernelGlobals *kg,
     return;
   }
 #endif
+
+  if (node.y == ATTR_STD_GENERATED && desc.element == ATTR_ELEMENT_NONE) {
+    /* No generated attribute, fall back to object coordinates. */
+    float3 f = sd->P + sd->dP.dx;
+    object_inverse_position_transform(kg, sd, &f);
+    if (type == NODE_ATTR_OUTPUT_FLOAT) {
+      stack_store_float(stack, out_offset, average(f));
+    }
+    else if (type == NODE_ATTR_OUTPUT_FLOAT3) {
+      stack_store_float3(stack, out_offset, f);
+    }
+    else {
+      stack_store_float(stack, out_offset, 1.0f);
+    }
+    return;
+  }
 
   /* Surface */
   if (desc.type == NODE_ATTR_FLOAT) {
@@ -236,6 +268,22 @@ ccl_device_noinline void svm_node_attr_bump_dy(const KernelGlobals *kg,
     return;
   }
 #endif
+
+  if (node.y == ATTR_STD_GENERATED && desc.element == ATTR_ELEMENT_NONE) {
+    /* No generated attribute, fall back to object coordinates. */
+    float3 f = sd->P + sd->dP.dy;
+    object_inverse_position_transform(kg, sd, &f);
+    if (type == NODE_ATTR_OUTPUT_FLOAT) {
+      stack_store_float(stack, out_offset, average(f));
+    }
+    else if (type == NODE_ATTR_OUTPUT_FLOAT3) {
+      stack_store_float3(stack, out_offset, f);
+    }
+    else {
+      stack_store_float(stack, out_offset, 1.0f);
+    }
+    return;
+  }
 
   /* Surface */
   if (desc.type == NODE_ATTR_FLOAT) {

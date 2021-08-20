@@ -743,9 +743,8 @@ bool PathTraceWorkGPU::copy_to_gpu_display_interop(GPUDisplay *gpu_display,
     return false;
   }
 
-  /* TODO(sergey): Take offset within the big tile into account.
-   * Can not test this currently because interop returns "NOT SUPPORTED" for some reason. Need to
-   * fix that first. */
+  /* NOTE: No need to take device slice into account since the interop is only used during single
+   * device rendering. */
 
   run_film_convert(d_rgba_half, pass_mode, num_samples);
 

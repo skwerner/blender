@@ -765,13 +765,10 @@ typedef struct RenderData {
   /* Cycles baking */
   struct BakeData bake;
 
-  int preview_start_resolution;
+  int _pad8;
   short preview_pixel_size;
 
-  /* Type of the debug pass to use.
-   * Only used when built with debug passes support.
-   */
-  short debug_pass_type;
+  short _pad4;
 
   /* MultiView */
   /** SceneRenderView. */

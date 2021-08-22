@@ -93,7 +93,7 @@ class RenderScheduler {
   void set_start_sample(int start_sample);
   int get_start_sample() const;
 
-  /* Number of sampels to render, starting from start sample.
+  /* Number of samples to render, starting from start sample.
    * The scheduler will schedule work in the range of
    * [start_sample, start_sample + num_samples - 1], inclusively. */
   void set_num_samples(int num_samples);

@@ -351,7 +351,7 @@ static double approximate_final_time(const RenderWork &render_work, double time)
 
 void RenderScheduler::report_work_begin(const RenderWork &render_work)
 {
-  /* Start counting render time when rendering sampels at their final resolution.
+  /* Start counting render time when rendering samples at their final resolution.
    *
    * NOTE: The work might have the path trace part be all zero: this happens when a post-processing
    * work is scheduled after the path tracing. Checking for just a start sample doesn't work here
@@ -607,7 +607,7 @@ double RenderScheduler::guess_display_update_interval_in_seconds_for_num_samples
     int num_rendered_samples) const
 {
   /* TODO(sergey): Need a decision on whether this should be using number of samples rendered
-   * within the current render ression, or use absolute number of samples with the start sample
+   * within the current render session, or use absolute number of samples with the start sample
    * taken into account. It will depend on whether the start sample offset clears the render
    * buffer. */
 
@@ -707,7 +707,7 @@ int RenderScheduler::get_num_samples_to_path_trace() const
   /* Round number of samples to a power of two, so that division of path states into tiles goes in
    * a more integer manner.
    * This might make it so updates happens more rarely due to rounding up. In the test scenes this
-   * is not huge deal because it is not seen that more than 8 sampels can be rendered between
+   * is not huge deal because it is not seen that more than 8 samples can be rendered between
    * updates. If that becomes a problem we can add some extra rules like never allow to round up
    * more than N samples. */
   const int num_samples_pot = round_num_samples_to_power_of_2(num_samples_per_update);

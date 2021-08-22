@@ -82,7 +82,7 @@ ccl_device bool integrator_init_from_camera(INTEGRATOR_STATE_ARGS,
 
   /* Count the sample and get an effective sample for this pixel.
    *
-   * This logic allows to both count actual number of sampels per pixel, and to add samples to this
+   * This logic allows to both count actual number of samples per pixel, and to add samples to this
    * pixel after it was converged and samples were added somewhere else (in which case the
    * `scheduled_sample` will be different from actual number of samples in this pixel). */
   const int sample = kernel_accum_sample(INTEGRATOR_STATE_PASS, render_buffer, scheduled_sample);

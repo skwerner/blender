@@ -5,11 +5,9 @@ CLOSURE_EVAL_FUNCTION_DECLARE_1(node_subsurface_scattering, Diffuse)
 void node_subsurface_scattering(vec4 color,
                                 float scale,
                                 vec3 radius,
-                                float sharpen,
-                                float texture_blur,
-                                vec3 N,
                                 float ior,
                                 float anisotropy,
+                                vec3 N,
                                 float sss_id,
                                 out Closure result)
 {
@@ -30,5 +28,5 @@ void node_subsurface_scattering(vec4 color,
 
 #else
 /* Stub subsurface scattering because it is not compatible with volumetrics. */
-#  define node_subsurface_scattering(a, b, c, d, e, f, g, h, i, j) (j = CLOSURE_DEFAULT)
+#  define node_subsurface_scattering(a, b, c, d, e, f, g, h) (h = CLOSURE_DEFAULT)
 #endif

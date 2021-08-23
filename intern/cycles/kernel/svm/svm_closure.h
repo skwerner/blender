@@ -229,7 +229,7 @@ ccl_device_noinline int svm_node_closure_bsdf(
 
             /* Clamps protecting against bad/extreme and non physical values. */
             subsurface_ior = clamp(subsurface_ior, 1.01f, 3.8f);
-            bssrdf->anisotropy = clamp(subsurface_anisotropy, -0.9f, 0.9f);
+            bssrdf->anisotropy = clamp(subsurface_anisotropy, 0.0f, 0.9f);
 
             /* setup bsdf */
             sd->flag |= bssrdf_setup(sd, bssrdf, subsurface_method, subsurface_ior);
@@ -898,7 +898,7 @@ ccl_device_noinline int svm_node_closure_bsdf(
 
         const float subsurface_ior = clamp(param2, 1.01f, 3.8f);
         const float subsurface_anisotropy = stack_load_float(stack, data_node.w);
-        bssrdf->anisotropy = clamp(subsurface_anisotropy, -0.9f, 0.9f);
+        bssrdf->anisotropy = clamp(subsurface_anisotropy, 0.0f, 0.9f);
 
         sd->flag |= bssrdf_setup(sd, bssrdf, (ClosureType)type, subsurface_ior);
       }

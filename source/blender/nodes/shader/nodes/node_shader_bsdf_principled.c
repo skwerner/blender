@@ -36,7 +36,7 @@ static bNodeSocketTemplate sh_node_bsdf_principled_in[] = {
      SOCK_COMPACT},
     {SOCK_RGBA, N_("Subsurface Color"), 0.8f, 0.8f, 0.8f, 1.0f, 0.0f, 1.0f},
     {SOCK_FLOAT, N_("Subsurface IOR"), 1.4f, 0.0f, 0.0f, 0.0f, 1.01f, 3.8f, PROP_FACTOR},
-    {SOCK_FLOAT, N_("Subsurface Anisotropy"), 0.0f, 0.0f, 0.0f, 0.0f, -1.0f, 1.0f, PROP_FACTOR},
+    {SOCK_FLOAT, N_("Subsurface Anisotropy"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_FACTOR},
     {SOCK_FLOAT, N_("Metallic"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_FACTOR},
     {SOCK_FLOAT, N_("Specular"), 0.5f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_FACTOR},
     {SOCK_FLOAT, N_("Specular Tint"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_FACTOR},

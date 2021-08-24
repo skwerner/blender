@@ -457,7 +457,7 @@ void PathTrace::denoise(const RenderWork &render_work)
 
   RenderBuffers *buffer_to_denoise = nullptr;
 
-  unique_ptr<RenderBuffers> multi_devoice_buffers;
+  unique_ptr<RenderBuffers> multi_device_buffers;
   bool allow_inplace_modification = false;
 
   if (path_trace_works_.size() == 1) {
@@ -469,12 +469,12 @@ void PathTrace::denoise(const RenderWork &render_work)
       return;
     }
 
-    multi_devoice_buffers = make_unique<RenderBuffers>(denoiser_device);
-    multi_devoice_buffers->reset(render_state_.effective_big_tile_params);
+    multi_device_buffers = make_unique<RenderBuffers>(denoiser_device);
+    multi_device_buffers->reset(render_state_.effective_big_tile_params);
 
-    buffer_to_denoise = multi_devoice_buffers.get();
+    buffer_to_denoise = multi_device_buffers.get();
 
-    copy_to_render_buffers(multi_devoice_buffers.get());
+    copy_to_render_buffers(multi_device_buffers.get());
 
     allow_inplace_modification = true;
   }
@@ -484,11 +484,11 @@ void PathTrace::denoise(const RenderWork &render_work)
                             get_num_samples_in_buffer(),
                             allow_inplace_modification);
 
-  if (multi_devoice_buffers) {
-    multi_devoice_buffers->copy_from_device();
+  if (multi_device_buffers) {
+    multi_device_buffers->copy_from_device();
     tbb::parallel_for_each(
-        path_trace_works_, [&multi_devoice_buffers](unique_ptr<PathTraceWork> &path_trace_work) {
-          path_trace_work->copy_from_denoised_render_buffers(multi_devoice_buffers.get());
+        path_trace_works_, [&multi_device_buffers](unique_ptr<PathTraceWork> &path_trace_work) {
+          path_trace_work->copy_from_denoised_render_buffers(multi_device_buffers.get());
         });
   }
 

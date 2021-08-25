@@ -430,7 +430,6 @@ url_manual_mapping = (
 	("bpy.types.rendersettings.dither_intensity*", "render/output/properties/post_processing.html#bpy-types-rendersettings-dither-intensity"),
 	("bpy.types.rendersettings.simplify_volumes*", "render/cycles/render_settings/simplify.html#bpy-types-rendersettings-simplify-volumes"),
 	("bpy.types.rendersettings.use_render_cache*", "render/output/properties/output.html#bpy-types-rendersettings-use-render-cache"),
-	("bpy.types.rendersettings.use_save_buffers*", "render/cycles/render_settings/performance.html#bpy-types-rendersettings-use-save-buffers"),
 	("bpy.types.rendersettings.use_single_layer*", "render/layers/view_layer.html#bpy-types-rendersettings-use-single-layer"),
 	("bpy.types.rendersettings_simplify_gpencil*", "render/cycles/render_settings/simplify.html#bpy-types-rendersettings-simplify-gpencil"),
 	("bpy.types.sceneeevee.use_taa_reprojection*", "render/eevee/render_settings/sampling.html#bpy-types-sceneeevee-use-taa-reprojection"),

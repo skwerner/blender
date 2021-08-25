@@ -59,7 +59,7 @@ extern "C" {
 #define RE_USE_PREVIEW 4
 #define RE_USE_POSTPROCESS 8
 #define RE_USE_EEVEE_VIEWPORT 16
-#define RE_USE_SAVE_BUFFERS 32
+/* #define RE_USE_SAVE_BUFFERS_DEPRECATED 32 */
 #define RE_USE_SHADING_NODES_CUSTOM 64
 #define RE_USE_SPHERICAL_STEREO 128
 #define RE_USE_STEREO_VIEWPORT 256
@@ -131,9 +131,6 @@ typedef struct RenderEngine {
   int flag;
   struct Object *camera_override;
   unsigned int layer_override;
-
-  int tile_x;
-  int tile_y;
 
   struct Render *re;
   ListBase fullresult;

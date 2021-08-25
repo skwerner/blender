@@ -213,7 +213,6 @@ static void external_cache_finish(void *UNUSED(vedata))
 static void external_draw_scene_do(void *vedata)
 {
   const DRWContextState *draw_ctx = DRW_context_state_get();
-  Scene *scene = draw_ctx->scene;
   RegionView3D *rv3d = draw_ctx->rv3d;
   ARegion *region = draw_ctx->region;
   const RenderEngineType *type;
@@ -229,8 +228,6 @@ static void external_draw_scene_do(void *vedata)
     }
 
     RenderEngine *engine = RE_engine_create(engine_type);
-    engine->tile_x = scene->r.tilex;
-    engine->tile_y = scene->r.tiley;
     engine_type->view_update(engine, draw_ctx->evil_C, draw_ctx->depsgraph);
     rv3d->render_engine = engine;
   }

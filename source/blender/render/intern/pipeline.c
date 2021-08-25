@@ -102,7 +102,6 @@
 #include "DEG_depsgraph.h"
 
 /* internal */
-#include "initrender.h"
 #include "pipeline.h"
 #include "render_result.h"
 #include "render_types.h"
@@ -568,7 +567,6 @@ Render *RE_NewRender(const char *name)
     BLI_addtail(&RenderGlobal.renderlist, re);
     BLI_strncpy(re->name, name, RE_MAXNAME);
     BLI_rw_mutex_init(&re->resultmutex);
-    BLI_rw_mutex_init(&re->partsmutex);
     BLI_mutex_init(&re->highlighted_tiles_mutex);
   }
 
@@ -633,7 +631,6 @@ void RE_FreeRender(Render *re)
   }
 
   BLI_rw_mutex_end(&re->resultmutex);
-  BLI_rw_mutex_end(&re->partsmutex);
   BLI_mutex_end(&re->highlighted_tiles_mutex);
 
   BLI_freelistN(&re->view_layers);
@@ -721,26 +718,6 @@ void RE_FreePersistentData(const Scene *scene)
 }
 
 /* ********* initialize state ******** */
-
-/* clear full sample and tile flags if needed */
-static int check_mode_full_sample(RenderData *rd)
-{
-  int scemode = rd->scemode;
-
-  /* not supported by any current renderer */
-  scemode &= ~R_FULL_SAMPLE;
-
-#ifdef WITH_OPENEXR
-  if (scemode & R_FULL_SAMPLE) {
-    scemode |= R_EXR_TILE_FILE; /* enable automatic */
-  }
-#else
-  /* can't do this without openexr support */
-  scemode &= ~(R_EXR_TILE_FILE | R_FULL_SAMPLE);
-#endif
-
-  return scemode;
-}
 
 static void re_init_resolution(Render *re, Render *source, int winx, int winy, rcti *disprect)
 {
@@ -839,8 +816,6 @@ void RE_InitState(Render *re,
     return;
   }
 
-  re->r.scemode = check_mode_full_sample(&re->r);
-
   if (single_layer) {
     int index = BLI_findindex(render_layers, single_layer);
     if (index != -1) {
@@ -889,9 +864,6 @@ void RE_InitState(Render *re,
     re->result->recty = re->recty;
     render_result_view_new(re->result, "");
   }
-
-  /* ensure renderdatabase can use part settings correct */
-  RE_parts_clamp(re);
 
   BLI_rw_mutex_unlock(&re->resultmutex);
 
@@ -1040,7 +1012,7 @@ static void render_result_uncrop(Render *re)
       /* weak is: it chances disprect from border */
       render_result_disprect_to_full_resolution(re);
 
-      rres = render_result_new(re, &re->disprect, RR_USE_MEM, RR_ALL_LAYERS, RR_ALL_VIEWS);
+      rres = render_result_new(re, &re->disprect, RR_ALL_LAYERS, RR_ALL_VIEWS);
       rres->stamp_data = BKE_stamp_data_copy(re->result->stamp_data);
 
       render_result_clone_passes(re, rres, NULL);
@@ -1226,7 +1198,7 @@ static void do_render_compositor(Render *re)
     if ((re->r.mode & R_CROP) == 0) {
       render_result_disprect_to_full_resolution(re);
     }
-    re->result = render_result_new(re, &re->disprect, RR_USE_MEM, RR_ALL_LAYERS, RR_ALL_VIEWS);
+    re->result = render_result_new(re, &re->disprect, RR_ALL_LAYERS, RR_ALL_VIEWS);
 
     BLI_rw_mutex_unlock(&re->resultmutex);
 
@@ -1646,23 +1618,12 @@ bool RE_is_rendering_allowed(Scene *scene,
                              Object *camera_override,
                              ReportList *reports)
 {
-  int scemode = check_mode_full_sample(&scene->r);
+  const int scemode = scene->r.scemode;
 
   if (scene->r.mode & R_BORDER) {
     if (scene->r.border.xmax <= scene->r.border.xmin ||
         scene->r.border.ymax <= scene->r.border.ymin) {
       BKE_report(reports, RPT_ERROR, "No border area selected");
-      return 0;
-    }
-  }
-
-  if (scemode & (R_EXR_TILE_FILE | R_FULL_SAMPLE)) {
-    char str[FILE_MAX];
-
-    render_result_exr_file_path(scene, "", 0, str);
-
-    if (!BLI_file_is_writable(str)) {
-      BKE_report(reports, RPT_ERROR, "Cannot save render buffers, check the temp default path");
       return 0;
     }
   }
@@ -1685,13 +1646,6 @@ bool RE_is_rendering_allowed(Scene *scene,
       BKE_report(reports, RPT_ERROR, "No render output node in scene");
       return 0;
     }
-
-    if (scemode & R_FULL_SAMPLE) {
-      if (compositor_needs_render(scene, 0) == 0) {
-        BKE_report(reports, RPT_ERROR, "Full sample AA not supported without 3D rendering");
-        return 0;
-      }
-    }
   }
   else {
     /* Regular Render */
@@ -1707,14 +1661,6 @@ bool RE_is_rendering_allowed(Scene *scene,
   }
 
   return 1;
-}
-
-static void validate_render_settings(Render *re)
-{
-  if (RE_engine_is_external(re)) {
-    /* not supported yet */
-    re->r.scemode &= ~R_FULL_SAMPLE;
-  }
 }
 
 static void update_physics_cache(Render *re,
@@ -1818,8 +1764,6 @@ static int render_init_from_main(Render *re,
 
   /* initstate makes new result, have to send changed tags around */
   ntreeCompositTagRender(re->scene);
-
-  validate_render_settings(re);
 
   re->display_init(re->dih, re->result);
   re->display_clear(re->dch, re->result);

@@ -78,8 +78,6 @@
     .ysch = 1080, \
     .xasp = 1, \
     .yasp = 1, \
-    .tilex = 256, \
-    .tiley = 256, \
     .size = 100, \
  \
     .im_format = _DNA_DEFAULT_ImageFormatData, \

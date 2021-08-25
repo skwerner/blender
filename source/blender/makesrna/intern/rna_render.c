@@ -779,11 +779,6 @@ static void rna_def_render_engine(BlenderRNA *brna)
   RNA_def_property_boolean_sdna(prop, NULL, "layer_override", 1);
   RNA_def_property_array(prop, 20);
 
-  prop = RNA_def_property(srna, "tile_x", PROP_INT, PROP_UNSIGNED);
-  RNA_def_property_int_sdna(prop, NULL, "tile_x");
-  prop = RNA_def_property(srna, "tile_y", PROP_INT, PROP_UNSIGNED);
-  RNA_def_property_int_sdna(prop, NULL, "tile_y");
-
   prop = RNA_def_property(srna, "resolution_x", PROP_INT, PROP_PIXEL);
   RNA_def_property_int_sdna(prop, NULL, "resolution_x");
   RNA_def_property_clear_flag(prop, PROP_EDITABLE);
@@ -881,12 +876,6 @@ static void rna_def_render_engine(BlenderRNA *brna)
                            "Use Custom Shading Nodes",
                            "Don't expose Cycles and Eevee shading nodes in the node editor user "
                            "interface, so own nodes can be used instead");
-
-  prop = RNA_def_property(srna, "bl_use_save_buffers", PROP_BOOLEAN, PROP_NONE);
-  RNA_def_property_boolean_sdna(prop, NULL, "type->flag", RE_USE_SAVE_BUFFERS);
-  RNA_def_property_flag(prop, PROP_REGISTER_OPTIONAL);
-  RNA_def_property_ui_text(
-      prop, "Use Save Buffers", "Support render to an on disk buffer during rendering");
 
   prop = RNA_def_property(srna, "bl_use_spherical_stereo", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "type->flag", RE_USE_SPHERICAL_STEREO);

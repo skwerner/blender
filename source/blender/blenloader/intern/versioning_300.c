@@ -842,5 +842,13 @@ void blo_do_versions_300(FileData *fd, Library *UNUSED(lib), Main *bmain)
       }
     }
     FOREACH_NODETREE_END;
+
+    enum {
+      R_EXR_TILE_FILE = (1 << 10),
+      R_FULL_SAMPLE = (1 << 15),
+    };
+    LISTBASE_FOREACH (Scene *, scene, &bmain->scenes) {
+      scene->r.scemode &= ~(R_EXR_TILE_FILE | R_FULL_SAMPLE);
+    }
   }
 }

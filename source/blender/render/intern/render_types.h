@@ -47,29 +47,9 @@ struct ReportList;
 extern "C" {
 #endif
 
-/* this is handed over to threaded hiding/passes/shading engine */
-typedef struct RenderPart {
-  struct RenderPart *next, *prev;
-
-  RenderResult *result; /* result of part rendering */
-  ListBase fullresult;  /* optional full sample buffers */
-
-  rcti disprect;    /* part coordinates within total picture */
-  int rectx, recty; /* the size */
-  int nr;           /* nr is partnr */
-  short status;
-} RenderPart;
-
 typedef struct HighlightedTile {
   rcti rect;
 } HighlightedTile;
-
-enum {
-  /* PART_STATUS_NONE = 0, */ /* UNUSED */
-  PART_STATUS_IN_PROGRESS = 1,
-  PART_STATUS_RENDERED = 2,
-  PART_STATUS_MERGED = 3,
-};
 
 /* controls state of render, everything that's read-only during render stage */
 struct Render {
@@ -101,10 +81,6 @@ struct Render {
   /* final picture width and height (within disprect) */
   int rectx, recty;
 
-  /* real maximum size of parts after correction for minimum
-   * partx*xparts can be larger than rectx, in that case last part is smaller */
-  int partx, party;
-
   /* Camera transform, only used by Freestyle. */
   float winmat[4][4];
 
@@ -119,9 +95,6 @@ struct Render {
   ListBase view_layers;
   int active_view_layer;
   struct Object *camera_override;
-
-  ThreadRWMutex partsmutex;
-  struct GHash *parts;
 
   ThreadMutex highlighted_tiles_mutex;
   struct GSet *highlighted_tiles;

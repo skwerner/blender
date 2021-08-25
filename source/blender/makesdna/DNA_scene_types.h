@@ -651,11 +651,6 @@ typedef struct RenderData {
    */
   int ysch;
 
-  /**
-   * render tile dimensions
-   */
-  int tilex, tiley;
-
   short planes DNA_DEPRECATED;
   short imtype DNA_DEPRECATED;
   short subimtype DNA_DEPRECATED;
@@ -1877,12 +1872,12 @@ enum {
 #define R_COMP_CROP (1 << 7)
 #define R_SCEMODE_UNUSED_8 (1 << 8) /* cleared */
 #define R_SINGLE_LAYER (1 << 9)
-#define R_EXR_TILE_FILE (1 << 10)
+#define R_SCEMODE_UNUSED_10 (1 << 10) /* cleared */
 #define R_SCEMODE_UNUSED_11 (1 << 11) /* cleared */
 #define R_NO_IMAGE_LOAD (1 << 12)
 #define R_SCEMODE_UNUSED_13 (1 << 13) /* cleared */
 #define R_NO_FRAME_UPDATE (1 << 14)
-#define R_FULL_SAMPLE (1 << 15)
+#define R_SCEMODE_UNUSED_15 (1 << 15) /* cleared */
 #define R_SCEMODE_UNUSED_16 (1 << 16) /* cleared */
 #define R_SCEMODE_UNUSED_17 (1 << 17) /* cleared */
 #define R_TEXNODE_PREVIEW (1 << 18)

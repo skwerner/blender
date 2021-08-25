@@ -62,7 +62,6 @@
 
 #include "DRW_engine.h"
 
-#include "initrender.h"
 #include "pipeline.h"
 #include "render_result.h"
 #include "render_types.h"
@@ -283,14 +282,6 @@ static void render_result_to_bake(RenderEngine *engine, RenderResult *rr)
 
 /* Render Results */
 
-static RenderPart *get_part_from_result(Render *re, RenderResult *result)
-{
-  rcti key = result->tilerect;
-  BLI_rcti_translate(&key, re->disprect.xmin, re->disprect.ymin);
-
-  return BLI_ghash_lookup(re->parts, &key);
-}
-
 static HighlightedTile highlighted_tile_from_result_get(Render *re, RenderResult *result)
 {
   HighlightedTile tile;
@@ -332,7 +323,7 @@ RenderResult *RE_engine_begin_result(
   disprect.ymin = y;
   disprect.ymax = y + h;
 
-  result = render_result_new(re, &disprect, RR_USE_MEM, layername, viewname);
+  result = render_result_new(re, &disprect, layername, viewname);
 
   /* TODO: make this thread safe. */
 
@@ -341,25 +332,12 @@ RenderResult *RE_engine_begin_result(
     render_result_clone_passes(re, result, viewname);
     render_result_passes_allocated_ensure(result);
 
-    RenderPart *pa;
-
-    /* Copy EXR tile settings, so pipeline knows whether this is a result
-     * for Save Buffers enabled rendering.
-     */
-    result->do_exr_tile = re->result->do_exr_tile;
-
     BLI_addtail(&engine->fullresult, result);
 
     result->tilerect.xmin += re->disprect.xmin;
     result->tilerect.xmax += re->disprect.xmin;
     result->tilerect.ymin += re->disprect.ymin;
     result->tilerect.ymax += re->disprect.ymin;
-
-    pa = get_part_from_result(re, result);
-
-    if (pa) {
-      pa->status = PART_STATUS_IN_PROGRESS;
-    }
   }
 
   return result;
@@ -420,21 +398,6 @@ void RE_engine_end_result(
     BLI_rw_mutex_unlock(&re->resultmutex);
   }
 
-  /* merge. on break, don't merge in result for preview renders, looks nicer */
-  if (!highlight) {
-    /* for exr tile render, detect tiles that are done */
-    RenderPart *pa = get_part_from_result(re, result);
-
-    if (pa) {
-      pa->status = (!cancel && merge_results) ? PART_STATUS_MERGED : PART_STATUS_RENDERED;
-    }
-    else if (re->result->do_exr_tile) {
-      /* If written result does not match any tile and we are using save
-       * buffers, we are going to get OpenEXR save errors. */
-      fprintf(stderr, "RenderEngine.end_result: dimensions do not match any OpenEXR tile.\n");
-    }
-  }
-
   if (re->engine && (re->engine->flag & RE_ENGINE_HIGHLIGHT_TILES)) {
     BLI_mutex_lock(&re->highlighted_tiles_mutex);
 
@@ -460,13 +423,7 @@ void RE_engine_end_result(
   }
 
   if (!cancel || merge_results) {
-    if (re->result->do_exr_tile) {
-      if (!cancel && merge_results) {
-        render_result_exr_file_merge(re->result, result, re->viewname);
-        render_result_merge(re->result, result);
-      }
-    }
-    else if (!(re->test_break(re->tbh) && (re->r.scemode & R_BUTS_PREVIEW))) {
+    if (!(re->test_break(re->tbh) && (re->r.scemode & R_BUTS_PREVIEW))) {
       render_result_merge(re->result, result);
     }
 
@@ -831,12 +788,6 @@ bool RE_bake_engine(Render *re,
   engine->resolution_x = re->winx;
   engine->resolution_y = re->winy;
 
-  BLI_rw_mutex_lock(&re->partsmutex, THREAD_LOCK_WRITE);
-  RE_parts_init(re);
-  engine->tile_x = re->r.tilex;
-  engine->tile_y = re->r.tiley;
-  BLI_rw_mutex_unlock(&re->partsmutex);
-
   if (type->bake) {
     engine->depsgraph = depsgraph;
 
@@ -864,20 +815,12 @@ bool RE_bake_engine(Render *re,
     engine->depsgraph = NULL;
   }
 
-  engine->tile_x = 0;
-  engine->tile_y = 0;
   engine->flag &= ~RE_ENGINE_RENDERING;
 
-  /* Free depsgraph outside of parts mutex lock, since this locks OpenGL context
-   * while the UI drawing might also lock the OpenGL context and parts mutex. */
   engine_depsgraph_free(engine);
-  BLI_rw_mutex_lock(&re->partsmutex, THREAD_LOCK_WRITE);
 
   RE_engine_free(engine);
   re->engine = NULL;
-
-  RE_parts_free(re);
-  BLI_rw_mutex_unlock(&re->partsmutex);
 
   if (BKE_reports_contain(re->reports, RPT_ERROR)) {
     G.is_break = true;
@@ -930,7 +873,7 @@ static void engine_render_view_layer(Render *re,
   }
 
   /* Optionally composite grease pencil over render result. */
-  if (engine->has_grease_pencil && use_grease_pencil && !re->result->do_exr_tile) {
+  if (engine->has_grease_pencil && use_grease_pencil) {
     /* NOTE: External engine might have been requested to free its
      * dependency graph, which is only allowed if there is no grease
      * pencil (pipeline is taking care of that). */
@@ -975,16 +918,11 @@ bool RE_engine_render(Render *re, bool do_all)
   /* create render result */
   BLI_rw_mutex_lock(&re->resultmutex, THREAD_LOCK_WRITE);
   if (re->result == NULL || !(re->r.scemode & R_BUTS_PREVIEW)) {
-    int savebuffers = RR_USE_MEM;
-
     if (re->result) {
       render_result_free(re->result);
     }
 
-    if ((type->flag & RE_USE_SAVE_BUFFERS) && (re->r.scemode & R_EXR_TILE_FILE)) {
-      savebuffers = RR_USE_EXR;
-    }
-    re->result = render_result_new(re, &re->disprect, savebuffers, RR_ALL_LAYERS, RR_ALL_VIEWS);
+    re->result = render_result_new(re, &re->disprect, RR_ALL_LAYERS, RR_ALL_VIEWS);
   }
   BLI_rw_mutex_unlock(&re->resultmutex);
 
@@ -1029,31 +967,14 @@ bool RE_engine_render(Render *re, bool do_all)
   engine->resolution_x = re->winx;
   engine->resolution_y = re->winy;
 
-  BLI_rw_mutex_lock(&re->partsmutex, THREAD_LOCK_WRITE);
-  RE_parts_init(re);
-  engine->tile_x = re->partx;
-  engine->tile_y = re->party;
-  BLI_rw_mutex_unlock(&re->partsmutex);
-
-  if (re->result->do_exr_tile) {
-    render_result_exr_file_begin(re, engine);
-  }
-
   /* Clear UI drawing locks. */
   if (re->draw_lock) {
     re->draw_lock(re->dlh, false);
   }
 
-  /* Render view layers. */
-  bool delay_grease_pencil = false;
-
   if (type->render) {
     FOREACH_VIEW_LAYER_TO_RENDER_BEGIN (re, view_layer_iter) {
       engine_render_view_layer(re, engine, view_layer_iter, true, true);
-
-      /* With save buffers there is no render buffer in memory for compositing, delay
-       * grease pencil in that case. */
-      delay_grease_pencil = engine->has_grease_pencil && re->result->do_exr_tile;
 
       if (RE_engine_test_break(engine)) {
         break;
@@ -1063,41 +984,13 @@ bool RE_engine_render(Render *re, bool do_all)
   }
 
   /* Clear tile data */
-  engine->tile_x = 0;
-  engine->tile_y = 0;
   engine->flag &= ~RE_ENGINE_RENDERING;
 
   render_result_free_list(&engine->fullresult, engine->fullresult.first);
 
-  BLI_rw_mutex_lock(&re->partsmutex, THREAD_LOCK_WRITE);
-
-  /* For save buffers, read back from disk. */
-  if (re->result->do_exr_tile) {
-    render_result_exr_file_end(re, engine);
-  }
-
-  /* Perform delayed grease pencil rendering. */
-  if (delay_grease_pencil) {
-    BLI_rw_mutex_unlock(&re->partsmutex);
-
-    FOREACH_VIEW_LAYER_TO_RENDER_BEGIN (re, view_layer_iter) {
-      engine_render_view_layer(re, engine, view_layer_iter, false, true);
-      if (RE_engine_test_break(engine)) {
-        break;
-      }
-    }
-    FOREACH_VIEW_LAYER_TO_RENDER_END;
-
-    BLI_rw_mutex_lock(&re->partsmutex, THREAD_LOCK_WRITE);
-  }
-
   /* re->engine becomes zero if user changed active render engine during render */
   if (!engine_keep_depsgraph(engine) || !re->engine) {
-    /* Free depsgraph outside of parts mutex lock, since this locks OpenGL context
-     * while the UI drawing might also lock the OpenGL context and parts mutex. */
-    BLI_rw_mutex_unlock(&re->partsmutex);
     engine_depsgraph_free(engine);
-    BLI_rw_mutex_lock(&re->partsmutex, THREAD_LOCK_WRITE);
 
     RE_engine_free(engine);
     re->engine = NULL;
@@ -1108,9 +1001,6 @@ bool RE_engine_render(Render *re, bool do_all)
     render_result_exr_file_cache_write(re);
     BLI_rw_mutex_unlock(&re->resultmutex);
   }
-
-  RE_parts_free(re);
-  BLI_rw_mutex_unlock(&re->partsmutex);
 
   if (BKE_reports_contain(re->reports, RPT_ERROR)) {
     G.is_break = true;

@@ -92,9 +92,9 @@ class CBSSRDFClosure : public CClosurePrimitive {
       bssrdf->radius = params.radius;
       bssrdf->albedo = params.albedo;
       bssrdf->N = params.N;
-      bssrdf->roughness = clamp(params.roughness, 1.01f, 3.8f);
+      bssrdf->roughness = params.roughness;
       bssrdf->anisotropy = clamp(params.anisotropy, 0.0f, 0.9f);
-      sd->flag |= bssrdf_setup(sd, bssrdf, (ClosureType)type, ior);
+      sd->flag |= bssrdf_setup(sd, bssrdf, (ClosureType)type, clamp(ior, 1.01f, 3.8f));
     }
   }
 };

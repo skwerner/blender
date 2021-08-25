@@ -160,8 +160,6 @@ bool Session::ready_to_reset()
 void Session::run_main_render_loop()
 {
   while (true) {
-    const bool did_cancel = progress.get_cancel();
-
     RenderWork render_work = run_update_for_next_iteration();
 
     if (!render_work) {
@@ -179,6 +177,7 @@ void Session::run_main_render_loop()
       }
     }
 
+    const bool did_cancel = progress.get_cancel();
     if (did_cancel) {
       render_scheduler_.render_work_reschedule_on_cancel(render_work);
       if (!render_work) {

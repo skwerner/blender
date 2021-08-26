@@ -820,6 +820,19 @@ void blo_do_versions_300(FileData *fd, Library *UNUSED(lib), Main *bmain)
     }
     FOREACH_NODETREE_END;
 
+    /* Disable Fade Inactive Overlay by default as it is redundant after introducing flash on mode
+     * transfer. */
+    for (bScreen *screen = bmain->screens.first; screen; screen = screen->id.next) {
+      LISTBASE_FOREACH (ScrArea *, area, &screen->areabase) {
+        LISTBASE_FOREACH (SpaceLink *, sl, &area->spacedata) {
+          if (sl->spacetype == SPACE_VIEW3D) {
+            View3D *v3d = (View3D *)sl;
+            v3d->overlay.flag &= ~V3D_OVERLAY_FADE_INACTIVE;
+          }
+        }
+      }
+    }
+
     /* TODO: move to specific subversion when merging into master. */
     FOREACH_NODETREE_BEGIN (bmain, ntree, id) {
       if (ntree->type == NTREE_SHADER) {

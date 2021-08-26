@@ -48,9 +48,9 @@
 ccl_gpu_kernel(GPU_KERNEL_BLOCK_NUM_THREADS, GPU_KERNEL_MAX_REGISTERS)
     kernel_gpu_integrator_reset(int num_states)
 {
-  const int path_index = ccl_gpu_global_id_x();
+  const int state = ccl_gpu_global_id_x();
 
-  if (path_index < num_states) {
+  if (state < num_states) {
     INTEGRATOR_STATE_WRITE(path, queued_kernel) = 0;
     INTEGRATOR_STATE_WRITE(shadow_path, queued_kernel) = 0;
   }
@@ -77,12 +77,12 @@ ccl_gpu_kernel(GPU_KERNEL_BLOCK_NUM_THREADS, GPU_KERNEL_MAX_REGISTERS)
     return;
   }
 
-  const int path_index = tile->path_index_offset + tile_work_index;
+  const int state = tile->path_index_offset + tile_work_index;
 
   uint x, y, sample;
   get_work_pixel(tile, tile_work_index, &x, &y, &sample);
 
-  integrator_init_from_camera(nullptr, path_index, tile, render_buffer, x, y, sample);
+  integrator_init_from_camera(nullptr, state, tile, render_buffer, x, y, sample);
 }
 
 ccl_gpu_kernel(GPU_KERNEL_BLOCK_NUM_THREADS, GPU_KERNEL_MAX_REGISTERS)
@@ -106,12 +106,12 @@ ccl_gpu_kernel(GPU_KERNEL_BLOCK_NUM_THREADS, GPU_KERNEL_MAX_REGISTERS)
     return;
   }
 
-  const int path_index = tile->path_index_offset + tile_work_index;
+  const int state = tile->path_index_offset + tile_work_index;
 
   uint x, y, sample;
   get_work_pixel(tile, tile_work_index, &x, &y, &sample);
 
-  integrator_init_from_bake(nullptr, path_index, tile, render_buffer, x, y, sample);
+  integrator_init_from_bake(nullptr, state, tile, render_buffer, x, y, sample);
 }
 
 ccl_gpu_kernel(GPU_KERNEL_BLOCK_NUM_THREADS, GPU_KERNEL_MAX_REGISTERS)
@@ -120,8 +120,8 @@ ccl_gpu_kernel(GPU_KERNEL_BLOCK_NUM_THREADS, GPU_KERNEL_MAX_REGISTERS)
   const int global_index = ccl_gpu_global_id_x();
 
   if (global_index < work_size) {
-    const int path_index = (path_index_array) ? path_index_array[global_index] : global_index;
-    integrator_intersect_closest(NULL, path_index);
+    const int state = (path_index_array) ? path_index_array[global_index] : global_index;
+    integrator_intersect_closest(NULL, state);
   }
 }
 
@@ -131,8 +131,8 @@ ccl_gpu_kernel(GPU_KERNEL_BLOCK_NUM_THREADS, GPU_KERNEL_MAX_REGISTERS)
   const int global_index = ccl_gpu_global_id_x();
 
   if (global_index < work_size) {
-    const int path_index = (path_index_array) ? path_index_array[global_index] : global_index;
-    integrator_intersect_shadow(NULL, path_index);
+    const int state = (path_index_array) ? path_index_array[global_index] : global_index;
+    integrator_intersect_shadow(NULL, state);
   }
 }
 
@@ -142,8 +142,8 @@ ccl_gpu_kernel(GPU_KERNEL_BLOCK_NUM_THREADS, GPU_KERNEL_MAX_REGISTERS)
   const int global_index = ccl_gpu_global_id_x();
 
   if (global_index < work_size) {
-    const int path_index = (path_index_array) ? path_index_array[global_index] : global_index;
-    integrator_intersect_subsurface(NULL, path_index);
+    const int state = (path_index_array) ? path_index_array[global_index] : global_index;
+    integrator_intersect_subsurface(NULL, state);
   }
 }
 
@@ -153,8 +153,8 @@ ccl_gpu_kernel(GPU_KERNEL_BLOCK_NUM_THREADS, GPU_KERNEL_MAX_REGISTERS)
   const int global_index = ccl_gpu_global_id_x();
 
   if (global_index < work_size) {
-    const int path_index = (path_index_array) ? path_index_array[global_index] : global_index;
-    integrator_intersect_volume_stack(NULL, path_index);
+    const int state = (path_index_array) ? path_index_array[global_index] : global_index;
+    integrator_intersect_volume_stack(NULL, state);
   }
 }
 
@@ -166,8 +166,8 @@ ccl_gpu_kernel(GPU_KERNEL_BLOCK_NUM_THREADS, GPU_KERNEL_MAX_REGISTERS)
   const int global_index = ccl_gpu_global_id_x();
 
   if (global_index < work_size) {
-    const int path_index = (path_index_array) ? path_index_array[global_index] : global_index;
-    integrator_shade_background(NULL, path_index, render_buffer);
+    const int state = (path_index_array) ? path_index_array[global_index] : global_index;
+    integrator_shade_background(NULL, state, render_buffer);
   }
 }
 
@@ -179,8 +179,8 @@ ccl_gpu_kernel(GPU_KERNEL_BLOCK_NUM_THREADS, GPU_KERNEL_MAX_REGISTERS)
   const int global_index = ccl_gpu_global_id_x();
 
   if (global_index < work_size) {
-    const int path_index = (path_index_array) ? path_index_array[global_index] : global_index;
-    integrator_shade_light(NULL, path_index, render_buffer);
+    const int state = (path_index_array) ? path_index_array[global_index] : global_index;
+    integrator_shade_light(NULL, state, render_buffer);
   }
 }
 
@@ -192,8 +192,8 @@ ccl_gpu_kernel(GPU_KERNEL_BLOCK_NUM_THREADS, GPU_KERNEL_MAX_REGISTERS)
   const int global_index = ccl_gpu_global_id_x();
 
   if (global_index < work_size) {
-    const int path_index = (path_index_array) ? path_index_array[global_index] : global_index;
-    integrator_shade_shadow(NULL, path_index, render_buffer);
+    const int state = (path_index_array) ? path_index_array[global_index] : global_index;
+    integrator_shade_shadow(NULL, state, render_buffer);
   }
 }
 
@@ -205,8 +205,8 @@ ccl_gpu_kernel(GPU_KERNEL_BLOCK_NUM_THREADS, GPU_KERNEL_MAX_REGISTERS)
   const int global_index = ccl_gpu_global_id_x();
 
   if (global_index < work_size) {
-    const int path_index = (path_index_array) ? path_index_array[global_index] : global_index;
-    integrator_shade_surface(NULL, path_index, render_buffer);
+    const int state = (path_index_array) ? path_index_array[global_index] : global_index;
+    integrator_shade_surface(NULL, state, render_buffer);
   }
 }
 
@@ -218,8 +218,8 @@ ccl_gpu_kernel(GPU_KERNEL_BLOCK_NUM_THREADS, GPU_KERNEL_MAX_REGISTERS)
   const int global_index = ccl_gpu_global_id_x();
 
   if (global_index < work_size) {
-    const int path_index = (path_index_array) ? path_index_array[global_index] : global_index;
-    integrator_shade_surface_raytrace(NULL, path_index, render_buffer);
+    const int state = (path_index_array) ? path_index_array[global_index] : global_index;
+    integrator_shade_surface_raytrace(NULL, state, render_buffer);
   }
 }
 
@@ -231,8 +231,8 @@ ccl_gpu_kernel(GPU_KERNEL_BLOCK_NUM_THREADS, GPU_KERNEL_MAX_REGISTERS)
   const int global_index = ccl_gpu_global_id_x();
 
   if (global_index < work_size) {
-    const int path_index = (path_index_array) ? path_index_array[global_index] : global_index;
-    integrator_shade_volume(NULL, path_index, render_buffer);
+    const int state = (path_index_array) ? path_index_array[global_index] : global_index;
+    integrator_shade_volume(NULL, state, render_buffer);
   }
 }
 
@@ -243,7 +243,7 @@ extern "C" __global__ void __launch_bounds__(GPU_PARALLEL_ACTIVE_INDEX_DEFAULT_B
                                              int kernel)
 {
   gpu_parallel_active_index_array<GPU_PARALLEL_ACTIVE_INDEX_DEFAULT_BLOCK_SIZE>(
-      num_states, indices, num_indices, [kernel](const int path_index) {
+      num_states, indices, num_indices, [kernel](const int state) {
         return (INTEGRATOR_STATE(path, queued_kernel) == kernel);
       });
 }
@@ -255,7 +255,7 @@ extern "C" __global__ void __launch_bounds__(GPU_PARALLEL_ACTIVE_INDEX_DEFAULT_B
                                                     int kernel)
 {
   gpu_parallel_active_index_array<GPU_PARALLEL_ACTIVE_INDEX_DEFAULT_BLOCK_SIZE>(
-      num_states, indices, num_indices, [kernel](const int path_index) {
+      num_states, indices, num_indices, [kernel](const int state) {
         return (INTEGRATOR_STATE(shadow_path, queued_kernel) == kernel);
       });
 }
@@ -264,7 +264,7 @@ extern "C" __global__ void __launch_bounds__(GPU_PARALLEL_ACTIVE_INDEX_DEFAULT_B
     kernel_gpu_integrator_active_paths_array(int num_states, int *indices, int *num_indices)
 {
   gpu_parallel_active_index_array<GPU_PARALLEL_ACTIVE_INDEX_DEFAULT_BLOCK_SIZE>(
-      num_states, indices, num_indices, [](const int path_index) {
+      num_states, indices, num_indices, [](const int state) {
         return (INTEGRATOR_STATE(path, queued_kernel) != 0) ||
                (INTEGRATOR_STATE(shadow_path, queued_kernel) != 0);
       });
@@ -277,7 +277,7 @@ extern "C" __global__ void __launch_bounds__(GPU_PARALLEL_ACTIVE_INDEX_DEFAULT_B
                                                  int indices_offset)
 {
   gpu_parallel_active_index_array<GPU_PARALLEL_ACTIVE_INDEX_DEFAULT_BLOCK_SIZE>(
-      num_states, indices + indices_offset, num_indices, [](const int path_index) {
+      num_states, indices + indices_offset, num_indices, [](const int state) {
         return (INTEGRATOR_STATE(path, queued_kernel) == 0) &&
                (INTEGRATOR_STATE(shadow_path, queued_kernel) == 0);
       });
@@ -288,7 +288,7 @@ extern "C" __global__ void __launch_bounds__(GPU_PARALLEL_SORTED_INDEX_DEFAULT_B
         int num_states, int *indices, int *num_indices, int *key_prefix_sum, int kernel)
 {
   gpu_parallel_sorted_index_array<GPU_PARALLEL_SORTED_INDEX_DEFAULT_BLOCK_SIZE>(
-      num_states, indices, num_indices, key_prefix_sum, [kernel](const int path_index) {
+      num_states, indices, num_indices, key_prefix_sum, [kernel](const int state) {
         return (INTEGRATOR_STATE(path, queued_kernel) == kernel) ?
                    INTEGRATOR_STATE(path, shader_sort_key) :
                    GPU_PARALLEL_SORTED_INDEX_INACTIVE_KEY;
@@ -302,8 +302,8 @@ extern "C" __global__ void __launch_bounds__(GPU_PARALLEL_ACTIVE_INDEX_DEFAULT_B
                                               int num_active_paths)
 {
   gpu_parallel_active_index_array<GPU_PARALLEL_ACTIVE_INDEX_DEFAULT_BLOCK_SIZE>(
-      num_states, indices, num_indices, [num_active_paths](const int path_index) {
-        return (path_index >= num_active_paths) &&
+      num_states, indices, num_indices, [num_active_paths](const int state) {
+        return (state >= num_active_paths) &&
                ((INTEGRATOR_STATE(path, queued_kernel) != 0) ||
                 (INTEGRATOR_STATE(shadow_path, queued_kernel) != 0));
       });
@@ -318,10 +318,10 @@ extern "C" __global__ void __launch_bounds__(GPU_PARALLEL_SORTED_INDEX_DEFAULT_B
   const int global_index = ccl_gpu_global_id_x();
 
   if (global_index < work_size) {
-    const int from_path_index = active_terminated_states[active_states_offset + global_index];
-    const int to_path_index = active_terminated_states[terminated_states_offset + global_index];
+    const int from_state = active_terminated_states[active_states_offset + global_index];
+    const int to_state = active_terminated_states[terminated_states_offset + global_index];
 
-    integrator_state_move(to_path_index, from_path_index);
+    integrator_state_move(to_state, from_state);
   }
 }
 
@@ -803,12 +803,12 @@ ccl_gpu_kernel(GPU_KERNEL_BLOCK_NUM_THREADS, GPU_KERNEL_MAX_REGISTERS)
     kernel_gpu_integrator_shadow_catcher_count_possible_splits(int num_states,
                                                                uint *num_possible_splits)
 {
-  const int path_index = ccl_gpu_global_id_x();
+  const int state = ccl_gpu_global_id_x();
 
   bool can_split = false;
 
-  if (path_index < num_states) {
-    can_split = kernel_shadow_catcher_path_can_split(nullptr, path_index);
+  if (state < num_states) {
+    can_split = kernel_shadow_catcher_path_can_split(nullptr, state);
   }
 
   /* NOTE: All threads specified in the mask must execute the intrinsic. */

@@ -188,7 +188,8 @@ ccl_device_forceinline void integrator_state_write_shadow_volume_stack(INTEGRATO
 }
 
 #if defined(__KERNEL_GPU__)
-ccl_device_inline void integrator_state_copy_only(const int to_path_index, const int path_index)
+ccl_device_inline void integrator_state_copy_only(const IntegratorState to_state,
+                                                  const IntegratorState state)
 {
   int index;
 
@@ -200,14 +201,14 @@ ccl_device_inline void integrator_state_copy_only(const int to_path_index, const
 
 #  define KERNEL_STRUCT_MEMBER(parent_struct, type, name, feature) \
     if (kernel_integrator_state.parent_struct.name != nullptr) { \
-      kernel_integrator_state.parent_struct.name[to_path_index] = \
-          kernel_integrator_state.parent_struct.name[path_index]; \
+      kernel_integrator_state.parent_struct.name[to_state] = \
+          kernel_integrator_state.parent_struct.name[state]; \
     }
 
 #  define KERNEL_STRUCT_ARRAY_MEMBER(parent_struct, type, name, feature) \
     if (kernel_integrator_state.parent_struct[index].name != nullptr) { \
-      kernel_integrator_state.parent_struct[index].name[to_path_index] = \
-          kernel_integrator_state.parent_struct[index].name[path_index]; \
+      kernel_integrator_state.parent_struct[index].name[to_state] = \
+          kernel_integrator_state.parent_struct[index].name[state]; \
     }
 
 #  define KERNEL_STRUCT_END(name) \
@@ -230,9 +231,10 @@ ccl_device_inline void integrator_state_copy_only(const int to_path_index, const
 #  undef KERNEL_STRUCT_END_ARRAY
 }
 
-ccl_device_inline void integrator_state_move(const int to_path_index, const int path_index)
+ccl_device_inline void integrator_state_move(const IntegratorState to_state,
+                                             const IntegratorState state)
 {
-  integrator_state_copy_only(to_path_index, path_index);
+  integrator_state_copy_only(to_state, state);
 
   INTEGRATOR_STATE_WRITE(path, queued_kernel) = 0;
   INTEGRATOR_STATE_WRITE(shadow_path, queued_kernel) = 0;
@@ -245,12 +247,12 @@ ccl_device_inline void integrator_state_move(const int to_path_index, const int 
 ccl_device_inline void integrator_state_shadow_catcher_split(INTEGRATOR_STATE_ARGS)
 {
 #if defined(__KERNEL_GPU__)
-  const int to_path_index = atomic_fetch_and_add_uint32(
+  const IntegratorState to_state = atomic_fetch_and_add_uint32(
       &kernel_integrator_state.next_shadow_catcher_path_index[0], 1);
 
-  integrator_state_copy_only(to_path_index, path_index);
+  integrator_state_copy_only(to_state, state);
 
-  kernel_integrator_state.path.flag[to_path_index] |= PATH_RAY_SHADOW_CATCHER_PASS;
+  kernel_integrator_state.path.flag[to_state] |= PATH_RAY_SHADOW_CATCHER_PASS;
 
   /* Sanity check: expect to split in the intersect-closest kernel, where there is no shadow ray
    * and no sorting yet. */
@@ -259,7 +261,7 @@ ccl_device_inline void integrator_state_shadow_catcher_split(INTEGRATOR_STATE_AR
                 nullptr);
 #else
 
-  IntegratorState *ccl_restrict split_state = state + 1;
+  IntegratorStateCPU *ccl_restrict split_state = state + 1;
 
   *split_state = *state;
 

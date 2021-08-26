@@ -22,7 +22,7 @@
 CCL_NAMESPACE_BEGIN
 
 struct KernelGlobals;
-struct IntegratorState;
+struct IntegratorStateCPU;
 struct TileInfo;
 
 class CPUKernels {
@@ -30,11 +30,11 @@ class CPUKernels {
   /* Integrator. */
 
   using IntegratorFunction =
-      CPUKernelFunction<void (*)(const KernelGlobals *kg, IntegratorState *state)>;
+      CPUKernelFunction<void (*)(const KernelGlobals *kg, IntegratorStateCPU *state)>;
   using IntegratorShadeFunction = CPUKernelFunction<void (*)(
-      const KernelGlobals *kg, IntegratorState *state, ccl_global float *render_buffer)>;
+      const KernelGlobals *kg, IntegratorStateCPU *state, ccl_global float *render_buffer)>;
   using IntegratorInitFunction = CPUKernelFunction<bool (*)(const KernelGlobals *kg,
-                                                            IntegratorState *state,
+                                                            IntegratorStateCPU *state,
                                                             KernelWorkTile *tile,
                                                             ccl_global float *render_buffer)>;
 

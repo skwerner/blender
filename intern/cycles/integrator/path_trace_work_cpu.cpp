@@ -115,10 +115,10 @@ void PathTraceWorkCPU::render_samples_full_pipeline(KernelGlobals *kernel_global
   const bool has_shadow_catcher = device_scene_->data.integrator.has_shadow_catcher;
   const bool has_bake = device_scene_->data.bake.use;
 
-  IntegratorState integrator_states[2] = {};
+  IntegratorStateCPU integrator_states[2] = {};
 
-  IntegratorState *state = &integrator_states[0];
-  IntegratorState *shadow_catcher_state = &integrator_states[1];
+  IntegratorStateCPU *state = &integrator_states[0];
+  IntegratorStateCPU *shadow_catcher_state = &integrator_states[1];
 
   KernelWorkTile sample_work_tile = work_tile;
   float *render_buffer = buffers_->buffer.data();

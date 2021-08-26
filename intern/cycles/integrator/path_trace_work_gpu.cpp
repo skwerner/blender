@@ -47,7 +47,7 @@ PathTraceWorkGPU::PathTraceWorkGPU(Device *device,
       num_queued_paths_(device, "num_queued_paths", MEM_READ_WRITE),
       work_tiles_(device, "work_tiles", MEM_READ_WRITE),
       gpu_display_rgba_half_(device, "display buffer half", MEM_READ_WRITE),
-      max_num_paths_(queue_->num_concurrent_states(sizeof(IntegratorState))),
+      max_num_paths_(queue_->num_concurrent_states(sizeof(IntegratorStateCPU))),
       min_num_active_paths_(queue_->num_concurrent_busy_states()),
       max_active_path_index_(0)
 {

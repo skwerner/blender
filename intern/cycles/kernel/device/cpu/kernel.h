@@ -28,7 +28,7 @@ CCL_NAMESPACE_BEGIN
 #define KERNEL_NAME_EVAL(arch, name) KERNEL_NAME_JOIN(kernel, arch, name)
 #define KERNEL_FUNCTION_FULL_NAME(name) KERNEL_NAME_EVAL(KERNEL_ARCH, name)
 
-struct IntegratorState;
+struct IntegratorStateCPU;
 struct KernelGlobals;
 struct KernelData;
 

@@ -71,14 +71,14 @@ CCL_NAMESPACE_BEGIN
 
 #define DEFINE_INTEGRATOR_KERNEL(name) \
   void KERNEL_FUNCTION_FULL_NAME(integrator_##name)(const KernelGlobals *kg, \
-                                                    IntegratorState *state) \
+                                                    IntegratorStateCPU *state) \
   { \
     KERNEL_INVOKE(name, kg, state); \
   }
 
 #define DEFINE_INTEGRATOR_SHADE_KERNEL(name) \
   void KERNEL_FUNCTION_FULL_NAME(integrator_##name)( \
-      const KernelGlobals *kg, IntegratorState *state, ccl_global float *render_buffer) \
+      const KernelGlobals *kg, IntegratorStateCPU *state, ccl_global float *render_buffer) \
   { \
     KERNEL_INVOKE(name, kg, state, render_buffer); \
   }
@@ -87,7 +87,7 @@ CCL_NAMESPACE_BEGIN
  * that it does not contain unused fields. */
 #define DEFINE_INTEGRATOR_INIT_KERNEL(name) \
   bool KERNEL_FUNCTION_FULL_NAME(integrator_##name)(const KernelGlobals *kg, \
-                                                    IntegratorState *state, \
+                                                    IntegratorStateCPU *state, \
                                                     KernelWorkTile *tile, \
                                                     ccl_global float *render_buffer) \
   { \

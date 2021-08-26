@@ -22,16 +22,16 @@
 
 #define KERNEL_INTEGRATOR_FUNCTION(name) \
   void KERNEL_FUNCTION_FULL_NAME(integrator_##name)(const KernelGlobals *ccl_restrict kg, \
-                                                    IntegratorState *state)
+                                                    IntegratorStateCPU *state)
 
 #define KERNEL_INTEGRATOR_SHADE_FUNCTION(name) \
   void KERNEL_FUNCTION_FULL_NAME(integrator_##name)(const KernelGlobals *ccl_restrict kg, \
-                                                    IntegratorState *state, \
+                                                    IntegratorStateCPU *state, \
                                                     ccl_global float *render_buffer)
 
 #define KERNEL_INTEGRATOR_INIT_FUNCTION(name) \
   bool KERNEL_FUNCTION_FULL_NAME(integrator_##name)(const KernelGlobals *ccl_restrict kg, \
-                                                    IntegratorState *state, \
+                                                    IntegratorStateCPU *state, \
                                                     KernelWorkTile *tile, \
                                                     ccl_global float *render_buffer)
 

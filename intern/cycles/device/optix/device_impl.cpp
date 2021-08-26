@@ -1556,7 +1556,7 @@ void OptiXDevice::const_copy_to(const char *name, void *host, size_t size)
       update_launch_params(offsetof(KernelParamsOptiX, tex_name), host, size); \
       return; \
     }
-  KERNEL_TEX(IntegratorState, __integrator_state)
+  KERNEL_TEX(IntegratorStateGPU, __integrator_state)
 #  include "kernel/kernel_textures.h"
 #  undef KERNEL_TEX
 }

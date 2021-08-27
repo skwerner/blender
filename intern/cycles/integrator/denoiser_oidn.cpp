@@ -19,6 +19,7 @@
 #include <array>
 
 #include "device/device.h"
+#include "device/device_queue.h"
 #include "integrator/pass_accessor_cpu.h"
 #include "render/buffers.h"
 #include "util/util_array.h"
@@ -38,12 +39,6 @@ OIDNDenoiser::OIDNDenoiser(Device *path_trace_device, const DenoiseParams &param
   DCHECK_EQ(params.type, DENOISER_OPENIMAGEDENOISE);
 
   DCHECK(openimagedenoise_supported()) << "OpenImageDenoiser is not supported on this platform.";
-}
-
-OIDNDenoiser::~OIDNDenoiser()
-{
-  /* NOTE: Keep the destructor here so that it has access to the State which is an incomplete as
-   * per the OIDN denoiser header. */
 }
 
 #ifdef WITH_OPENIMAGEDENOISE
@@ -547,6 +542,39 @@ class OIDNDenoiseContext {
 };
 #endif
 
+static unique_ptr<DeviceQueue> create_device_queue(const RenderBuffers *render_buffers)
+{
+  Device *device = render_buffers->buffer.device;
+  if (device->info.has_gpu_queue) {
+    return device->gpu_queue_create();
+  }
+  return nullptr;
+}
+
+static void copy_render_buffers_from_device(unique_ptr<DeviceQueue> &queue,
+                                            RenderBuffers *render_buffers)
+{
+  if (queue) {
+    queue->copy_from_device(render_buffers->buffer);
+    queue->synchronize();
+  }
+  else {
+    render_buffers->copy_from_device();
+  }
+}
+
+static void copy_render_buffers_to_device(unique_ptr<DeviceQueue> &queue,
+                                          RenderBuffers *render_buffers)
+{
+  if (queue) {
+    queue->copy_to_device(render_buffers->buffer);
+    queue->synchronize();
+  }
+  else {
+    render_buffers->copy_to_device();
+  }
+}
+
 bool OIDNDenoiser::denoise_buffer(const BufferParams &buffer_params,
                                   RenderBuffers *render_buffers,
                                   const int num_samples,
@@ -554,8 +582,9 @@ bool OIDNDenoiser::denoise_buffer(const BufferParams &buffer_params,
 {
   thread_scoped_lock lock(mutex_);
 
-  /* Copy pixels from compute device to CPU (no-op for CPU device). */
-  render_buffers->buffer.copy_from_device();
+  /* Make sure the host-side data is available for denoising. */
+  unique_ptr<DeviceQueue> queue = create_device_queue(render_buffers);
+  copy_render_buffers_from_device(queue, render_buffers);
 
 #ifdef WITH_OPENIMAGEDENOISE
   OIDNDenoiseContext context(
@@ -582,7 +611,7 @@ bool OIDNDenoiser::denoise_buffer(const BufferParams &buffer_params,
 
     /* TODO: It may be possible to avoid this copy, but we have to ensure that when other code
      * copies data from the device it doesn't overwrite the denoiser buffers. */
-    render_buffers->buffer.copy_to_device();
+    copy_render_buffers_to_device(queue, render_buffers);
   }
 #endif
 

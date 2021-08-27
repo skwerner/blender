@@ -30,7 +30,6 @@ class OIDNDenoiser : public Denoiser {
   class State;
 
   OIDNDenoiser(Device *path_trace_device, const DenoiseParams &params);
-  ~OIDNDenoiser();
 
   virtual bool denoise_buffer(const BufferParams &buffer_params,
                               RenderBuffers *render_buffers,

@@ -140,7 +140,7 @@ class OptiXDevice : public CUDADevice {
   class DenoiseContext;
   class DenoisePass;
 
-  virtual void denoise_buffer(const DeviceDenoiseTask &task) override;
+  virtual bool denoise_buffer(const DeviceDenoiseTask &task) override;
   virtual DeviceQueue *get_denoise_queue() override;
 
   /* Read guiding passes from the render buffers, preprocess them in a way which is expected by

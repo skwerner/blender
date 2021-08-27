@@ -31,7 +31,7 @@ class DeviceDenoiser : public Denoiser {
   DeviceDenoiser(Device *path_trace_device, const DenoiseParams &params);
   ~DeviceDenoiser();
 
-  virtual void denoise_buffer(const BufferParams &buffer_params,
+  virtual bool denoise_buffer(const BufferParams &buffer_params,
                               RenderBuffers *render_buffers,
                               const int num_samples,
                               bool allow_inplace_modification) override;

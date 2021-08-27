@@ -76,8 +76,11 @@ class Denoiser {
    * The `allow_inplace_modification` means that the denoiser is allowed to do in-place
    * modification of the input passes (scaling them down i.e.). This will lower the memory
    * footprint of the denoiser but will make input passes "invalid" (from path tracer) point of
-   * view. */
-  virtual void denoise_buffer(const BufferParams &buffer_params,
+   * view.
+   *
+   * Returns true when all passes are denoised. Will return false if there is a denoiser error (for
+   * example, caused by misconfigured denoiser) or when user requested to cancel rendering. */
+  virtual bool denoise_buffer(const BufferParams &buffer_params,
                               RenderBuffers *render_buffers,
                               const int num_samples,
                               bool allow_inplace_modification) = 0;

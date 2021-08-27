@@ -613,19 +613,19 @@ class OptiXDevice::DenoisePass {
   bool use_denoising_albedo;
 };
 
-void OptiXDevice::denoise_buffer(const DeviceDenoiseTask &task)
+bool OptiXDevice::denoise_buffer(const DeviceDenoiseTask &task)
 {
   const CUDAContextScope scope(this);
 
   DenoiseContext context(this, task);
 
   if (!denoise_ensure(context)) {
-    return;
+    return false;
   }
 
   if (!denoise_filter_guiding_preprocess(context)) {
     LOG(ERROR) << "Error preprocessing guiding passes.";
-    return;
+    return false;
   }
 
   /* Passes which will use real albedo when it is available. */
@@ -634,6 +634,8 @@ void OptiXDevice::denoise_buffer(const DeviceDenoiseTask &task)
 
   /* Passes which do not need albedo and hence if real is present it needs to become fake. */
   denoise_pass(context, PASS_SHADOW_CATCHER);
+
+  return true;
 }
 
 DeviceQueue *OptiXDevice::get_denoise_queue()

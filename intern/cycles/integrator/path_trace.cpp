@@ -479,10 +479,12 @@ void PathTrace::denoise(const RenderWork &render_work)
     allow_inplace_modification = true;
   }
 
-  denoiser_->denoise_buffer(render_state_.effective_big_tile_params,
-                            buffer_to_denoise,
-                            get_num_samples_in_buffer(),
-                            allow_inplace_modification);
+  if (denoiser_->denoise_buffer(render_state_.effective_big_tile_params,
+                                buffer_to_denoise,
+                                get_num_samples_in_buffer(),
+                                allow_inplace_modification)) {
+    render_state_.has_denoised_result = true;
+  }
 
   if (multi_device_buffers) {
     multi_device_buffers->copy_from_device();
@@ -493,8 +495,6 @@ void PathTrace::denoise(const RenderWork &render_work)
   }
 
   render_scheduler_.report_denoise_time(render_work, time_dt() - start_time);
-
-  render_state_.has_denoised_result = true;
 }
 
 void PathTrace::set_gpu_display(unique_ptr<GPUDisplay> gpu_display)

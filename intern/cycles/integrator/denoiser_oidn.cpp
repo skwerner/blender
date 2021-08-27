@@ -547,7 +547,7 @@ class OIDNDenoiseContext {
 };
 #endif
 
-void OIDNDenoiser::denoise_buffer(const BufferParams &buffer_params,
+bool OIDNDenoiser::denoise_buffer(const BufferParams &buffer_params,
                                   RenderBuffers *render_buffers,
                                   const int num_samples,
                                   bool allow_inplace_modification)
@@ -576,7 +576,7 @@ void OIDNDenoiser::denoise_buffer(const BufferParams &buffer_params,
     for (const PassType pass_type : passes) {
       context.denoise_pass(pass_type);
       if (is_cancelled()) {
-        return;
+        return false;
       }
     }
 
@@ -585,6 +585,10 @@ void OIDNDenoiser::denoise_buffer(const BufferParams &buffer_params,
     render_buffers->buffer.copy_to_device();
   }
 #endif
+
+  /* This code is not supposed to run when compiled without OIDN support, so can assume if we made
+   * it up here all passes are properly denoised. */
+  return true;
 }
 
 uint OIDNDenoiser::get_device_type_mask() const

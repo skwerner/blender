@@ -222,10 +222,11 @@ class Device {
 
   /* Buffer denoising. */
 
-  /* TODO(sergey): Need to pass real parameters needed for denoising. */
-  virtual void denoise_buffer(const DeviceDenoiseTask & /*task*/)
+  /* Returns true if task is fully handled. */
+  virtual bool denoise_buffer(const DeviceDenoiseTask & /*task*/)
   {
     LOG(ERROR) << "Request buffer denoising from a device which does not support it.";
+    return false;
   }
 
   virtual DeviceQueue *get_denoise_queue()

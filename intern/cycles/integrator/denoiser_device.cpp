@@ -36,14 +36,14 @@ DeviceDenoiser::~DeviceDenoiser()
   /* Explicit implementation, to allow forward declaration of Device in the header. */
 }
 
-void DeviceDenoiser::denoise_buffer(const BufferParams &buffer_params,
+bool DeviceDenoiser::denoise_buffer(const BufferParams &buffer_params,
                                     RenderBuffers *render_buffers,
                                     const int num_samples,
                                     bool allow_inplace_modification)
 {
   Device *denoiser_device = get_denoiser_device();
   if (!denoiser_device) {
-    return;
+    return false;
   }
 
   DeviceDenoiseTask task;
@@ -89,7 +89,7 @@ void DeviceDenoiser::denoise_buffer(const BufferParams &buffer_params,
     task.allow_inplace_modification = true;
   }
 
-  denoiser_device->denoise_buffer(task);
+  const bool denoise_result = denoiser_device->denoise_buffer(task);
 
   if (local_buffer_used) {
     local_render_buffers.copy_from_device();
@@ -99,6 +99,8 @@ void DeviceDenoiser::denoise_buffer(const BufferParams &buffer_params,
 
     render_buffers->copy_to_device();
   }
+
+  return denoise_result;
 }
 
 CCL_NAMESPACE_END

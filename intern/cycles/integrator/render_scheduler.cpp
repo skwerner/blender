@@ -630,11 +630,11 @@ double RenderScheduler::guess_display_update_interval_in_seconds_for_num_samples
     }
     return 2.0;
   }
-  
+
   /* Render time and number of samples rendered are used to figure out the display update interval.
-  *  Render time is used to allow for fast display updates in the first few seconds of rendering
-  *  on fast devices. Number of samples rendered is used to allow for potentially quicker display
-  *  updates on slow devices during the first few samples. */
+   *  Render time is used to allow for fast display updates in the first few seconds of rendering
+   *  on fast devices. Number of samples rendered is used to allow for potentially quicker display
+   *  updates on slow devices during the first few samples. */
   const double render_time = path_trace_time_.get_wall();
   if (render_time < 1) {
     return 0.1;
@@ -735,7 +735,7 @@ int RenderScheduler::get_num_samples_to_path_trace() const
 
 int RenderScheduler::get_num_samples_during_navigation(int resolution_divider) const
 {
-  /* Specvial trick for the fast navigation: schedule multiple samples during fats navigation
+  /* Specvial trick for the fast navigation: schedule multiple samples during fast navigation
    * (which will prefer to use lower resolution to keep up with refresh rate). This gives more
    * usable visual feedback for artists. There are couple of tricks though. */
 
@@ -747,7 +747,7 @@ int RenderScheduler::get_num_samples_during_navigation(int resolution_divider) c
   }
 
   if (resolution_divider <= pixel_size_ * 2) {
-    /* When denoising is used during navigation prefer using highetr resolution and less samples
+    /* When denoising is used during navigation prefer using higher resolution and less samples
      * (scheduling less samples here will make it so resolutiondivider calculation will use lower
      * value for the divider). This is because both OpenImageDenoiser and OptiX denoiser gives
      * visually better results on higher resolution image with less samples. */
@@ -815,10 +815,11 @@ bool RenderScheduler::work_need_denoise(bool &delayed)
     return false;
   }
 
-  /* Avoid excessive denoising in viewport after reaching a certain sample count and render time. */
+  /* Avoid excessive denoising in viewport after reaching a certain sample count and render time.
+   */
   /* TODO(sergey): Consider making time interval and sample configurable. */
   delayed = (path_trace_time_.get_wall() > 4 && num_samples_finished >= 20 &&
-      (time_dt() - state_.last_display_update_time) < 1.0);
+             (time_dt() - state_.last_display_update_time) < 1.0);
 
   return !delayed;
 }

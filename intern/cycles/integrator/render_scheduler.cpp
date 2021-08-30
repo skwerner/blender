@@ -630,17 +630,22 @@ double RenderScheduler::guess_display_update_interval_in_seconds_for_num_samples
     }
     return 2.0;
   }
-
-  if (num_rendered_samples < 4) {
+  
+  /* Render time and number of samples rendered are used to figure out the display update interval.
+  *  Render time is used to allow for fast display updates in the first few seconds of rendering
+  *  on fast devices. Number of samples rendered is used to allow for potentially quicker display
+  *  updates on slow devices during the first few samples. */
+  const double render_time = path_trace_time_.get_wall();
+  if (render_time < 1) {
     return 0.1;
   }
-  if (num_rendered_samples < 8) {
+  if (render_time < 2) {
     return 0.25;
   }
-  if (num_rendered_samples < 16) {
+  if (render_time < 4) {
     return 0.5;
   }
-  if (num_rendered_samples < 32) {
+  if (render_time < 8 || num_rendered_samples < 32) {
     return 1.0;
   }
   return 2.0;
@@ -649,7 +654,7 @@ double RenderScheduler::guess_display_update_interval_in_seconds_for_num_samples
 int RenderScheduler::calculate_num_samples_per_update() const
 {
   const double time_per_sample_average = path_trace_time_.get_average();
-  const double num_samples_in_second = 1.0 / time_per_sample_average;
+  const double num_samples_in_second = pixel_size_ * pixel_size_ / time_per_sample_average;
 
   const double update_interval_in_seconds = guess_display_update_interval_in_seconds();
 
@@ -810,9 +815,10 @@ bool RenderScheduler::work_need_denoise(bool &delayed)
     return false;
   }
 
-  /* Avoid excessive denoising in viewport after reaching a certain amount of samples. */
+  /* Avoid excessive denoising in viewport after reaching a certain sample count and render time. */
   /* TODO(sergey): Consider making time interval and sample configurable. */
-  delayed = (num_samples_finished >= 20 && (time_dt() - state_.last_display_update_time) < 1.0);
+  delayed = (path_trace_time_.get_wall() > 4 && num_samples_finished >= 20 &&
+      (time_dt() - state_.last_display_update_time) < 1.0);
 
   return !delayed;
 }

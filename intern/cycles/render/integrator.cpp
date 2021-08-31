@@ -284,20 +284,6 @@ AdaptiveSampling Integrator::get_adaptive_sampling() const
     return adaptive_sampling;
   }
 
-  if (aa_samples > 0 && adaptive_min_samples == 0) {
-    adaptive_sampling.min_samples = max(4, (int)sqrtf(aa_samples));
-    VLOG(1) << "Cycles adaptive sampling: automatic min samples = "
-            << adaptive_sampling.min_samples;
-  }
-  else {
-    adaptive_sampling.min_samples = max(4, adaptive_min_samples);
-  }
-
-  adaptive_sampling.adaptive_step = 16;
-
-  DCHECK(is_power_of_two(adaptive_sampling.adaptive_step))
-      << "Adaptive step must be a power of two for bitwise operations to work";
-
   if (aa_samples > 0 && adaptive_threshold == 0.0f) {
     adaptive_sampling.threshold = max(0.001f, 1.0f / (float)aa_samples);
     VLOG(1) << "Cycles adaptive sampling: automatic threshold = " << adaptive_sampling.threshold;
@@ -305,6 +291,26 @@ AdaptiveSampling Integrator::get_adaptive_sampling() const
   else {
     adaptive_sampling.threshold = adaptive_threshold;
   }
+
+  if (adaptive_threshold > 0 && adaptive_min_samples == 0) {
+    /* Threshold 0.1 -> 32, 0.01 -> 64, 0.001 -> 128. */
+    const int min_samples = (int)ceilf(16.0f / sqrtf(adaptive_threshold * 0.3f));
+    adaptive_sampling.min_samples = max(4, min_samples);
+    VLOG(1) << "Cycles adaptive sampling: automatic min samples = "
+            << adaptive_sampling.min_samples;
+  }
+  else {
+    adaptive_sampling.min_samples = max(4, adaptive_min_samples);
+  }
+
+  /* Arbitrary factor that makes the threshold more similar to what is was before,
+   * and gives arguably more intuitive values. */
+  adaptive_sampling.threshold *= 5.0f;
+
+  adaptive_sampling.adaptive_step = 16;
+
+  DCHECK(is_power_of_two(adaptive_sampling.adaptive_step))
+      << "Adaptive step must be a power of two for bitwise operations to work";
 
   return adaptive_sampling;
 }

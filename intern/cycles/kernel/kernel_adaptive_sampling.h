@@ -70,13 +70,16 @@ ccl_device bool kernel_adaptive_sampling_convergence_check(const KernelGlobals *
   const float4 I = kernel_read_pass_float4(buffer + kernel_data.film.pass_combined);
 
   const float sample = __float_as_uint(buffer[kernel_data.film.pass_sample_count]);
+  const float inv_sample = 1.0f / sample;
 
   /* The per pixel error as seen in section 2.1 of
-   * "A hierarchical automatic stopping condition for Monte Carlo global illumination"
-   * A small epsilon is added to the divisor to prevent division by zero. */
-  const float error = (fabsf(I.x - A.x) + fabsf(I.y - A.y) + fabsf(I.z - A.z)) /
-                      (sample * 0.0001f + sqrtf(I.x + I.y + I.z));
-  const bool did_converge = (error < threshold * sample);
+   * "A hierarchical automatic stopping condition for Monte Carlo global illumination" */
+  const float error_difference = (fabsf(I.x - A.x) + fabsf(I.y - A.y) + fabsf(I.z - A.z)) *
+                                 inv_sample;
+  const float error_normalize = sqrtf((I.x + I.y + I.z) * inv_sample);
+  /* A small epsilon is added to the divisor to prevent division by zero. */
+  const float error = error_difference / (0.0001f + error_normalize);
+  const bool did_converge = (error < threshold);
 
   const uint aux_w_offset = kernel_data.film.pass_adaptive_aux_buffer + 3;
   buffer[aux_w_offset] = did_converge;

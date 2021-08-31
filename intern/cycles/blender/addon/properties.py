@@ -365,7 +365,7 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
     )
     adaptive_min_samples: IntProperty(
         name="Adaptive Min Samples",
-        description="Minimum AA samples for adaptive sampling, to discover noisy features before stopping sampling. Zero for automatic setting based on number of AA samples",
+        description="Minimum AA samples for adaptive sampling, to discover noisy features before stopping sampling. Zero for automatic setting based on noise threshold",
         min=0, max=4096,
         default=0,
     )
@@ -385,7 +385,7 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
     )
     preview_adaptive_min_samples: IntProperty(
         name="Adaptive Min Samples",
-        description="Minimum AA samples for adaptive sampling, to discover noisy features before stopping sampling. Zero for automatic setting based on number of AA samples, for viewport renders",
+        description="Minimum AA samples for adaptive sampling, to discover noisy features before stopping sampling. Zero for automatic setting based on noise threshold, for viewport renders",
         min=0, max=4096,
         default=0,
     )

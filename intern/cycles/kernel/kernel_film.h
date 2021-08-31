@@ -294,6 +294,7 @@ ccl_device_inline void film_get_pass_pixel_float4(const KernelFilmConvert *ccl_r
   pixel[2] = color.z;
   pixel[3] = alpha;
 }
+
 ccl_device_inline void film_get_pass_pixel_combined(const KernelFilmConvert *ccl_restrict
                                                         kfilm_convert,
                                                     ccl_global const float *ccl_restrict buffer,

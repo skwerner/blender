@@ -264,7 +264,7 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         name="Denoising Prefilter",
         description="Prefilter noisy guiding (albedo and normal) passes to improve denoising quality when using OpenImageDenoiser",
         items=enum_denoising_prefilter,
-        default=2,
+        default='FAST',
     )
 
     denoiser: EnumProperty(
@@ -1219,7 +1219,7 @@ class CyclesRenderLayerSettings(bpy.types.PropertyGroup):
         name="Denoising Prefilter",
         description="Prefilter noisy guiding (albedo and normal) passes to improve denoising quality when using OpenImageDenoiser",
         items=enum_denoising_prefilter,
-        default=1,
+        default='ACCURATE',
     )
 
     @classmethod

@@ -250,7 +250,7 @@ class PathTrace {
     BufferParams effective_big_tile_params;
 
     /* Denosier was run and there are denoised versions of the passes in the render buffers. */
-    bool has_denoised_result_ = false;
+    bool has_denoised_result = false;
   } render_state_;
 
   /* Progress object which is used to communicate sample progress. */

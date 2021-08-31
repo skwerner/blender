@@ -123,7 +123,7 @@ void PathTrace::reset(const BufferParams &big_tile_params)
     gpu_display_->reset(big_tile_params);
   }
 
-  render_state_.has_denoised_result_ = false;
+  render_state_.has_denoised_result = false;
 
   did_draw_after_reset_ = false;
 }
@@ -494,7 +494,7 @@ void PathTrace::denoise(const RenderWork &render_work)
 
   render_scheduler_.report_denoise_time(render_work, time_dt() - start_time);
 
-  render_state_.has_denoised_result_ = true;
+  render_state_.has_denoised_result = true;
 }
 
 void PathTrace::set_gpu_display(unique_ptr<GPUDisplay> gpu_display)
@@ -550,8 +550,8 @@ void PathTrace::update_display(const RenderWork &render_work)
     return;
   }
 
-  const PassMode pass_mode = render_state_.has_denoised_result_ ? PassMode::DENOISED :
-                                                                  PassMode::NOISY;
+  const PassMode pass_mode = render_state_.has_denoised_result ? PassMode::DENOISED :
+                                                                 PassMode::NOISY;
 
   /* TODO(sergey): When using multi-device rendering map the GPUDisplay once and copy data from all
    * works in parallel. */
@@ -755,7 +755,7 @@ bool PathTrace::set_render_tile_pixels(PassAccessor &pass_accessor,
 
 bool PathTrace::has_denoised_result() const
 {
-  return render_state_.has_denoised_result_;
+  return render_state_.has_denoised_result;
 }
 
 /* --------------------------------------------------------------------

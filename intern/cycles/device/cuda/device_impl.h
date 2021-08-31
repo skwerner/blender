@@ -69,14 +69,6 @@ class CUDADevice : public Device {
   CUDAMemMap cuda_mem_map;
   thread_mutex cuda_mem_map_mutex;
 
-  struct PixelMem {
-    GLuint cuPBO;
-    CUgraphicsResource cuPBOresource;
-    GLuint cuTexId;
-    int w, h;
-  };
-  map<device_ptr, PixelMem> pixel_mem_map;
-
   /* Bindless Textures */
   device_vector<TextureInfo> texture_info;
   bool need_texture_info;

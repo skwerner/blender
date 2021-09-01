@@ -141,7 +141,7 @@ ccl_device_noinline int svm_node_tex_coord_bump_dx(
     case NODE_TEXCO_WINDOW: {
       if ((path_flag & PATH_RAY_CAMERA) && sd->object == OBJECT_NONE &&
           kernel_data.cam.type == CAMERA_ORTHOGRAPHIC)
-        data = camera_world_to_ndc(kg, sd, sd->ray_P); /* TODO: + sd->ray_dP.dx); */
+        data = camera_world_to_ndc(kg, sd, sd->ray_P + make_float3(sd->ray_dP, 0.0f, 0.0f));
       else
         data = camera_world_to_ndc(kg, sd, sd->P + sd->dP.dx);
       data.z = 0.0f;
@@ -222,7 +222,7 @@ ccl_device_noinline int svm_node_tex_coord_bump_dy(
     case NODE_TEXCO_WINDOW: {
       if ((path_flag & PATH_RAY_CAMERA) && sd->object == OBJECT_NONE &&
           kernel_data.cam.type == CAMERA_ORTHOGRAPHIC)
-        data = camera_world_to_ndc(kg, sd, sd->ray_P); /* TODO: + sd->ray_dP.dy); */
+        data = camera_world_to_ndc(kg, sd, sd->ray_P + make_float3(0.0f, sd->ray_dP, 0.0f));
       else
         data = camera_world_to_ndc(kg, sd, sd->P + sd->dP.dy);
       data.z = 0.0f;

@@ -44,12 +44,19 @@
 #include "kernel/device/cpu/globals.h"
 #include "kernel/device/cpu/image.h"
 
-#include "kernel/kernel_color.h"
-#include "kernel/kernel_camera.h"
+#include "kernel/kernel_differential.h"
+
+#include "kernel/integrator/integrator_state.h"
+#include "kernel/integrator/integrator_state_flow.h"
+
 #include "kernel/geom/geom.h"
 #include "kernel/bvh/bvh.h"
 
+#include "kernel/kernel_color.h"
+#include "kernel/kernel_camera.h"
+#include "kernel/kernel_path_state.h"
 #include "kernel/kernel_projection.h"
+#include "kernel/kernel_shader.h"
 // clang-format on
 
 CCL_NAMESPACE_BEGIN
@@ -993,45 +1000,36 @@ bool OSLRenderServices::get_background_attribute(const KernelGlobals *kg,
     float f = sd->ray_length;
     return set_attribute_float(f, type, derivatives, val);
   }
-  /* TODO */
-#if 0
   else if (name == u_path_ray_depth) {
     /* Ray Depth */
-    PathState *state = sd->osl_path_state;
-    int f = state->bounce;
+    const IntegratorStateCPU *state = sd->osl_path_state;
+    int f = state->path.bounce;
     return set_attribute_int(f, type, derivatives, val);
   }
   else if (name == u_path_diffuse_depth) {
     /* Diffuse Ray Depth */
-    PathState *state = sd->osl_path_state;
-    int f = state->diffuse_bounce;
+    const IntegratorStateCPU *state = sd->osl_path_state;
+    int f = state->path.diffuse_bounce;
     return set_attribute_int(f, type, derivatives, val);
   }
   else if (name == u_path_glossy_depth) {
     /* Glossy Ray Depth */
-    PathState *state = sd->osl_path_state;
-    int f = state->glossy_bounce;
+    const IntegratorStateCPU *state = sd->osl_path_state;
+    int f = state->path.glossy_bounce;
     return set_attribute_int(f, type, derivatives, val);
   }
   else if (name == u_path_transmission_depth) {
     /* Transmission Ray Depth */
-    PathState *state = sd->osl_path_state;
-    int f = state->transmission_bounce;
+    const IntegratorStateCPU *state = sd->osl_path_state;
+    int f = state->path.transmission_bounce;
     return set_attribute_int(f, type, derivatives, val);
   }
   else if (name == u_path_transparent_depth) {
     /* Transparent Ray Depth */
-    PathState *state = sd->osl_path_state;
-    int f = state->transparent_bounce;
+    const IntegratorStateCPU *state = sd->osl_path_state;
+    int f = state->path.transparent_bounce;
     return set_attribute_int(f, type, derivatives, val);
   }
-  else if (name == u_path_transmission_depth) {
-    /* Transmission Ray Depth */
-    PathState *state = sd->osl_path_state;
-    int f = state->transmission_bounce;
-    return set_attribute_int(f, type, derivatives, val);
-  }
-#endif
   else if (name == u_ndc) {
     /* NDC coordinates with special exception for orthographic projection. */
     OSLThreadData *tdata = kg->osl_tdata;
@@ -1043,8 +1041,10 @@ bool OSLRenderServices::get_background_attribute(const KernelGlobals *kg,
       ndc[0] = camera_world_to_ndc(kg, sd, sd->ray_P);
 
       if (derivatives) {
-        ndc[1] = camera_world_to_ndc(kg, sd, sd->ray_P /* TODO: + sd->ray_dP.dx*/) - ndc[0];
-        ndc[2] = camera_world_to_ndc(kg, sd, sd->ray_P /* TODO: + sd->ray_dP.dy*/) - ndc[0];
+        ndc[1] = camera_world_to_ndc(kg, sd, sd->ray_P + make_float3(sd->ray_dP, 0.0f, 0.0f)) -
+                 ndc[0];
+        ndc[2] = camera_world_to_ndc(kg, sd, sd->ray_P + make_float3(0.0f, sd->ray_dP, 0.0f)) -
+                 ndc[0];
       }
     }
     else {
@@ -1213,27 +1213,22 @@ bool OSLRenderServices::texture(ustring filename,
 
   switch (texture_type) {
     case OSLTextureHandle::BEVEL: {
-      /* TODO */
-#if 0
       /* Bevel shader hack. */
       if (nchannels >= 3) {
-        PathState *state = sd->osl_path_state;
+        const IntegratorStateCPU *state = sd->osl_path_state;
         int num_samples = (int)s;
         float radius = t;
-        float3 N = svm_bevel(kernel_globals, sd, state, radius, num_samples);
+        float3 N = svm_bevel(kernel_globals, state, sd, radius, num_samples);
         result[0] = N.x;
         result[1] = N.y;
         result[2] = N.z;
         status = true;
       }
-#endif
       break;
     }
     case OSLTextureHandle::AO: {
-      /* TODO */
-#if 0
       /* AO shader hack. */
-      PathState *state = sd->osl_path_state;
+      const IntegratorStateCPU *state = sd->osl_path_state;
       int num_samples = (int)s;
       float radius = t;
       float3 N = make_float3(dsdx, dtdx, dsdy);
@@ -1247,9 +1242,8 @@ bool OSLRenderServices::texture(ustring filename,
       if ((int)options.tblur) {
         flags |= NODE_AO_GLOBAL_RADIUS;
       }
-      result[0] = svm_ao(kernel_globals, sd, N, state, radius, num_samples, flags);
+      result[0] = svm_ao(kernel_globals, state, sd, N, radius, num_samples, flags);
       status = true;
-#endif
       break;
     }
     case OSLTextureHandle::SVM: {
@@ -1267,12 +1261,9 @@ bool OSLRenderServices::texture(ustring filename,
       break;
     }
     case OSLTextureHandle::IES: {
-      /* TODO */
-#if 0
       /* IES light. */
       result[0] = kernel_ies_interp(kernel_globals, handle->svm_slot, s, t);
       status = true;
-#endif
       break;
     }
     case OSLTextureHandle::OIIO: {
@@ -1658,14 +1649,12 @@ bool OSLRenderServices::getmessage(OSL::ShaderGlobals *sg,
         return set_attribute_float(f, type, derivatives, val);
       }
       else {
-        /* TODO */
-#if 0
         ShaderData *sd = &tracedata->sd;
         const KernelGlobals *kg = sd->osl_globals;
 
         if (!tracedata->setup) {
           /* lazy shader data setup */
-          shader_setup_from_ray(kg, sd, &tracedata->isect, &tracedata->ray);
+          shader_setup_from_ray(kg, sd, &tracedata->ray, &tracedata->isect);
           tracedata->setup = true;
         }
 
@@ -1693,7 +1682,6 @@ bool OSLRenderServices::getmessage(OSL::ShaderGlobals *sg,
         }
 
         return get_attribute(sd, derivatives, u_empty, type, name, val);
-#endif
       }
     }
   }

@@ -806,6 +806,7 @@ typedef ccl_addr_space struct ccl_align(16) ShaderData
 
 #ifdef __OSL__
   const struct KernelGlobals *osl_globals;
+  const struct IntegratorStateCPU *osl_path_state;
 #endif
 
   /* LCG state for closures that require additional random numbers. */

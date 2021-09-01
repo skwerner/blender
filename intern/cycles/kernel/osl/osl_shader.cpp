@@ -134,10 +134,7 @@ static void shaderdata_to_shaderglobals(const KernelGlobals *kg,
 
   /* Used by render-services. */
   sd->osl_globals = kg;
-  /* TODO */
-#if 0
   sd->osl_path_state = state;
-#endif
 }
 
 /* Surface */

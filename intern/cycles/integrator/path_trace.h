@@ -67,7 +67,7 @@ class PathTrace {
    * render result. */
   bool ready_to_reset();
 
-  void reset(const BufferParams &big_tile_params);
+  void reset(const BufferParams &full_params, const BufferParams &big_tile_params);
 
   /* Set progress tracker.
    * Used to communicate details about the progress to the outer world, check whether rendering is
@@ -225,7 +225,8 @@ class PathTrace {
   /* Per-path trace work information needed for multi-device balancing. */
   vector<WorkBalanceInfo> work_balance_infos_;
 
-  /* Render buffer parameters of the  the big tile. */
+  /* Render buffer parameters of the full frame and current big tile. */
+  BufferParams full_params_;
   BufferParams big_tile_params_;
 
   /* Denoiser which takes care of denoising the big tile. */

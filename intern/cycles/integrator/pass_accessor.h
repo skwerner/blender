@@ -86,8 +86,15 @@ class PassAccessor {
     int offset = 0;
 
     /* Number of floats per pixel. When zero is the same as `num_components`.
-     * NOTE: Is ignored for half4 destination. */
+     *
+     * NOTE: Is ignored for half4 destination, as the half4 pixels are always 4-component
+     * half-floats. */
     int pixel_stride = 0;
+
+    /* Row stride in pixel elements:
+     *  - For the float destination stride is a number of floats per row.
+     *  - For the half4 destination stride is a number of half4 per row. */
+    int stride = 0;
   };
 
   class Source {

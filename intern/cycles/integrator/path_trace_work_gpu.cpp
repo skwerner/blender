@@ -702,8 +702,8 @@ void PathTraceWorkGPU::copy_to_gpu_display_naive(GPUDisplay *gpu_display,
   const int final_width = buffers_->params.width;
   const int final_height = buffers_->params.height;
 
-  const int texture_x = full_x - effective_big_tile_params_.full_x;
-  const int texture_y = full_y - effective_big_tile_params_.full_y;
+  const int texture_x = full_x - effective_full_params_.full_x;
+  const int texture_y = full_y - effective_full_params_.full_y;
 
   /* Re-allocate display memory if needed, and make sure the device pointer is allocated.
    *
@@ -718,7 +718,10 @@ void PathTraceWorkGPU::copy_to_gpu_display_naive(GPUDisplay *gpu_display,
     queue_->zero_to_device(gpu_display_rgba_half_);
   }
 
-  run_film_convert(gpu_display_rgba_half_.device_pointer, pass_mode, num_samples);
+  PassAccessor::Destination destination(film_->get_display_pass());
+  destination.d_pixels_half_rgba = gpu_display_rgba_half_.device_pointer;
+
+  get_render_tile_film_pixels(destination, pass_mode, num_samples);
 
   gpu_display_rgba_half_.copy_from_device();
 
@@ -743,27 +746,24 @@ bool PathTraceWorkGPU::copy_to_gpu_display_interop(GPUDisplay *gpu_display,
     return false;
   }
 
-  /* NOTE: No need to take device slice into account since the interop is only used during single
-   * device rendering. */
+  PassAccessor::Destination destination = get_gpu_display_destination_template(gpu_display);
+  destination.d_pixels_half_rgba = d_rgba_half;
 
-  run_film_convert(d_rgba_half, pass_mode, num_samples);
+  get_render_tile_film_pixels(destination, pass_mode, num_samples);
 
   device_graphics_interop_->unmap();
 
   return true;
 }
 
-void PathTraceWorkGPU::run_film_convert(device_ptr d_rgba_half,
-                                        PassMode pass_mode,
-                                        int num_samples)
+void PathTraceWorkGPU::get_render_tile_film_pixels(const PassAccessor::Destination &destination,
+                                                   PassMode pass_mode,
+                                                   int num_samples)
 {
   const KernelFilm &kfilm = device_scene_->data.film;
 
   const PassAccessor::PassAccessInfo pass_access_info = get_display_pass_access_info(pass_mode);
   const PassAccessorGPU pass_accessor(queue_.get(), pass_access_info, kfilm.exposure, num_samples);
-
-  PassAccessor::Destination destination(pass_access_info.type);
-  destination.d_pixels_half_rgba = d_rgba_half;
 
   pass_accessor.get_render_tile_pixels(buffers_.get(), effective_buffer_params_, destination);
 }

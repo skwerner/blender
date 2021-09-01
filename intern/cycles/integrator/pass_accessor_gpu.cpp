@@ -45,14 +45,21 @@ void PassAccessorGPU::run_film_convert_kernels(DeviceKernel kernel,
 
   const int work_size = buffer_params.width * buffer_params.height;
 
+  const int destination_stride = destination.stride != 0 ? destination.stride :
+                                                           buffer_params.width;
+
   if (destination.d_pixels) {
+    DCHECK_EQ(destination.stride, 0) << "Custom stride for float destination is not implemented.";
+
     void *args[] = {const_cast<KernelFilmConvert *>(&kfilm_convert),
                     const_cast<device_ptr *>(&destination.d_pixels),
                     const_cast<device_ptr *>(&render_buffers->buffer.device_pointer),
                     const_cast<int *>(&work_size),
+                    const_cast<int *>(&buffer_params.width),
                     const_cast<int *>(&buffer_params.offset),
                     const_cast<int *>(&buffer_params.stride),
-                    const_cast<int *>(&destination.offset)};
+                    const_cast<int *>(&destination.offset),
+                    const_cast<int *>(&destination_stride)};
 
     queue_->enqueue(kernel, work_size, args);
   }
@@ -63,9 +70,11 @@ void PassAccessorGPU::run_film_convert_kernels(DeviceKernel kernel,
                     const_cast<device_ptr *>(&destination.d_pixels_half_rgba),
                     const_cast<device_ptr *>(&render_buffers->buffer.device_pointer),
                     const_cast<int *>(&work_size),
+                    const_cast<int *>(&buffer_params.width),
                     const_cast<int *>(&buffer_params.offset),
                     const_cast<int *>(&buffer_params.stride),
-                    const_cast<int *>(&destination.offset)};
+                    const_cast<int *>(&destination.offset),
+                    const_cast<int *>(&destination_stride)};
 
     queue_->enqueue(kernel_half_float, work_size, args);
   }

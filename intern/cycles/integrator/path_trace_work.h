@@ -52,7 +52,8 @@ class PathTraceWork {
   RenderBuffers *get_render_buffers();
 
   /* Set effective parameters of the big tile and the work itself. */
-  void set_effective_buffer_params(const BufferParams &effective_big_tile_params,
+  void set_effective_buffer_params(const BufferParams &effective_full_params,
+                                   const BufferParams &effective_big_tile_params,
                                    const BufferParams &effective_buffer_params);
 
   /* Check whether the big tile is being worked on by multiple path trace works. */
@@ -73,7 +74,8 @@ class PathTraceWork {
   virtual void render_samples(int start_sample, int samples_num) = 0;
 
   /* Copy render result from this work to the corresponding place of the GPU display.
-   * The pass_mode indicates whether to access denoised or noisy version of the display pass. The
+   *
+   * The `pass_mode` indicates whether to access denoised or noisy version of the display pass. The
    * noisy pass mode will be passed here when it is known that the buffer does not have denoised
    * passes yet (because denoiser did not run). If the denoised pass is requested and denoiser is
    * not used then this function will fall-back to the noisy pass instead. */
@@ -152,6 +154,11 @@ class PathTraceWork {
 
   PassAccessor::PassAccessInfo get_display_pass_access_info(PassMode pass_mode) const;
 
+  /* Get destination which offset and stride are configured so that writing to it will write to a
+   * proper location of GPU display texture, taking current tile and device slice into account. */
+  PassAccessor::Destination get_gpu_display_destination_template(
+      const GPUDisplay *gpu_display) const;
+
   /* Device which will be used for path tracing.
    * Note that it is an actual render device (and never is a multi-device). */
   Device *device_;
@@ -168,9 +175,10 @@ class PathTraceWork {
    * It also defines possible subset of a big tile in the case of multi-device rendering. */
   unique_ptr<RenderBuffers> buffers_;
 
-  /* Effective parameters of the big tile and render buffer.
+  /* Effective parameters of the full, big tile, and current work render buffer.
    * The latter might be different from buffers_->params when there is a resolution divider
    * involved. */
+  BufferParams effective_full_params_;
   BufferParams effective_big_tile_params_;
   BufferParams effective_buffer_params_;
 

@@ -112,15 +112,20 @@ bool PathTrace::ready_to_reset()
   return false;
 }
 
-void PathTrace::reset(const BufferParams &big_tile_params)
+void PathTrace::reset(const BufferParams &full_params, const BufferParams &big_tile_params)
 {
   if (big_tile_params_.modified(big_tile_params)) {
     big_tile_params_ = big_tile_params;
     render_state_.need_reset_params = true;
   }
 
+  full_params_ = full_params;
+
+  /* NOTE: GPU display checks for buffer modification and avoids unnecessary re-allocation.
+   * It is requires to inform about reset whenever it happens, so that the redraw state tracking is
+   * properly updated. */
   if (gpu_display_) {
-    gpu_display_->reset(big_tile_params);
+    gpu_display_->reset(full_params);
   }
 
   render_state_.has_denoised_result = false;
@@ -276,6 +281,7 @@ void PathTrace::update_effective_work_buffer_params(const RenderWork &render_wor
 {
   const int resolution_divider = render_work.resolution_divider;
 
+  const BufferParams scaled_full_params = scale_buffer_params(full_params_, resolution_divider);
   const BufferParams scaled_big_tile_params = scale_buffer_params(big_tile_params_,
                                                                   resolution_divider);
 
@@ -284,7 +290,7 @@ void PathTrace::update_effective_work_buffer_params(const RenderWork &render_wor
                                scaled_big_tile_params,
                                [&](PathTraceWork *path_trace_work, const BufferParams params) {
                                  path_trace_work->set_effective_buffer_params(
-                                     scaled_big_tile_params, params);
+                                     scaled_full_params, scaled_big_tile_params, params);
                                });
 
   render_state_.effective_big_tile_params = scaled_big_tile_params;
@@ -533,19 +539,19 @@ void PathTrace::update_display(const RenderWork &render_work)
     return;
   }
 
+  if (full_params_.width == 0 || full_params_.height == 0) {
+    VLOG(3) << "Skipping GPUDisplay update due to 0 size of the render buffer.";
+    return;
+  }
+
   VLOG(3) << "Perform copy to GPUDisplay work.";
 
   const double start_time = time_dt();
 
-  const int width = render_state_.effective_big_tile_params.width;
-  const int height = render_state_.effective_big_tile_params.height;
-  if (width == 0 || height == 0) {
-    return;
-  }
-
-  const int num_samples = get_num_samples_in_buffer();
-
-  if (!gpu_display_->update_begin(width, height)) {
+  const int resolution_divider = render_work.resolution_divider;
+  const int texture_width = max(1, full_params_.width / resolution_divider);
+  const int texture_height = max(1, full_params_.height / resolution_divider);
+  if (!gpu_display_->update_begin(texture_width, texture_height)) {
     LOG(ERROR) << "Error beginning GPUDisplay update.";
     return;
   }
@@ -555,6 +561,7 @@ void PathTrace::update_display(const RenderWork &render_work)
 
   /* TODO(sergey): When using multi-device rendering map the GPUDisplay once and copy data from all
    * works in parallel. */
+  const int num_samples = get_num_samples_in_buffer();
   for (auto &&path_trace_work : path_trace_works_) {
     path_trace_work->copy_to_gpu_display(gpu_display_.get(), pass_mode, num_samples);
   }

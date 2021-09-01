@@ -97,13 +97,15 @@ inline void PassAccessorCPU::run_get_pass_kernel_processor_float(
     const Destination &destination,
     const Processor &processor) const
 {
+  DCHECK_EQ(destination.stride, 0) << "Custom stride for float destination is not implemented.";
+
   const float *buffer_data = render_buffers->buffer.data();
   const int pixel_stride = destination.pixel_stride ? destination.pixel_stride :
                                                       destination.num_components;
 
-  tbb::parallel_for(0, buffer_params.height, [&](int y) {
-    int64_t pixel_index = int64_t(y) * buffer_params.width;
-    for (int x = 0; x < buffer_params.width; ++x, ++pixel_index) {
+  tbb::parallel_for(0, buffer_params.height, [&](int64_t y) {
+    int64_t pixel_index = y * buffer_params.width;
+    for (int64_t x = 0; x < buffer_params.width; ++x, ++pixel_index) {
       const int64_t input_pixel_offset = pixel_index * buffer_params.pass_stride;
       const float *buffer = buffer_data + input_pixel_offset;
       float *pixel = destination.pixels + (pixel_index + destination.offset) * pixel_stride;
@@ -123,9 +125,14 @@ inline void PassAccessorCPU::run_get_pass_kernel_processor_half_rgba(
 {
   const float *buffer_data = render_buffers->buffer.data();
 
-  tbb::parallel_for(0, buffer_params.height, [&](int y) {
+  half4 *dst_start = destination.pixels_half_rgba + destination.offset;
+  const int destination_stride = destination.stride != 0 ? destination.stride :
+                                                           buffer_params.width;
+
+  tbb::parallel_for(0, buffer_params.height, [&](int64_t y) {
     int64_t pixel_index = y * buffer_params.width;
-    for (int x = 0; x < buffer_params.width; ++x, ++pixel_index) {
+    half4 *dst_row_start = dst_start + y * destination_stride;
+    for (int64_t x = 0; x < buffer_params.width; ++x, ++pixel_index) {
       const int64_t input_pixel_offset = pixel_index * buffer_params.pass_stride;
       const float *buffer = buffer_data + input_pixel_offset;
 
@@ -134,7 +141,7 @@ inline void PassAccessorCPU::run_get_pass_kernel_processor_half_rgba(
 
       film_apply_pass_pixel_overlays_rgba(kfilm_convert, buffer, pixel);
 
-      half4 *pixel_half_rgba = destination.pixels_half_rgba + pixel_index + destination.offset;
+      half4 *pixel_half_rgba = dst_row_start + x;
       float4_store_half(&pixel_half_rgba->x, make_float4(pixel[0], pixel[1], pixel[2], pixel[3]));
     }
   });

@@ -21,6 +21,7 @@
 #include "integrator/path_trace_work_gpu.h"
 #include "render/buffers.h"
 #include "render/film.h"
+#include "render/gpu_display.h"
 #include "render/scene.h"
 
 #include "kernel/kernel_types.h"
@@ -61,9 +62,11 @@ RenderBuffers *PathTraceWork::get_render_buffers()
   return buffers_.get();
 }
 
-void PathTraceWork::set_effective_buffer_params(const BufferParams &effective_big_tile_params,
+void PathTraceWork::set_effective_buffer_params(const BufferParams &effective_full_params,
+                                                const BufferParams &effective_big_tile_params,
                                                 const BufferParams &effective_buffer_params)
 {
+  effective_full_params_ = effective_full_params;
   effective_big_tile_params_ = effective_big_tile_params;
   effective_buffer_params_ = effective_buffer_params;
 }
@@ -180,6 +183,21 @@ PassAccessor::PassAccessInfo PathTraceWork::get_display_pass_access_info(PassMod
   pass_access_info.show_active_pixels = film_->get_show_active_pixels();
 
   return pass_access_info;
+}
+
+PassAccessor::Destination PathTraceWork::get_gpu_display_destination_template(
+    const GPUDisplay *gpu_display) const
+{
+  PassAccessor::Destination destination(film_->get_display_pass());
+
+  const int2 display_texture_size = gpu_display->get_texture_size();
+  const int texture_x = effective_buffer_params_.full_x - effective_full_params_.full_x;
+  const int texture_y = effective_buffer_params_.full_y - effective_full_params_.full_y;
+
+  destination.offset = texture_y * display_texture_size.x + texture_x;
+  destination.stride = display_texture_size.x;
+
+  return destination;
 }
 
 CCL_NAMESPACE_END

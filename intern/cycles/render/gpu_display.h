@@ -90,6 +90,9 @@ class GPUDisplay {
 
   void update_end();
 
+  /* Get currently configured texture size of the display (as configured by `update_begin()`. */
+  int2 get_texture_size() const;
+
   /* --------------------------------------------------------------------
    * Texture update from CPU buffer.
    *
@@ -208,6 +211,9 @@ class GPUDisplay {
     /* Texture is considered outdated after `reset()` until the next call of
      * `copy_pixels_to_texture()`. */
     bool is_outdated = true;
+
+    /* Texture size in pixels. */
+    int2 size = make_int2(0, 0);
   } texture_state_;
 
   /* State of the texture buffer. Is tracked to perform sanity checks. */

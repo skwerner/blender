@@ -65,6 +65,8 @@ bool GPUDisplay::update_begin(int texture_width, int texture_height)
 
   mutex_.lock();
 
+  texture_state_.size = make_int2(texture_width, texture_height);
+
   if (!do_update_begin(texture_width, texture_height)) {
     LOG(ERROR) << "GPUDisplay implementation could not begin update.";
     mutex_.unlock();
@@ -89,6 +91,11 @@ void GPUDisplay::update_end()
 
   update_state_.is_active = false;
   mutex_.unlock();
+}
+
+int2 GPUDisplay::get_texture_size() const
+{
+  return texture_state_.size;
 }
 
 /* --------------------------------------------------------------------

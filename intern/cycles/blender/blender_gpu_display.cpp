@@ -321,8 +321,8 @@ bool BlenderGPUDisplay::do_update_begin(int texture_width, int texture_height)
    * too much data to GPU when resolution divider is not 1. */
   /* TODO(sergey): Investigate whether keeping the PBO exact size of the texute makes non-interop
    * mode faster. */
-  const int buffer_width = params_.size.x;
-  const int buffer_height = params_.size.y;
+  const int buffer_width = params_.full_size.x;
+  const int buffer_height = params_.full_size.y;
   if (texture_.buffer_width != buffer_width || texture_.buffer_height != buffer_height) {
     const size_t size_in_bytes = sizeof(half4) * buffer_width * buffer_height;
     glBindBuffer(GL_PIXEL_UNPACK_BUFFER, texture_.gl_pbo_id_);
@@ -374,7 +374,7 @@ void BlenderGPUDisplay::do_copy_pixels_to_texture(
   }
   else {
     const half4 *rgba_row = rgba_pixels;
-    half4 *mapped_rgba_row = mapped_rgba_pixels + texture_y * texture_.width;
+    half4 *mapped_rgba_row = mapped_rgba_pixels + texture_y * texture_.width + texture_x;
     for (int y = 0; y < pixels_height;
          ++y, rgba_row += pixels_width, mapped_rgba_row += texture_.width) {
       memcpy(mapped_rgba_row, rgba_row, sizeof(half4) * pixels_width);

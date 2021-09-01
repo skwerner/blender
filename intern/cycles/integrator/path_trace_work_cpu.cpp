@@ -162,17 +162,14 @@ void PathTraceWorkCPU::copy_to_gpu_display(GPUDisplay *gpu_display,
     return;
   }
 
-  const int offset_y = effective_buffer_params_.full_y - effective_big_tile_params_.full_y;
-  const int width = effective_buffer_params_.width;
-
   const KernelFilm &kfilm = device_scene_->data.film;
 
   const PassAccessor::PassAccessInfo pass_access_info = get_display_pass_access_info(pass_mode);
 
   const PassAccessorCPU pass_accessor(pass_access_info, kfilm.exposure, num_samples);
 
-  PassAccessor::Destination destination(pass_access_info.type, rgba_half);
-  destination.offset = offset_y * width;
+  PassAccessor::Destination destination = get_gpu_display_destination_template(gpu_display);
+  destination.pixels_half_rgba = rgba_half;
 
   tbb::task_arena local_arena = local_tbb_arena_create(device_);
   local_arena.execute([&]() {

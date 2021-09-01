@@ -412,9 +412,11 @@ ccl_device_inline void kernel_gpu_film_convert_common(const KernelFilmConvert *k
                                                       float *pixels,
                                                       float *render_buffer,
                                                       int num_pixels,
+                                                      int width,
                                                       int offset,
                                                       int stride,
                                                       int dst_offset,
+                                                      int dst_stride,
                                                       const Processor &processor)
 {
   const int render_pixel_index = ccl_gpu_global_id_x();
@@ -437,9 +439,11 @@ ccl_device_inline void kernel_gpu_film_convert_half_rgba_common_rgba(
     uchar4 *rgba,
     float *render_buffer,
     int num_pixels,
+    int width,
     int offset,
     int stride,
     int rgba_offset,
+    int rgba_stride,
     const Processor &processor)
 {
   const int render_pixel_index = ccl_gpu_global_id_x();
@@ -455,8 +459,11 @@ ccl_device_inline void kernel_gpu_film_convert_half_rgba_common_rgba(
 
   film_apply_pass_pixel_overlays_rgba(kfilm_convert, buffer, pixel);
 
-  ccl_global half *out = (ccl_global half *)rgba + (rgba_offset + render_pixel_index) * 4;
-  float4_store_half(out, make_float4(pixel[0], pixel[1], pixel[2], pixel[3]));
+  const int x = render_pixel_index % width;
+  const int y = render_pixel_index / width;
+
+  ccl_global half4 *out = ((ccl_global half4 *)rgba) + rgba_offset + y * rgba_stride + x;
+  float4_store_half((ccl_global half *)out, make_float4(pixel[0], pixel[1], pixel[2], pixel[3]));
 }
 
 /* Common implementation for half4 destination and 3-channel input pass. */
@@ -466,9 +473,11 @@ ccl_device_inline void kernel_gpu_film_convert_half_rgba_common_rgb(
     uchar4 *rgba,
     float *render_buffer,
     int num_pixels,
+    int width,
     int offset,
     int stride,
     int rgba_offset,
+    int rgba_stride,
     const Processor &processor)
 {
   kernel_gpu_film_convert_half_rgba_common_rgba(
@@ -476,9 +485,11 @@ ccl_device_inline void kernel_gpu_film_convert_half_rgba_common_rgb(
       rgba,
       render_buffer,
       num_pixels,
+      width,
       offset,
       stride,
       rgba_offset,
+      rgba_stride,
       [&processor](const KernelFilmConvert *kfilm_convert,
                    ccl_global const float *buffer,
                    float *pixel_rgba) {
@@ -494,9 +505,11 @@ ccl_device_inline void kernel_gpu_film_convert_half_rgba_common_value(
     uchar4 *rgba,
     float *render_buffer,
     int num_pixels,
+    int width,
     int offset,
     int stride,
     int rgba_offset,
+    int rgba_stride,
     const Processor &processor)
 {
   kernel_gpu_film_convert_half_rgba_common_rgba(
@@ -504,9 +517,11 @@ ccl_device_inline void kernel_gpu_film_convert_half_rgba_common_value(
       rgba,
       render_buffer,
       num_pixels,
+      width,
       offset,
       stride,
       rgba_offset,
+      rgba_stride,
       [&processor](const KernelFilmConvert *kfilm_convert,
                    ccl_global const float *buffer,
                    float *pixel_rgba) {
@@ -529,17 +544,21 @@ ccl_device_inline void kernel_gpu_film_convert_half_rgba_common_value(
    float *pixels, \
    float *render_buffer, \
    int num_pixels, \
+   int width, \
    int offset, \
    int stride, \
-   int rgba_offset) \
+   int rgba_offset, \
+   int rgba_stride) \
   { \
     kernel_gpu_film_convert_common(&kfilm_convert, \
                                    pixels, \
                                    render_buffer, \
                                    num_pixels, \
+                                   width, \
                                    offset, \
                                    stride, \
                                    rgba_offset, \
+                                   rgba_stride, \
                                    film_get_pass_pixel_##variant); \
   } \
   KERNEL_FILM_CONVERT_PROC(kernel_gpu_film_convert_##variant##_half_rgba) \
@@ -547,17 +566,21 @@ ccl_device_inline void kernel_gpu_film_convert_half_rgba_common_value(
    uchar4 *rgba, \
    float *render_buffer, \
    int num_pixels, \
+   int width, \
    int offset, \
    int stride, \
-   int rgba_offset) \
+   int rgba_offset, \
+   int rgba_stride) \
   { \
     kernel_gpu_film_convert_half_rgba_common_##channels(&kfilm_convert, \
                                                         rgba, \
                                                         render_buffer, \
                                                         num_pixels, \
+                                                        width, \
                                                         offset, \
                                                         stride, \
                                                         rgba_offset, \
+                                                        rgba_stride, \
                                                         film_get_pass_pixel_##variant); \
   }
 

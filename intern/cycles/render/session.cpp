@@ -312,7 +312,7 @@ RenderWork Session::run_update_for_next_iteration()
       tile_params.full_height = buffer_params_.full_height;
       tile_params.update_offset_stride();
 
-      path_trace_->reset(tile_params);
+      path_trace_->reset(buffer_params_, tile_params);
     }
 
     const int resolution = render_work.resolution_divider;

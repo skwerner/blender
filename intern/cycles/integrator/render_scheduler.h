@@ -192,7 +192,7 @@ class RenderScheduler {
   bool is_denoise_active_during_update() const;
 
   /* Heuristic which aims to give perceptually pleasant update of display interval in a way that at
-   * lower samples and near the beginning of rendering, updates happen more often, but with higher 
+   * lower samples and near the beginning of rendering, updates happen more often, but with higher
    * number of samples and later in the render, updates happen less often but device occupancy
    * goes higher. */
   double guess_display_update_interval_in_seconds() const;

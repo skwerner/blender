@@ -651,6 +651,12 @@ typedef struct RenderData {
    */
   int ysch;
 
+  /**
+   * render tile dimensions
+   */
+  int tilex DNA_DEPRECATED;
+  int tiley DNA_DEPRECATED;
+
   short planes DNA_DEPRECATED;
   short imtype DNA_DEPRECATED;
   short subimtype DNA_DEPRECATED;

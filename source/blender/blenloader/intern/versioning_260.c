@@ -1743,6 +1743,17 @@ void blo_do_versions_260(FileData *fd, Library *UNUSED(lib), Main *bmain)
   }
 
   if (!MAIN_VERSION_ATLEAST(bmain, 264, 7)) {
+    /* convert tiles size from resolution and number of tiles */
+    {
+      Scene *scene;
+
+      for (scene = bmain->scenes.first; scene; scene = scene->id.next) {
+        if (scene->r.tilex == 0 || scene->r.tiley == 1) {
+          scene->r.tilex = scene->r.tiley = 64;
+        }
+      }
+    }
+
     /* collision masks */
     {
       Object *ob;

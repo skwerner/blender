@@ -240,10 +240,6 @@ def do_versions(self):
             if version <= (2, 76, 9):
                 cworld = world.cycles
 
-                # World MIS Samples
-                if not cworld.is_property_set("samples"):
-                    cworld.samples = 4
-
                 # World MIS Resolution
                 if not cworld.is_property_set("sample_map_resolution"):
                     cworld.sample_map_resolution = 256

@@ -150,7 +150,7 @@ class PathTraceWork {
                 DeviceScene *device_scene,
                 bool *cancel_requested_flag);
 
-  virtual PassAccessor::PassAccessInfo get_display_pass_access_info(PassMode pass_mode) const;
+  PassAccessor::PassAccessInfo get_display_pass_access_info(PassMode pass_mode) const;
 
   /* Device which will be used for path tracing.
    * Note that it is an actual render device (and never is a multi-device). */

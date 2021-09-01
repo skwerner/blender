@@ -342,11 +342,15 @@ ccl_device_inline void kernel_accum_emission_or_background_pass(INTEGRATOR_STATE
     /* Directly visible, write to emission or background pass. */
     pass_offset = pass;
   }
-  else if (path_flag & PATH_RAY_REFLECT_PASS) {
+  else if (path_flag & (PATH_RAY_REFLECT_PASS | PATH_RAY_TRANSMISSION_PASS)) {
     /* Indirectly visible through reflection. */
-    const int glossy_pass_offset = pass_offset = (INTEGRATOR_STATE(path, bounce) == 1) ?
-                                                     kernel_data.film.pass_glossy_direct :
-                                                     kernel_data.film.pass_glossy_indirect;
+    const int glossy_pass_offset = (path_flag & PATH_RAY_REFLECT_PASS) ?
+                                       ((INTEGRATOR_STATE(path, bounce) == 1) ?
+                                            kernel_data.film.pass_glossy_direct :
+                                            kernel_data.film.pass_glossy_indirect) :
+                                       ((INTEGRATOR_STATE(path, bounce) == 1) ?
+                                            kernel_data.film.pass_transmission_direct :
+                                            kernel_data.film.pass_transmission_indirect);
 
     if (glossy_pass_offset != PASS_UNUSED) {
       /* Glossy is a subset of the throughput, reconstruct it here using the
@@ -362,12 +366,6 @@ ccl_device_inline void kernel_accum_emission_or_background_pass(INTEGRATOR_STATE
     if (pass_offset != PASS_UNUSED) {
       contribution *= INTEGRATOR_STATE(path, diffuse_glossy_ratio);
     }
-  }
-  else if (path_flag & PATH_RAY_TRANSMISSION_PASS) {
-    /* Indirectly visible through transmission. */
-    pass_offset = (INTEGRATOR_STATE(path, bounce) == 1) ?
-                      kernel_data.film.pass_transmission_direct :
-                      kernel_data.film.pass_transmission_indirect;
   }
   else if (path_flag & PATH_RAY_VOLUME_PASS) {
     /* Indirectly visible through volume. */
@@ -400,11 +398,15 @@ ccl_device_inline void kernel_accum_light(INTEGRATOR_STATE_CONST_ARGS,
     const int path_flag = INTEGRATOR_STATE(shadow_path, flag);
     int pass_offset = PASS_UNUSED;
 
-    if (path_flag & PATH_RAY_REFLECT_PASS) {
+    if (path_flag & (PATH_RAY_REFLECT_PASS | PATH_RAY_TRANSMISSION_PASS)) {
       /* Indirectly visible through reflection. */
-      const int glossy_pass_offset = pass_offset = (INTEGRATOR_STATE(shadow_path, bounce) == 0) ?
-                                                       kernel_data.film.pass_glossy_direct :
-                                                       kernel_data.film.pass_glossy_indirect;
+      const int glossy_pass_offset = (path_flag & PATH_RAY_REFLECT_PASS) ?
+                                         ((INTEGRATOR_STATE(shadow_path, bounce) == 1) ?
+                                              kernel_data.film.pass_glossy_direct :
+                                              kernel_data.film.pass_glossy_indirect) :
+                                         ((INTEGRATOR_STATE(shadow_path, bounce) == 1) ?
+                                              kernel_data.film.pass_transmission_direct :
+                                              kernel_data.film.pass_transmission_indirect);
 
       if (glossy_pass_offset != PASS_UNUSED) {
         /* Glossy is a subset of the throughput, reconstruct it here using the
@@ -421,12 +423,6 @@ ccl_device_inline void kernel_accum_light(INTEGRATOR_STATE_CONST_ARGS,
       if (pass_offset != PASS_UNUSED) {
         contribution *= INTEGRATOR_STATE(shadow_path, diffuse_glossy_ratio);
       }
-    }
-    else if (path_flag & PATH_RAY_TRANSMISSION_PASS) {
-      /* Indirectly visible through transmission. */
-      pass_offset = (INTEGRATOR_STATE(shadow_path, bounce) == 0) ?
-                        kernel_data.film.pass_transmission_direct :
-                        kernel_data.film.pass_transmission_indirect;
     }
     else if (path_flag & PATH_RAY_VOLUME_PASS) {
       /* Indirectly visible through volume. */

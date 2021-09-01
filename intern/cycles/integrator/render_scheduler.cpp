@@ -244,11 +244,15 @@ RenderWork RenderScheduler::get_render_work()
 
   if (done()) {
     RenderWork render_work;
+
     if (!set_postprocess_render_work(&render_work)) {
       if (state_.end_render_time == 0.0) {
         state_.end_render_time = time_now;
       }
     }
+
+    update_state_for_render_work(render_work);
+
     return render_work;
   }
 
@@ -269,10 +273,6 @@ RenderWork RenderScheduler::get_render_work()
 
   /* NOTE: Rebalance scheduler requires current number of samples to not be advanced forward. */
   render_work.rebalance = work_need_rebalance();
-  if (render_work.rebalance) {
-    state_.last_rebalance_time = time_now;
-    ++state_.num_rebalance_requested;
-  }
 
   /* NOTE: Advance number of samples now, so that filter and denoising check can see that all the
    * samples are rendered. */
@@ -284,12 +284,28 @@ RenderWork RenderScheduler::get_render_work()
 
   bool denoiser_delayed;
   render_work.denoise = work_need_denoise(denoiser_delayed);
-  state_.last_work_was_denoised = render_work.denoise;
 
   render_work.write_final_result = done();
-  state_.final_result_was_written = render_work.write_final_result;
 
   render_work.update_display = work_need_update_display(denoiser_delayed);
+
+  if (done()) {
+    set_postprocess_render_work(&render_work);
+  }
+
+  update_state_for_render_work(render_work);
+
+  return render_work;
+}
+
+void RenderScheduler::update_state_for_render_work(const RenderWork &render_work)
+{
+  const double time_now = time_dt();
+
+  if (render_work.rebalance) {
+    state_.last_rebalance_time = time_now;
+    ++state_.num_rebalance_requested;
+  }
 
   /* A fallback display update time, for the case there is an error of display update, or when
    * there is no display at all. */
@@ -298,11 +314,8 @@ RenderWork RenderScheduler::get_render_work()
     state_.last_display_update_sample = state_.num_rendered_samples;
   }
 
-  if (done()) {
-    set_postprocess_render_work(&render_work);
-  }
-
-  return render_work;
+  state_.last_work_was_denoised = render_work.denoise;
+  state_.final_result_was_written |= render_work.write_final_result;
 }
 
 bool RenderScheduler::set_postprocess_render_work(RenderWork *render_work)

@@ -176,6 +176,11 @@ class RenderScheduler {
    * extra work needs to be scheduled to denoise and write final result. */
   bool done() const;
 
+  /* Update scheduling state for a newely scheduled work.
+   * Takes care of things like checking whether work was ever denoised, tile was written and states
+   * like that. */
+  void update_state_for_render_work(const RenderWork &render_work);
+
   /* Returns true if any work was scheduled. */
   bool set_postprocess_render_work(RenderWork *render_work);
 

@@ -216,21 +216,31 @@ ccl_device_inline void shadow_ray_setup(const ShaderData *ccl_restrict sd,
                                         const float3 P,
                                         Ray *ray)
 {
-  ray->P = P;
+  if (ls->shader & SHADER_CAST_SHADOW) {
+    /* setup ray */
+    ray->P = P;
 
-  if (ls->t == FLT_MAX) {
-    /* distant light */
-    ray->D = ls->D;
-    ray->t = ls->t;
+    if (ls->t == FLT_MAX) {
+      /* distant light */
+      ray->D = ls->D;
+      ray->t = ls->t;
+    }
+    else {
+      /* other lights, avoid self-intersection */
+      ray->D = ray_offset(ls->P, ls->Ng) - P;
+      ray->D = normalize_len(ray->D, &ray->t);
+    }
   }
   else {
-    /* other lights, avoid self-intersection */
-    ray->D = ray_offset(ls->P, ls->Ng) - P;
-    ray->D = normalize_len(ray->D, &ray->t);
+    /* signal to not cast shadow ray */
+    ray->P = zero_float3();
+    ray->D = zero_float3();
+    ray->t = 0.0f;
   }
 
   ray->dP = differential_make_compact(sd->dP);
   ray->dD = differential_zero_compact();
+  ray->time = sd->time;
 }
 
 /* Create shadow ray towards light sample. */
@@ -239,17 +249,8 @@ ccl_device_inline void light_sample_to_surface_shadow_ray(const KernelGlobals *c
                                                           const LightSample *ccl_restrict ls,
                                                           Ray *ray)
 {
-  if (ls->shader & SHADER_CAST_SHADOW) {
-    /* setup ray */
-    const float3 P = shadow_ray_offset(kg, sd, ls->D);
-    shadow_ray_setup(sd, ls, P, ray);
-  }
-  else {
-    /* signal to not cast shadow ray */
-    ray->t = 0.0f;
-  }
-
-  ray->time = sd->time;
+  const float3 P = shadow_ray_offset(kg, sd, ls->D);
+  shadow_ray_setup(sd, ls, P, ray);
 }
 
 /* Create shadow ray towards light sample. */
@@ -259,16 +260,7 @@ ccl_device_inline void light_sample_to_volume_shadow_ray(const KernelGlobals *cc
                                                          const float3 P,
                                                          Ray *ray)
 {
-  if (ls->shader & SHADER_CAST_SHADOW) {
-    /* setup ray */
-    shadow_ray_setup(sd, ls, P, ray);
-  }
-  else {
-    /* signal to not cast shadow ray */
-    ray->t = 0.0f;
-  }
-
-  ray->time = sd->time;
+  shadow_ray_setup(sd, ls, P, ray);
 }
 
 CCL_NAMESPACE_END

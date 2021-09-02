@@ -340,15 +340,17 @@ void BlenderSync::sync_integrator(BL::ViewLayer &b_view_layer, bool background)
       cscene, "sampling_pattern", SAMPLING_NUM_PATTERNS, SAMPLING_PATTERN_SOBOL);
   integrator->set_sampling_pattern(sampling_pattern);
 
-  const bool use_adaptive_sampling = RNA_boolean_get(&cscene, "use_adaptive_sampling");
-  integrator->set_use_adaptive_sampling(use_adaptive_sampling);
-  integrator->set_adaptive_threshold(get_float(cscene, "adaptive_threshold"));
-
-  int adaptive_min_samples = get_int(cscene, "adaptive_min_samples");
-  if (get_boolean(cscene, "use_square_samples")) {
-    adaptive_min_samples = min(adaptive_min_samples * adaptive_min_samples, INT_MAX);
+  if (preview) {
+    integrator->set_use_adaptive_sampling(
+        RNA_boolean_get(&cscene, "use_preview_adaptive_sampling"));
+    integrator->set_adaptive_threshold(get_float(cscene, "preview_adaptive_threshold"));
+    integrator->set_adaptive_min_samples(get_int(cscene, "preview_adaptive_min_samples"));
   }
-  integrator->set_adaptive_min_samples(adaptive_min_samples);
+  else {
+    integrator->set_use_adaptive_sampling(RNA_boolean_get(&cscene, "use_adaptive_sampling"));
+    integrator->set_adaptive_threshold(get_float(cscene, "adaptive_threshold"));
+    integrator->set_adaptive_min_samples(get_int(cscene, "adaptive_min_samples"));
+  }
 
   if (get_boolean(cscene, "use_fast_gi")) {
     if (preview) {
@@ -459,10 +461,7 @@ void BlenderSync::sync_view_layer(BL::ViewLayer &b_view_layer)
 
   if (use_layer_samples != 2) {
     int samples = b_view_layer.samples();
-    if (get_boolean(cscene, "use_square_samples"))
-      view_layer.samples = samples * samples;
-    else
-      view_layer.samples = samples;
+    view_layer.samples = samples;
   }
 }
 
@@ -811,11 +810,6 @@ SessionParams BlenderSync::get_session_params(BL::RenderEngine &b_engine,
   int samples = get_int(cscene, "samples");
   int preview_samples = get_int(cscene, "preview_samples");
 
-  if (get_boolean(cscene, "use_square_samples")) {
-    samples = samples * samples;
-    preview_samples = preview_samples * preview_samples;
-  }
-
   if (background) {
     params.samples = samples;
   }
@@ -883,22 +877,17 @@ DenoiseParams BlenderSync::get_denoise_params(BL::Scene &b_scene,
     /* Final Render Denoising */
     denoising.use = get_boolean(cscene, "use_denoising");
     denoising.type = (DenoiserType)get_enum(cscene, "denoiser", DENOISER_NUM, DENOISER_NONE);
+    denoising.prefilter = (DenoiserPrefilter)get_enum(
+        cscene, "denoising_prefilter", DENOISER_PREFILTER_NUM, DENOISER_PREFILTER_NONE);
+
+    input_passes = (DenoiserInput)get_enum(
+        cscene, "denoising_input_passes", DENOISER_INPUT_NUM, DENOISER_INPUT_RGB_ALBEDO_NORMAL);
 
     if (b_view_layer) {
       PointerRNA clayer = RNA_pointer_get(&b_view_layer.ptr, "cycles");
       if (!get_boolean(clayer, "use_denoising")) {
         denoising.use = false;
       }
-
-      input_passes = (DenoiserInput)get_enum(clayer,
-                                             (denoising.type == DENOISER_OPTIX) ?
-                                                 "denoising_optix_input_passes" :
-                                                 "denoising_openimagedenoise_input_passes",
-                                             DENOISER_INPUT_NUM,
-                                             DENOISER_INPUT_RGB_ALBEDO_NORMAL);
-
-      denoising.prefilter = (DenoiserPrefilter)get_enum(
-          clayer, "denoising_prefilter", DENOISER_PREFILTER_NUM, DENOISER_PREFILTER_NONE);
     }
   }
   else {
@@ -906,13 +895,12 @@ DenoiseParams BlenderSync::get_denoise_params(BL::Scene &b_scene,
     denoising.use = get_boolean(cscene, "use_preview_denoising");
     denoising.type = (DenoiserType)get_enum(
         cscene, "preview_denoiser", DENOISER_NUM, DENOISER_NONE);
+    denoising.prefilter = (DenoiserPrefilter)get_enum(
+        cscene, "preview_denoising_prefilter", DENOISER_PREFILTER_NUM, DENOISER_PREFILTER_FAST);
     denoising.start_sample = get_int(cscene, "preview_denoising_start_sample");
 
     input_passes = (DenoiserInput)get_enum(
         cscene, "preview_denoising_input_passes", DENOISER_INPUT_NUM, DENOISER_INPUT_RGB_ALBEDO);
-
-    denoising.prefilter = (DenoiserPrefilter)get_enum(
-        cscene, "preview_denoising_prefilter", DENOISER_PREFILTER_NUM, DENOISER_PREFILTER_FAST);
 
     /* Auto select fastest denoiser. */
     if (denoising.type == DENOISER_NONE) {

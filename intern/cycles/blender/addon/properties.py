@@ -201,9 +201,9 @@ def enum_denoiser(self, context):
 
 
 enum_denoising_input_passes = (
-    ('RGB', "Color", "Use only color as input", 1),
-    ('RGB_ALBEDO', "Color + Albedo", "Use color and albedo data as input", 2),
-    ('RGB_ALBEDO_NORMAL', "Color + Albedo + Normal", "Use color, albedo and normal data as input", 3),
+    ('RGB', "None", "Don't use utility passes for denoising", 1),
+    ('RGB_ALBEDO', "Albedo", "Use albedo pass for denoising", 2),
+    ('RGB_ALBEDO_NORMAL', "Albedo and Normal", "Use albedo and normal passes for denoising", 3),
 )
 
 enum_denoising_prefilter = (
@@ -252,28 +252,34 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
     use_denoising: BoolProperty(
         name="Use Denoising",
         description="Denoise the rendered image",
-        default=False,
+        default=True,
         update=update_render_passes,
     )
-    use_preview_denoising: BoolProperty(
-        name="Use Viewport Denoising",
-        description="Denoise the image in the 3D viewport",
-        default=False,
-    )
-    preview_denoising_prefilter: EnumProperty(
-        name="Denoising Prefilter",
-        description="Prefilter noisy guiding (albedo and normal) passes to improve denoising quality when using OpenImageDenoiser",
-        items=enum_denoising_prefilter,
-        default='FAST',
-    )
-
     denoiser: EnumProperty(
         name="Denoiser",
         description="Denoise the image with the selected denoiser. "
         "For denoising the image after rendering",
         items=enum_denoiser,
-        default=1,
+        default=4, # Use integer to avoid error in builds without OpenImageDenoise.
         update=update_render_passes,
+    )
+    denoising_prefilter: EnumProperty(
+        name="Denoising Prefilter",
+        description="Prefilter noisy guiding (albedo and normal) passes to improve denoising quality when using OpenImageDenoiser",
+        items=enum_denoising_prefilter,
+        default='ACCURATE',
+    )
+    denoising_input_passes: EnumProperty(
+        name="Denoising Input Passes",
+        description="Passes used by the denoiser to distinguish noise from shader and geometry detail",
+        items=enum_denoising_input_passes,
+        default='RGB_ALBEDO_NORMAL',
+    )
+
+    use_preview_denoising: BoolProperty(
+        name="Use Viewport Denoising",
+        description="Denoise the image in the 3D viewport",
+        default=False,
     )
     preview_denoiser: EnumProperty(
         name="Viewport Denoiser",
@@ -281,24 +287,36 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         items=enum_preview_denoiser,
         default=0,
     )
-
-    use_square_samples: BoolProperty(
-        name="Square Samples",
-        description="Square sampling values for easier artist control",
-        default=False,
+    preview_denoising_prefilter: EnumProperty(
+        name="Viewport Denoising Prefilter",
+        description="Prefilter noisy guiding (albedo and normal) passes to improve denoising quality when using OpenImageDenoiser",
+        items=enum_denoising_prefilter,
+        default='FAST',
+    )
+    preview_denoising_input_passes: EnumProperty(
+        name="Viewport Denoising Input Passes",
+        description="Passes used by the denoiser to distinguish noise from shader and geometry detail",
+        items=enum_denoising_input_passes,
+        default='RGB_ALBEDO',
+    )
+    preview_denoising_start_sample: IntProperty(
+        name="Start Denoising",
+        description="Sample to start denoising the preview at",
+        min=0, max=(1 << 24),
+        default=1,
     )
 
     samples: IntProperty(
         name="Samples",
         description="Number of samples to render for each pixel",
         min=1, max=(1 << 24),
-        default=128,
+        default=4096,
     )
     preview_samples: IntProperty(
         name="Viewport Samples",
         description="Number of samples to render in the viewport, unlimited if 0",
         min=0, max=(1 << 24),
-        default=32,
+        default=1024,
     )
 
     # TODO: Use proper subtype to show units in the UI.
@@ -335,19 +353,39 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
     use_adaptive_sampling: BoolProperty(
         name="Use Adaptive Sampling",
         description="Automatically reduce the number of samples per pixel based on estimated noise level",
-        default=False,
+        default=True,
     )
-
     adaptive_threshold: FloatProperty(
         name="Adaptive Sampling Threshold",
         description="Noise level step to stop sampling at, lower values reduce noise at the cost of render time. Zero for automatic setting based on number of AA samples",
         min=0.0, max=1.0,
-        default=0.0,
+        soft_min=0.001,
+        default=0.01,
         precision=4,
     )
     adaptive_min_samples: IntProperty(
         name="Adaptive Min Samples",
         description="Minimum AA samples for adaptive sampling, to discover noisy features before stopping sampling. Zero for automatic setting based on number of AA samples",
+        min=0, max=4096,
+        default=0,
+    )
+
+    use_preview_adaptive_sampling: BoolProperty(
+        name="Use Adaptive Sampling",
+        description="Automatically reduce the number of samples per pixel based on estimated noise level, for viewport renders",
+        default=True,
+    )
+    preview_adaptive_threshold: FloatProperty(
+        name="Adaptive Sampling Threshold",
+        description="Noise level step to stop sampling at, lower values reduce noise at the cost of render time. Zero for automatic setting based on number of AA samples, for viewport renders",
+        min=0.0, max=1.0,
+        soft_min=0.001,
+        default=0.1,
+        precision=4,
+    )
+    preview_adaptive_min_samples: IntProperty(
+        name="Adaptive Min Samples",
+        description="Minimum AA samples for adaptive sampling, to discover noisy features before stopping sampling. Zero for automatic setting based on number of AA samples, for viewport renders",
         min=0, max=4096,
         default=0,
     )
@@ -562,19 +600,6 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         "much noise and slow convergence at the cost of accuracy",
         min=0.0, max=1e8,
         default=10.0,
-    )
-
-    preview_denoising_start_sample: IntProperty(
-        name="Start Denoising",
-        description="Sample to start denoising the preview at",
-        min=0, max=(1 << 24),
-        default=1,
-    )
-    preview_denoising_input_passes: EnumProperty(
-        name="Viewport Input Passes",
-        description="Passes used by the denoiser to distinguish noise from shader and geometry detail",
-        items=enum_denoising_input_passes,
-        default='RGB_ALBEDO',
     )
 
     debug_bvh_type: EnumProperty(
@@ -1201,25 +1226,6 @@ class CyclesRenderLayerSettings(bpy.types.PropertyGroup):
         description="Store the denoising feature passes and the noisy image. The passes adapt to the denoiser selected for rendering",
         default=False,
         update=update_render_passes,
-    )
-
-    denoising_optix_input_passes: EnumProperty(
-        name="Input Passes",
-        description="Passes used by the denoiser to distinguish noise from shader and geometry detail",
-        items=enum_denoising_input_passes,
-        default='RGB_ALBEDO',
-    )
-    denoising_openimagedenoise_input_passes: EnumProperty(
-        name="Input Passes",
-        description="Passes used by the denoiser to distinguish noise from shader and geometry detail",
-        items=enum_denoising_input_passes,
-        default='RGB_ALBEDO_NORMAL',
-    )
-    denoising_prefilter: EnumProperty(
-        name="Denoising Prefilter",
-        description="Prefilter noisy guiding (albedo and normal) passes to improve denoising quality when using OpenImageDenoiser",
-        items=enum_denoising_prefilter,
-        default='ACCURATE',
     )
 
     @classmethod

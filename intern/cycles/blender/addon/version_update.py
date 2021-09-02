@@ -109,7 +109,8 @@ def do_versions(self):
         library_versions.setdefault(library.version, []).append(library)
 
     # Do versioning per library, since they might have different versions.
-    max_need_versioning = (2, 93, 7)
+    # TODO: lower subversion number when merging.
+    max_need_versioning = (3, 0, 999)
     for version, libraries in library_versions.items():
         if version > max_need_versioning:
             continue
@@ -219,6 +220,33 @@ def do_versions(self):
                 else:
                     cscene.ao_bounces = 1
                     cscene.ao_bounces_render = 1
+
+            if version <= (3, 0, 999):
+                cscene = scene.cycles
+
+                # Default changes.
+                if not cscene.is_property_set("samples"):
+                    cscene.samples = 128
+                if not cscene.is_property_set("preview_samples"):
+                    cscene.preview_samples = 32
+                if not cscene.is_property_set("use_adaptive_sampling"):
+                    cscene.use_adaptive_sampling = False
+                    cscene.use_preview_adaptive_sampling = False
+                if not cscene.is_property_set("use_denoising"):
+                    cscene.use_denoising = False
+                if not cscene.is_property_set("use_preview_denoising"):
+                    cscene.use_preview_denoising = False
+
+                # Removal of square samples.
+                cscene = scene.cycles
+                use_square_samples = cscene.get("use_square_samples", False)
+
+                if use_square_samples:
+                    cscene.samples *= cscene.samples
+                    cscene.preview_samples *= cscene.preview_samples
+                    for layer in scene.view_layers:
+                        layer.samples *= layer.samples
+                    cscene["square_samples"] = False
 
         # Lamps
         for light in bpy.data.lights:

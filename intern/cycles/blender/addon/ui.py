@@ -34,6 +34,12 @@ class CYCLES_PT_sampling_presets(PresetPanel, Panel):
     preset_add_operator = "render.cycles_sampling_preset_add"
     COMPAT_ENGINES = {'CYCLES'}
 
+class CYCLES_PT_viewport_sampling_presets(PresetPanel, Panel):
+    bl_label = "Viewport Sampling Presets"
+    preset_subdir = "cycles/viewport_sampling"
+    preset_operator = "script.execute_preset"
+    preset_add_operator = "render.cycles_viewport_sampling_preset_add"
+    COMPAT_ENGINES = {'CYCLES'}
 
 class CYCLES_PT_integrator_presets(PresetPanel, Panel):
     bl_label = "Integrator Presets"
@@ -112,20 +118,6 @@ def show_device_active(context):
     return context.preferences.addons[__package__].preferences.has_active_device()
 
 
-def draw_samples_info(layout, context):
-    cscene = context.scene.cycles
-
-    if cscene.use_square_samples:
-        aa = cscene.samples
-        aa = aa * aa
-
-        col = layout.column(align=True)
-        col.scale_y = 0.6
-        col.label(text="Total Samples:")
-        col.separator()
-        col.label(text="%s AA" % aa)
-
-
 def get_effective_preview_denoiser(context):
     scene = context.scene
     cscene = scene.cycles
@@ -143,9 +135,6 @@ def get_effective_preview_denoiser(context):
 class CYCLES_RENDER_PT_sampling(CyclesButtonsPanel, Panel):
     bl_label = "Sampling"
 
-    def draw_header_preset(self, context):
-        CYCLES_PT_sampling_presets.draw_panel_header(self.layout)
-
     def draw(self, context):
         pass
 
@@ -154,6 +143,9 @@ class CYCLES_RENDER_PT_sampling_viewport(CyclesButtonsPanel, Panel):
     bl_label = "Viewport"
     bl_parent_id = "CYCLES_RENDER_PT_sampling"
 
+    def draw_header_preset(self, context):
+        CYCLES_PT_viewport_sampling_presets.draw_panel_header(self.layout)
+
     def draw(self, context):
         layout = self.layout
 
@@ -163,33 +155,59 @@ class CYCLES_RENDER_PT_sampling_viewport(CyclesButtonsPanel, Panel):
         layout.use_property_split = True
         layout.use_property_decorate = False
 
-        col = layout.column(align=True)
-        col.prop(cscene, "preview_samples", text="Samples")
-
-        layout.separator()
-
-        heading = layout.column(align=False, heading="Denoising")
+        heading = layout.column(align=True, heading="Noise Threshold")
         row = heading.row(align=True)
-        row.prop(cscene, "use_preview_denoising", text="")
+        row.prop(cscene, "use_preview_adaptive_sampling", text="")
         sub = row.row()
-        sub.active = cscene.use_preview_denoising
-        sub.prop(cscene, "preview_denoiser", text="")
+        sub.active = cscene.use_preview_adaptive_sampling
+        sub.prop(cscene, "preview_adaptive_threshold", text="")
 
-        sub = heading.column(align=True)
-        sub.active = cscene.use_preview_denoising
-        sub.prop(cscene, "preview_denoising_start_sample", text="Start Sample")
-        sub.prop(cscene, "preview_denoising_input_passes", text="Input Passes")
-        sub_row = sub.row()
+        if cscene.use_preview_adaptive_sampling:
+            col = layout.column(align=True)
+            col.prop(cscene, "preview_samples", text=" Max Samples")
+            col.prop(cscene, "preview_adaptive_min_samples", text="Min Samples")
+        else:
+            layout.prop(cscene, "preview_samples", text="Samples")
+
+
+class CYCLES_RENDER_PT_sampling_viewport_denoise(CyclesButtonsPanel, Panel):
+    bl_label = "Denoise"
+    bl_parent_id = 'CYCLES_RENDER_PT_sampling_viewport'
+    bl_options = {'DEFAULT_CLOSED'}
+
+    def draw_header(self, context):
+        scene = context.scene
+        cscene = scene.cycles
+
+        self.layout.prop(context.scene.cycles, "use_preview_denoising", text="")
+
+    def draw(self, context):
+        layout = self.layout
+        layout.use_property_split = True
+        layout.use_property_decorate = False
+
+        scene = context.scene
+        cscene = scene.cycles
+
+        col = layout.column()
+        col.active = cscene.use_preview_denoising
+        col.prop(cscene, "preview_denoiser", text="Denoiser")
+        col.prop(cscene, "preview_denoising_input_passes", text="Passes")
 
         effective_preview_denoiser = get_effective_preview_denoiser(context)
         if effective_preview_denoiser == 'OPENIMAGEDENOISE':
-            sub_row.prop(cscene, "preview_denoising_prefilter", text="Prefilter")
+            col.prop(cscene, "preview_denoising_prefilter", text="Prefilter")
+
+        col.prop(cscene, "preview_denoising_start_sample", text="Start Sample")
 
 
 class CYCLES_RENDER_PT_sampling_render(CyclesButtonsPanel, Panel):
     bl_label = "Render"
     bl_parent_id = "CYCLES_RENDER_PT_sampling"
 
+    def draw_header_preset(self, context):
+        CYCLES_PT_sampling_presets.draw_panel_header(self.layout)
+
     def draw(self, context):
         layout = self.layout
 
@@ -199,38 +217,32 @@ class CYCLES_RENDER_PT_sampling_render(CyclesButtonsPanel, Panel):
         layout.use_property_split = True
         layout.use_property_decorate = False
 
-        col = layout.column(align=True)
-        col.prop(cscene, "samples")
-
-        draw_samples_info(layout, context)
-
-        layout.separator()
-
-        heading = layout.column(align=True, heading="Denoising")
+        heading = layout.column(align=True, heading="Noise Threshold")
         row = heading.row(align=True)
-        row.prop(cscene, "use_denoising", text="")
+        row.prop(cscene, "use_adaptive_sampling", text="")
         sub = row.row()
-
-        sub.active = cscene.use_denoising
-        sub.prop(cscene, "denoiser", text="")
-
-        layout.separator()
+        sub.active = cscene.use_adaptive_sampling
+        sub.prop(cscene, "adaptive_threshold", text="")
 
         col = layout.column(align=True)
+        if cscene.use_adaptive_sampling:
+            col.prop(cscene, "samples", text=" Max Samples")
+            col.prop(cscene, "adaptive_min_samples", text="Min Samples")
+        else:
+            col.prop(cscene, "samples", text="Samples")
         col.prop(cscene, "time_limit")
 
 
-class CYCLES_RENDER_PT_sampling_adaptive(CyclesButtonsPanel, Panel):
-    bl_label = "Adaptive Sampling"
-    bl_parent_id = "CYCLES_RENDER_PT_sampling"
+class CYCLES_RENDER_PT_sampling_render_denoise(CyclesButtonsPanel, Panel):
+    bl_label = "Denoise"
+    bl_parent_id = 'CYCLES_RENDER_PT_sampling_render'
     bl_options = {'DEFAULT_CLOSED'}
 
     def draw_header(self, context):
-        layout = self.layout
         scene = context.scene
         cscene = scene.cycles
 
-        layout.prop(cscene, "use_adaptive_sampling", text="")
+        self.layout.prop(context.scene.cycles, "use_denoising", text="")
 
     def draw(self, context):
         layout = self.layout
@@ -240,11 +252,12 @@ class CYCLES_RENDER_PT_sampling_adaptive(CyclesButtonsPanel, Panel):
         scene = context.scene
         cscene = scene.cycles
 
-        layout.active = cscene.use_adaptive_sampling
-
-        col = layout.column(align=True)
-        col.prop(cscene, "adaptive_threshold", text="Noise Threshold")
-        col.prop(cscene, "adaptive_min_samples", text="Min Samples")
+        col = layout.column()
+        col.active = cscene.use_denoising
+        col.prop(cscene, "denoiser", text="Denoiser")
+        col.prop(cscene, "denoising_input_passes", text="Passes")
+        if cscene.denoiser == 'OPENIMAGEDENOISE':
+            col.prop(cscene, "denoising_prefilter", text="Prefilter")
 
 
 class CYCLES_RENDER_PT_sampling_advanced(CyclesButtonsPanel, Panel):
@@ -267,8 +280,6 @@ class CYCLES_RENDER_PT_sampling_advanced(CyclesButtonsPanel, Panel):
         col = layout.column(align=True)
         col.active = not(cscene.use_adaptive_sampling)
         col.prop(cscene, "sampling_pattern", text="Pattern")
-
-        layout.prop(cscene, "use_square_samples")
 
         layout.separator()
 
@@ -693,6 +704,9 @@ class CYCLES_RENDER_PT_filter(CyclesButtonsPanel, Panel):
         sub = col.row()
         sub.prop(view_layer, "use_motion_blur", text="Motion Blur")
         sub.active = rd.use_motion_blur
+        sub = col.row()
+        sub.prop(view_layer.cycles, 'use_denoising', text='Denoising')
+        sub.active = scene.cycles.use_denoising
 
 
 class CYCLES_RENDER_PT_override(CyclesButtonsPanel, Panel):
@@ -808,45 +822,6 @@ class CYCLES_RENDER_PT_passes_aov(CyclesButtonsPanel, ViewLayerAOVPanel):
     bl_label = "Shader AOV"
     bl_context = "view_layer"
     bl_parent_id = "CYCLES_RENDER_PT_passes"
-
-
-class CYCLES_RENDER_PT_denoising(CyclesButtonsPanel, Panel):
-    bl_label = "Denoising"
-    bl_context = "view_layer"
-    bl_options = {'DEFAULT_CLOSED'}
-
-    @classmethod
-    def poll(cls, context):
-        cscene = context.scene.cycles
-        return CyclesButtonsPanel.poll(context) and cscene.use_denoising
-
-    def draw_header(self, context):
-        scene = context.scene
-        view_layer = context.view_layer
-        cycles_view_layer = view_layer.cycles
-
-        layout = self.layout
-        layout.prop(cycles_view_layer, "use_denoising", text="")
-
-    def draw(self, context):
-        layout = self.layout
-        layout.use_property_split = True
-        layout.use_property_decorate = False
-
-        scene = context.scene
-        view_layer = context.view_layer
-        cycles_view_layer = view_layer.cycles
-        denoiser = scene.cycles.denoiser
-
-        layout.active = denoiser != 'NONE' and cycles_view_layer.use_denoising
-
-        col = layout.column()
-
-        if denoiser == 'OPTIX':
-            col.prop(cycles_view_layer, "denoising_optix_input_passes")
-        elif denoiser == 'OPENIMAGEDENOISE':
-            col.prop(cycles_view_layer, "denoising_openimagedenoise_input_passes")
-            col.prop(cycles_view_layer, "denoising_prefilter", text="Prefilter")
 
 
 class CYCLES_PT_post_processing(CyclesButtonsPanel, Panel):
@@ -2080,11 +2055,13 @@ def get_panels():
 
 classes = (
     CYCLES_PT_sampling_presets,
+    CYCLES_PT_viewport_sampling_presets,
     CYCLES_PT_integrator_presets,
     CYCLES_RENDER_PT_sampling,
     CYCLES_RENDER_PT_sampling_viewport,
+    CYCLES_RENDER_PT_sampling_viewport_denoise,
     CYCLES_RENDER_PT_sampling_render,
-    CYCLES_RENDER_PT_sampling_adaptive,
+    CYCLES_RENDER_PT_sampling_render_denoise,
     CYCLES_RENDER_PT_sampling_advanced,
     CYCLES_RENDER_PT_light_paths,
     CYCLES_RENDER_PT_light_paths_max_bounces,
@@ -2119,7 +2096,6 @@ classes = (
     CYCLES_RENDER_PT_passes_aov,
     CYCLES_RENDER_PT_filter,
     CYCLES_RENDER_PT_override,
-    CYCLES_RENDER_PT_denoising,
     CYCLES_PT_post_processing,
     CYCLES_CAMERA_PT_dof,
     CYCLES_CAMERA_PT_dof_aperture,

@@ -16,6 +16,13 @@
 
 #pragma once
 
+#include "kernel/kernel_accumulate.h"
+#include "kernel/kernel_emission.h"
+#include "kernel/kernel_light.h"
+#include "kernel/kernel_passes.h"
+#include "kernel/kernel_path_state.h"
+#include "kernel/kernel_shader.h"
+
 #include "kernel/integrator/integrator_intersect_closest.h"
 #include "kernel/integrator/integrator_volume_stack.h"
 
@@ -559,6 +566,13 @@ ccl_device_forceinline void volume_integrate_heterogeneous(
         ray, equiangular_light_P, vstate.rscatter, &vstate.equiangular_pdf);
   }
 
+#  ifdef __DENOISING_FEATURES__
+  const bool write_denoising_features = (INTEGRATOR_STATE(path, flag) &
+                                         PATH_RAY_DENOISING_FEATURES);
+  float3 accum_albedo = zero_float3();
+#  endif
+  float3 accum_emission = zero_float3();
+
   for (int i = 0; i < max_steps; i++) {
     /* Advance to new position */
     vstate.end_t = min(ray->t, (i + steps_offset) * step_size);
@@ -581,16 +595,22 @@ ccl_device_forceinline void volume_integrate_heterogeneous(
         /* Only write emission before indirect light scatter position, since we terminate
          * stepping at that point if we have already found a direct light scatter position. */
         if (!result.indirect_scatter) {
-          /* TODO: write only once to avoid overhead of atomics? */
           const float3 emission = volume_emission_integrate(
               &coeff, closure_flag, transmittance, dt);
-          kernel_accum_emission(
-              INTEGRATOR_STATE_PASS, result.indirect_throughput, emission, render_buffer);
+          accum_emission += emission;
         }
       }
 
       if (closure_flag & SD_EXTINCTION) {
         if ((closure_flag & SD_SCATTER) || !vstate.absorption_only) {
+#  ifdef __DENOISING_FEATURES__
+          /* Accumulate albedo for denoising features. */
+          if (write_denoising_features && (closure_flag & SD_SCATTER)) {
+            const float3 albedo = safe_divide_color(coeff.sigma_s, coeff.sigma_t);
+            accum_albedo += result.indirect_throughput * albedo * (one_float3() - transmittance);
+          }
+#  endif
+
           /* Scattering and absorption. */
           volume_integrate_step_scattering(
               sd, ray, equiangular_light_P, coeff, transmittance, vstate, result);
@@ -627,6 +647,20 @@ ccl_device_forceinline void volume_integrate_heterogeneous(
       break;
     }
   }
+
+  /* Write accumulated emisison. */
+  if (!is_zero(accum_emission)) {
+    kernel_accum_emission(
+        INTEGRATOR_STATE_PASS, result.indirect_throughput, accum_emission, render_buffer);
+  }
+
+#  ifdef __DENOISING_FEATURES__
+  /* Write denoising features. */
+  if (write_denoising_features) {
+    kernel_write_denoising_features_volume(
+        INTEGRATOR_STATE_PASS, accum_albedo, result.indirect_scatter, render_buffer);
+  }
+#  endif /* __DENOISING_FEATURES__ */
 }
 
 #  ifdef __EMISSION__

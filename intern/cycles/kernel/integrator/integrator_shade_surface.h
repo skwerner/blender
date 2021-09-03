@@ -431,7 +431,7 @@ ccl_device bool integrate_surface(INTEGRATOR_STATE_ARGS,
     }
 
 #ifdef __DENOISING_FEATURES__
-    kernel_write_denoising_features(INTEGRATOR_STATE_PASS, &sd, render_buffer);
+    kernel_write_denoising_features_surface(INTEGRATOR_STATE_PASS, &sd, render_buffer);
 #endif
 
 #ifdef __SHADOW_CATCHER__

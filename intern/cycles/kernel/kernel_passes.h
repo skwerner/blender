@@ -35,7 +35,7 @@ ccl_device_forceinline ccl_global float *kernel_pass_pixel_render_buffer(
 
 #ifdef __DENOISING_FEATURES__
 
-ccl_device_forceinline void kernel_write_denoising_features(
+ccl_device_forceinline void kernel_write_denoising_features_surface(
     INTEGRATOR_STATE_ARGS, const ShaderData *sd, ccl_global float *ccl_restrict render_buffer)
 {
   if (!(INTEGRATOR_STATE(path, flag) & PATH_RAY_DENOISING_FEATURES)) {
@@ -118,6 +118,31 @@ ccl_device_forceinline void kernel_write_denoising_features(
   }
   else {
     INTEGRATOR_STATE_WRITE(path, denoising_feature_throughput) *= specular_albedo;
+  }
+}
+
+ccl_device_forceinline void kernel_write_denoising_features_volume(INTEGRATOR_STATE_ARGS,
+                                                                   const float3 albedo,
+                                                                   const bool scatter,
+                                                                   ccl_global float *ccl_restrict
+                                                                       render_buffer)
+{
+  ccl_global float *buffer = kernel_pass_pixel_render_buffer(INTEGRATOR_STATE_PASS, render_buffer);
+  const float3 denoising_feature_throughput = INTEGRATOR_STATE(path, denoising_feature_throughput);
+
+  if (scatter && kernel_data.film.pass_denoising_normal != PASS_UNUSED) {
+    /* Assume scatter is sufficiently diffuse to stop writing denoising features. */
+    INTEGRATOR_STATE_WRITE(path, flag) &= ~PATH_RAY_DENOISING_FEATURES;
+
+    /* Write view direction as normal. */
+    const float3 denoising_normal = make_float3(0.0f, 0.0f, -1.0f);
+    kernel_write_pass_float3(buffer + kernel_data.film.pass_denoising_normal, denoising_normal);
+  }
+
+  if (kernel_data.film.pass_denoising_albedo != PASS_UNUSED) {
+    /* Write albedo. */
+    const float3 denoising_albedo = ensure_finite3(denoising_feature_throughput * albedo);
+    kernel_write_pass_float3(buffer + kernel_data.film.pass_denoising_albedo, denoising_albedo);
   }
 }
 #endif /* __DENOISING_FEATURES__ */

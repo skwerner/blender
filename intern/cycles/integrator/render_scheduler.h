@@ -414,6 +414,7 @@ class RenderScheduler {
    * down by a factor of 4. */
   int calculate_resolution_divider_for_time(double desired_time, double actual_time);
 };
+
 int calculate_resolution_divider_for_resolution(int width, int height, int resolution);
 
 int calculate_resolution_for_divider(int width, int height, int resolution_divider);

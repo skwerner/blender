@@ -20,15 +20,6 @@
 
 CCL_NAMESPACE_BEGIN
 
-TEST(IntegratorRenderScheduler, calculate_resolution_divider_for_time)
-{
-  /* Actual time is lover than the desired one. */
-  EXPECT_EQ(calculate_resolution_divider_for_time(1.0, 0.5), 1);
-
-  EXPECT_EQ(calculate_resolution_divider_for_time(1.0, 3.9), 2);
-  EXPECT_EQ(calculate_resolution_divider_for_time(1.0, 7.9), 4);
-}
-
 TEST(IntegratorRenderScheduler, calculate_resolution_divider_for_resolution)
 {
   EXPECT_EQ(calculate_resolution_divider_for_resolution(1920, 1080, 1920), 1);

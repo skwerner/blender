@@ -748,23 +748,30 @@ int RenderScheduler::get_num_samples_to_path_trace() const
 
 int RenderScheduler::get_num_samples_during_navigation(int resolution_divider) const
 {
-  /* Specvial trick for the fast navigation: schedule multiple samples during fast navigation
+  /* Special trick for fast navigation: schedule multiple samples during fast navigation
    * (which will prefer to use lower resolution to keep up with refresh rate). This gives more
-   * usable visual feedback for artists. There are couple of tricks though. */
+   * usable visual feedback for artists. There are a couple of tricks though. */
 
   if (is_denoise_active_during_update()) {
-    /* When resolution divider is the previous to the final resolution schedule single sample.
-     * This is so that rendering on lower resolution does not exceed time what it takes to render
-     * first sample at the full resolution. */
+    /* When denoising is used during navigation prefer using a higher resolution with less samples
+     * (scheduling less samples here will make it so the resolution_divider calculation will use a
+     * lower value for the divider). This is because both OpenImageDenoiser and OptiX denoiser
+     * give visually better results on a higher resolution image with less samples. */
     return 1;
   }
 
-  if (resolution_divider <= pixel_size_ * 2) {
-    /* When denoising is used during navigation prefer using higher resolution and less samples
-     * (scheduling less samples here will make it so resolutiondivider calculation will use lower
-     * value for the divider). This is because both OpenImageDenoiser and OptiX denoiser gives
-     * visually better results on higher resolution image with less samples. */
+  if (resolution_divider <= pixel_size_) {
+    /* When resolution divider is at or below pixel size, schedule one sample. This doesn't effect
+     * the sample count at this resolution division, but instead assists in the calculation of
+     * the resolution divider. */
     return 1;
+  }
+
+  if (resolution_divider == pixel_size_ * 2) {
+    /* When resolution divider is the previous step to the final resolution, schedule two samples.
+     * This is so that rendering on lower resolution does not exceed time that it takes to render
+     * first sample at the full resolution. */
+    return 2;
   }
 
   /* Always render 4 samples, even if scene is configured for less.
@@ -929,14 +936,10 @@ void RenderScheduler::update_start_resolution_divider()
     return;
   }
 
-  const int num_samples_during_navigation = get_num_samples_during_navigation(
-      default_start_resolution_divider_);
-
   const double desired_update_interval_in_seconds =
       guess_viewport_navigation_update_interval_in_seconds();
 
-  const double actual_time_per_update = first_render_time_.path_trace_per_sample *
-                                            num_samples_during_navigation +
+  const double actual_time_per_update = first_render_time_.path_trace_per_sample +
                                         first_render_time_.denoise_time +
                                         first_render_time_.display_update_time;
 
@@ -946,16 +949,12 @@ void RenderScheduler::update_start_resolution_divider()
   const int resolution_divider_for_update = calculate_resolution_divider_for_time(
       desired_update_interval_in_seconds * 1.4, actual_time_per_update);
 
-  /* Never higher resolution that the pixel size allows to (which is possible if the scene is
-   * simple and compute device is fast). */
-  const int new_resolution_divider = max(resolution_divider_for_update, pixel_size_);
-
   /* TODO(sergey): Need to add hysteresis to avoid resolution divider bouncing around when actual
    * render time is somewhere on a boundary between two resolutions. */
 
-  /* Don't let resolution to go below the desired one: better be slower than provide a fully
-   * unreadable viewport render. */
-  start_resolution_divider_ = min(new_resolution_divider, default_start_resolution_divider_);
+  /* Never increase resolution to higher than the pixel size (which is possible if the scene is
+   * simple and compute device is fast). */
+  start_resolution_divider_ = max(resolution_divider_for_update, pixel_size_);
 
   VLOG(3) << "Calculated resolution divider is " << start_resolution_divider_;
 }
@@ -1038,14 +1037,23 @@ void RenderScheduler::check_time_limit_reached()
  * Utility functions.
  */
 
-int calculate_resolution_divider_for_time(double desired_time, double actual_time)
+int RenderScheduler::calculate_resolution_divider_for_time(double desired_time, double actual_time)
 {
   /* TODO(sergey): There should a non-iterative analytical formula here. */
 
   int resolution_divider = 1;
-  while (actual_time > desired_time) {
+
+  /* This algorithm iterates through resolution dividers until a divider is found that achieves
+   * the desired render time. A limit of default_start_resolution_divider_ is put in place as the
+   * maximum resolution divider to avoid an unreadable viewport due to a low resolution.
+   * pre_resolution_division_samples and post_resolution_division_samples are used in this
+   * calculation to better predict the performance impact of changing resolution divisions as
+   * the sample count can also change between resolution divisions. */
+  while (actual_time > desired_time && resolution_divider < default_start_resolution_divider_) {
+    int pre_resolution_division_samples = get_num_samples_during_navigation(resolution_divider);
     resolution_divider = resolution_divider * 2;
-    actual_time /= 4.0;
+    int post_resolution_division_samples = get_num_samples_during_navigation(resolution_divider);
+    actual_time /= 4.0 * pre_resolution_division_samples / post_resolution_division_samples;
   }
 
   return resolution_divider;

@@ -75,7 +75,8 @@ ccl_device_inline float cmj_randfloat_simple(uint i, uint p)
 ccl_device float pmj_sample_1D(const KernelGlobals *kg, uint sample, uint rng_hash, uint dimension)
 {
   /* The PMJ sample sets contain a sample with (x,y) with NUM_PMJ_SAMPLES so for 1D
-   *  the x part is used as the sample (TODO(@leesonw): Add using both x and y parts independently). */
+   *  the x part is used as the sample (TODO(@leesonw): Add using both x and y parts
+   * independently). */
 
   /* Perform Owen shuffle of the sample number to reorder the samples. */
 #ifdef _SIMPLE_HASH_

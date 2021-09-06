@@ -788,6 +788,40 @@ ccl_device_inline uint prev_power_of_two(uint x)
   return x < 2 ? x : 1 << (31 - count_leading_zeros(x - 1));
 }
 
+#ifndef __has_builtin
+#  define __has_builtin(v) 0
+#endif
+
+/* Reverses the bits of a 32 bit integer. */
+ccl_device_inline uint32_t reverse_integer_bits(uint32_t x)
+{
+  /* Use a native instruction if it exists. */
+#if defined(__arm__) || defined(__aarch64__)
+  __asm__("rbit %0, %1" : "=r"(x) : "r"(x));
+  return x;
+#elif defined(__KERNEL_CUDA__)
+  return __brev(x);
+#elif __has_builtin(__builtin_bitreverse32)
+  return __builtin_bitreverse32(x);
+#else
+  /* Flip pairwise. */
+  x = ((x & 0x55555555) << 1) | ((x & 0xAAAAAAAA) >> 1);
+  /* Flip pairs. */
+  x = ((x & 0x33333333) << 2) | ((x & 0xCCCCCCCC) >> 2);
+  /* Flip nibbles. */
+  x = ((x & 0x0F0F0F0F) << 4) | ((x & 0xF0F0F0F0) >> 4);
+  /* Flip bytes. CPUs have an instruction for that, pretty fast one. */
+#  ifdef _MSC_VER
+  return _byteswap_ulong(x);
+#  elif defined(__INTEL_COMPILER)
+  return (uint32_t)_bswap((int)x);
+#  else
+  /* Assuming gcc or clang. */
+  return __builtin_bswap32(x);
+#  endif
+#endif
+}
+
 CCL_NAMESPACE_END
 
 #endif /* __UTIL_MATH_H__ */

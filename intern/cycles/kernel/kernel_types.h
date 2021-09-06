@@ -1393,8 +1393,9 @@ typedef struct KernelShaderEvalInput {
 static_assert_align(KernelShaderEvalInput, 16);
 
 /* Pre-computed sample table sizes for PMJ02 sampler. */
-#define NUM_PMJ_SAMPLES (64 * 64)
-#define NUM_PMJ_PATTERNS 48
+#define NUM_PMJ_DIVISIONS 32
+#define NUM_PMJ_SAMPLES ((NUM_PMJ_DIVISIONS) * (NUM_PMJ_DIVISIONS))
+#define NUM_PMJ_PATTERNS 1
 
 /* Device kernels.
  *

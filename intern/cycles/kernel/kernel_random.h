@@ -13,7 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 #pragma once
 
 #include "kernel/kernel_jitter.h"
@@ -45,7 +44,7 @@ ccl_device uint sobol_dimension(const KernelGlobals *kg, int index, int dimensio
   uint i = index + SOBOL_SKIP;
   for (int j = 0, x; (x = find_first_set(i)); i >>= x) {
     j += x;
-    result ^= kernel_tex_fetch(__sample_pattern_lut, 32 * dimension + j - 1);
+    result ^= __float_as_uint(kernel_tex_fetch(__sample_pattern_lut, 32 * dimension + j - 1));
   }
   return result;
 }
@@ -99,9 +98,8 @@ ccl_device_forceinline void path_rng_2D(
   if (kernel_data.integrator.sampling_pattern == SAMPLING_PATTERN_PMJ)
 #endif
   {
-    const float2 f = pmj_sample_2D(kg, sample, rng_hash, dimension);
-    *fx = f.x;
-    *fy = f.y;
+    pmj_sample_2D(kg, sample, rng_hash, dimension, fx, fy);
+
     return;
   }
 
@@ -112,12 +110,39 @@ ccl_device_forceinline void path_rng_2D(
 #endif
 }
 
+/**
+ * 1D hash recomended from "Hash Functions for GPU Rendering" JCGT Vol. 9, No. 3, 2020
+ * See https://www.shadertoy.com/view/4tXyWN and https://www.shadertoy.com/view/XlGcRh
+ * http://www.jcgt.org/published/0009/03/02/paper.pdf
+ */
+ccl_device_inline uint hash_iqint1(uint n)
+{
+  n = (n << 13U) ^ n;
+  n = n * (n * n * 15731U + 789221U) + 1376312589U;
+
+  return n;
+}
+
+/**
+ * 2D hash recomended from "Hash Functions for GPU Rendering" JCGT Vol. 9, No. 3, 2020
+ * See https://www.shadertoy.com/view/4tXyWN and https://www.shadertoy.com/view/XlGcRh
+ * http://www.jcgt.org/published/0009/03/02/paper.pdf
+ */
+ccl_device_inline uint hash_iqnt2d(const uint x, const uint y)
+{
+  const uint qx = 1103515245U * ((x >> 1U) ^ (y));
+  const uint qy = 1103515245U * ((y >> 1U) ^ (x));
+  const uint n = 1103515245U * ((qx) ^ (qy >> 3U));
+
+  return n;
+}
+
 ccl_device_inline uint path_rng_hash_init(const KernelGlobals *ccl_restrict kg,
                                           const int sample,
                                           const int x,
                                           const int y)
 {
-  const uint rng_hash = hash_uint2(x, y) ^ kernel_data.integrator.seed;
+  const uint rng_hash = hash_iqnt2d(x, y) ^ kernel_data.integrator.seed;
 
 #ifdef __DEBUG_CORRELATION__
   srand48(rng_hash + sample);

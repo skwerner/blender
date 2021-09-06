@@ -187,7 +187,7 @@ void Integrator::device_update(Device *device, DeviceScene *dscene, Scene *scene
   kintegrator->caustics_refractive = caustics_refractive;
   kintegrator->filter_glossy = (filter_glossy == 0.0f) ? FLT_MAX : 1.0f / filter_glossy;
 
-  kintegrator->seed = hash_uint2(seed, 0);
+  kintegrator->seed = seed;
 
   kintegrator->sample_clamp_direct = (sample_clamp_direct == 0.0f) ? FLT_MAX :
                                                                      sample_clamp_direct * 3.0f;
@@ -213,7 +213,7 @@ void Integrator::device_update(Device *device, DeviceScene *dscene, Scene *scene
 
   if (need_update_lut) {
     if (kintegrator->sampling_pattern == SAMPLING_PATTERN_SOBOL) {
-      uint *directions = dscene->sample_pattern_lut.alloc(SOBOL_BITS * dimensions);
+      uint *directions = (uint *)dscene->sample_pattern_lut.alloc(SOBOL_BITS * dimensions);
 
       sobol_generate_direction_vectors((uint(*)[SOBOL_BITS])directions, dimensions);
 
@@ -231,6 +231,7 @@ void Integrator::device_update(Device *device, DeviceScene *dscene, Scene *scene
             function_bind(&progressive_multi_jitter_02_generate_2D, sequence, sequence_size, j));
       }
       pool.wait_work();
+
       dscene->sample_pattern_lut.copy_to_device();
     }
   }

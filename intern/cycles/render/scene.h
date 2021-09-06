@@ -128,7 +128,7 @@ class DeviceScene {
   device_vector<float> lookup_table;
 
   /* integrator */
-  device_vector<uint> sample_pattern_lut;
+  device_vector<float> sample_pattern_lut;
 
   /* ies lights */
   device_vector<float> ies_lights;

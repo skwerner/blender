@@ -1938,7 +1938,7 @@ class CYCLES_VIEW3D_PT_shading_debug(CyclesDebugButtonsPanel,
         shading = context.space_data.shading
 
         layout = self.layout
-        layout.active = context.scene.cycles.use_adaptive_sampling
+        layout.active = context.scene.cycles.use_preview_adaptive_sampling
         layout.prop(shading.cycles, "show_active_pixels")
 
 

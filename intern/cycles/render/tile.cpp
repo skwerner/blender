@@ -35,7 +35,7 @@ TileManager::TileManager()
    * Cycles sessions within the same process. */
   const string unique_part = to_string(system_self_process_id()) + "-" +
                              to_string(reinterpret_cast<uintptr_t>(this));
-  tile_filepath_ = path_temp_get("cycles-tile-" + unique_part + ".exr");
+  tile_filepath_ = path_temp_get("cycles-tile-buffer-" + unique_part + ".exr");
 }
 
 TileManager::~TileManager()

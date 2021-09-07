@@ -229,15 +229,24 @@ void RenderScheduler::render_work_reschedule_on_cancel(RenderWork &render_work)
 
   render_work = RenderWork();
 
+  const bool has_rendered_samples = get_num_rendered_samples() != 0;
+
   /* Do not write tile if it has zero samples it it, treat it similarly to all other tiles which
    * got cancelled. */
-  if (!state_.tile_result_was_written && get_num_rendered_samples() != 0) {
+  if (!state_.tile_result_was_written && has_rendered_samples) {
     render_work.tile.write = true;
-    render_work.update_display = true;
   }
 
   if (!state_.full_frame_was_written) {
     render_work.full.write = true;
+  }
+
+  /* Update current tile, but only if any sample was rendered.
+   * Allows to have latest state of tile visible while full buffer is being processed.
+   *
+   * Note that if there are no samples in the current tile its render buffer might have pixels
+   * remained from previous state. */
+  if (has_rendered_samples) {
     render_work.update_display = true;
   }
 }

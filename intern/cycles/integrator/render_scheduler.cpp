@@ -231,12 +231,14 @@ void RenderScheduler::render_work_reschedule_on_cancel(RenderWork &render_work)
 
   /* Do not write tile if it has zero samples it it, treat it similarly to all other tiles which
    * got cancelled. */
-  if (!state_.tile_result_was_written && get_num_rendered_samples() != 0) {
+  const bool has_rendered_samples = get_num_rendered_samples() != 0;
+
+  if (!state_.tile_result_was_written && has_rendered_samples) {
     render_work.tile.write = true;
     render_work.update_display = true;
   }
 
-  if (!state_.full_frame_was_written) {
+  if (!state_.full_frame_was_written && has_rendered_samples) {
     render_work.full.write = true;
     render_work.update_display = true;
   }

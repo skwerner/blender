@@ -160,7 +160,7 @@ void BlenderSession::create_session()
   session->reset(buffer_params, session_params.samples);
 
   /* Create GPU display. */
-  if (!b_engine.is_preview()) {
+  if (!b_engine.is_preview() && !headless) {
     session->set_gpu_display(make_unique<BlenderGPUDisplay>(b_engine, b_scene));
   }
 

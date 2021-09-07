@@ -271,7 +271,7 @@ void PassAccessor::init_kernel_film_convert(KernelFilmConvert *kfilm_convert,
   kfilm_convert->pass_background = buffer_params.get_pass_offset(PASS_BACKGROUND);
 
   if (pass_info.use_filter) {
-    kfilm_convert->scale = 1.0f / num_samples_;
+    kfilm_convert->scale = num_samples_ != 0 ? 1.0f / num_samples_ : 0.0f;
   }
   else {
     kfilm_convert->scale = 1.0f;

@@ -453,6 +453,8 @@ class CYCLES_RENDER_PT_light_paths_fast_gi(CyclesButtonsPanel, Panel):
         layout.use_property_split = True
         layout.use_property_decorate = False
 
+        layout.active = cscene.use_fast_gi
+
         col = layout.column(align=True)
         col.prop(cscene, "ao_bounces", text="Viewport Bounces")
         col.prop(cscene, "ao_bounces_render", text="Render Bounces")

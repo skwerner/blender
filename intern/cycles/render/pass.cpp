@@ -144,14 +144,14 @@ Pass::Pass() : Node(get_node_type()), is_auto_(false)
 {
 }
 
-const PassInfo &Pass::get_info() const
+PassInfo Pass::get_info() const
 {
-  return info_;
+  return get_info(type, include_albedo);
 }
 
 bool Pass::is_written() const
 {
-  return info_.is_written;
+  return get_info().is_written;
 }
 
 PassInfo Pass::get_info(const PassType type, const bool include_albedo)

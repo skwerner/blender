@@ -637,11 +637,9 @@ void Film::finalize_passes(Scene *scene, const bool use_denoise)
   vector<Pass *> new_passes;
 
   for (Pass *pass : scene->passes) {
-    pass->info_ = Pass::get_info(pass->type, pass->include_albedo);
-
     /* Disable denoising on passes if denoising is disabled, or if the
      * pass does not support it. */
-    pass->mode = (use_denoise && pass->info_.support_denoise) ? pass->mode : PassMode::NOISY;
+    pass->mode = (use_denoise && pass->get_info().support_denoise) ? pass->mode : PassMode::NOISY;
 
     /* Merge duplicate passes. */
     bool duplicate_found = false;

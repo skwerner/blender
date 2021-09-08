@@ -69,7 +69,7 @@ class Pass : public Node {
 
   Pass();
 
-  const PassInfo &get_info() const;
+  PassInfo get_info() const;
 
   /* The pass is written by the render pipeline (kernel or denoiser). If the pass is written it
    * will have pixels allocated in a RenderBuffer. Passes which are not written do not have their
@@ -77,8 +77,6 @@ class Pass : public Node {
   bool is_written() const;
 
  protected:
-  PassInfo info_;
-
   /* The has been created automatically as a requirement to various rendering functionality (such
    * as adaptive sampling). */
   bool is_auto_;

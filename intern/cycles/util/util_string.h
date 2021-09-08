@@ -21,6 +21,11 @@
 #include <string.h>
 #include <string>
 
+/* Use string view implementation from OIIO.
+ * Ideally, need to switch to `std::string_view`, but this first requires getting rid of using
+ * namespace OIIO as it causes symbol collision. */
+#include <OpenImageIO/string_view.h>
+
 #include "util/util_vector.h"
 
 CCL_NAMESPACE_BEGIN
@@ -30,6 +35,8 @@ using std::ostringstream;
 using std::string;
 using std::stringstream;
 using std::to_string;
+
+using OIIO::string_view;
 
 #ifdef __GNUC__
 #  define PRINTF_ATTRIBUTE __attribute__((format(printf, 1, 2)))

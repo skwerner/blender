@@ -566,9 +566,9 @@ static Pass *pass_add(Scene *scene,
 {
   Pass *pass = scene->create_node<Pass>();
 
-  pass->type = type;
-  pass->name = name;
-  pass->mode = mode;
+  pass->set_type(type);
+  pass->set_name(ustring(name));
+  pass->set_mode(mode);
 
   return pass;
 }

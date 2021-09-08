@@ -36,9 +36,9 @@ PassAccessor::PassAccessInfo::PassAccessInfo(const Pass &pass,
                                              const Film &film,
                                              const Background &background,
                                              const vector<Pass *> &passes)
-    : type(pass.type),
-      mode(pass.mode),
-      include_albedo(pass.include_albedo),
+    : type(pass.get_type()),
+      mode(pass.get_mode()),
+      include_albedo(pass.get_include_albedo()),
       offset(Pass::get_offset(passes, &pass)),
       use_approximate_shadow_catcher(film.get_use_approximate_shadow_catcher()),
       use_approximate_shadow_catcher_background(use_approximate_shadow_catcher &&

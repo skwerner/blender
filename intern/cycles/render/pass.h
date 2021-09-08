@@ -62,10 +62,10 @@ class Pass : public Node {
  public:
   NODE_DECLARE
 
-  PassType type;
-  PassMode mode;
-  ustring name;
-  bool include_albedo;
+  NODE_SOCKET_API(PassType, type)
+  NODE_SOCKET_API(PassMode, mode)
+  NODE_SOCKET_API(ustring, name)
+  NODE_SOCKET_API(bool, include_albedo)
 
   Pass();
 

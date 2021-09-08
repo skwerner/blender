@@ -634,9 +634,9 @@ void BlenderSession::bake(BL::Depsgraph &b_depsgraph_,
   /* Add render pass that we want to bake, and name it Combined so that it is
    * used as that on the Blender side. */
   Pass *pass = scene->create_node<Pass>();
-  pass->name = "Combined";
-  pass->type = bake_type_to_pass(bake_type, bake_filter);
-  pass->include_albedo = (bake_filter & BL::BakeSettings::pass_filter_COLOR);
+  pass->set_name(ustring("Combined"));
+  pass->set_type(bake_type_to_pass(bake_type, bake_filter));
+  pass->set_include_albedo((bake_filter & BL::BakeSettings::pass_filter_COLOR));
 
   session->read_render_tile_cb = [&]() { read_render_tile(); };
   session->write_render_tile_cb = [&]() { write_render_tile(); };
@@ -820,7 +820,7 @@ void BlenderSession::draw(BL::SpaceImageEditor &space_image)
       return;
     }
 
-    scene->film->set_display_pass(pass->type);
+    scene->film->set_display_pass(pass->get_type());
 
     draw_state_.last_pass_index = pass_index;
   }

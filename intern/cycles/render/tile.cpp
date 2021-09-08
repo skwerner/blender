@@ -62,7 +62,7 @@ static std::vector<std::string> exr_channel_names_for_passes(const vector<Pass *
      * buffers memory to disk and read it back without doing extra mapping. */
     const string prefix = string_printf("%08d", pass_index);
 
-    const string channel_name_prefix = prefix + string(pass->name) + ".";
+    const string channel_name_prefix = prefix + string(pass->get_name()) + ".";
 
     for (int i = 0; i < pass_info.num_components; ++i) {
       channel_names.push_back(channel_name_prefix + component_suffixes[i]);

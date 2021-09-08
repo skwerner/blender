@@ -43,7 +43,7 @@ static int pass_type_mode_to_index(PassType pass_type, PassMode mode)
 
 static int pass_to_index(const Pass *pass)
 {
-  return pass_type_mode_to_index(pass->type, pass->mode);
+  return pass_type_mode_to_index(pass->get_type(), pass->get_mode());
 }
 
 /* Buffer Params */

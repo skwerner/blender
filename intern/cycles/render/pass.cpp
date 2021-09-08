@@ -356,7 +356,7 @@ PassInfo Pass::get_info(const PassType type, const bool include_albedo)
 bool Pass::contains(const vector<Pass *> &passes, PassType type)
 {
   for (const Pass *pass : passes) {
-    if (pass->type != type) {
+    if (pass->get_type() != type) {
       continue;
     }
 
@@ -369,7 +369,7 @@ bool Pass::contains(const vector<Pass *> &passes, PassType type)
 const Pass *Pass::find(const vector<Pass *> &passes, const string &name)
 {
   for (const Pass *pass : passes) {
-    if (pass->name == name) {
+    if (pass->get_name() == name) {
       return pass;
     }
   }
@@ -380,7 +380,7 @@ const Pass *Pass::find(const vector<Pass *> &passes, const string &name)
 const Pass *Pass::find(const vector<Pass *> &passes, PassType type, PassMode mode)
 {
   for (const Pass *pass : passes) {
-    if (pass->type != type || pass->mode != mode) {
+    if (pass->get_type() != type || pass->get_mode() != mode) {
       continue;
     }
 
@@ -396,8 +396,9 @@ int Pass::get_offset(const vector<Pass *> &passes, const Pass *pass)
 
   for (const Pass *current_pass : passes) {
     /* Note that pass name is allowed to be empty. This is why we check for type and mode. */
-    if (current_pass->type == pass->type && current_pass->mode == pass->mode &&
-        current_pass->name == pass->name) {
+    if (current_pass->get_type() == pass->get_type() &&
+        current_pass->get_mode() == pass->get_mode() &&
+        current_pass->get_name() == pass->get_name()) {
       if (current_pass->is_written()) {
         return pass_offset;
       }
@@ -415,9 +416,9 @@ int Pass::get_offset(const vector<Pass *> &passes, const Pass *pass)
 
 std::ostream &operator<<(std::ostream &os, const Pass &pass)
 {
-  os << "type: " << pass_type_as_string(pass.type);
-  os << ", name: \"" << pass.name << "\"";
-  os << ", mode: " << pass.mode;
+  os << "type: " << pass_type_as_string(pass.get_type());
+  os << ", name: \"" << pass.get_name() << "\"";
+  os << ", mode: " << pass.get_mode();
   os << ", is_written: " << string_from_bool(pass.is_written());
 
   return os;

@@ -34,7 +34,10 @@ struct Transform;
 #define NODE_SOCKET_API_BASE_METHODS(type_, name, string_name) \
   const SocketType *get_##name##_socket() const \
   { \
-    static const SocketType *socket = type->find_input(ustring(string_name)); \
+    /* Explicitly cast to base class to use `Node::type` even if the derived class defines \
+     * `type`. */ \
+    const Node *self_node = this; \
+    static const SocketType *socket = self_node->type->find_input(ustring(string_name)); \
     return socket; \
   } \
   bool name##_is_modified() const \

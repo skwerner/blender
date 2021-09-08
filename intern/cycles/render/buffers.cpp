@@ -61,7 +61,7 @@ BufferParams::BufferParams()
   reset_pass_offset();
 }
 
-void BufferParams::update_passes(vector<Pass *> &passes)
+void BufferParams::update_passes(const vector<Pass *> &passes)
 {
   update_offset_stride();
   reset_pass_offset();

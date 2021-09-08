@@ -97,8 +97,7 @@ class TileManager {
 
   /* Read full frame render buffer from tiles file on disk.
    *
-   * The render buffer is reset to the full frame parameters. This means that the caller does not
-   * need to worry about keeping track of the full frame parameters.
+   * The render buffer is configured according to the metadata in the file.
    *
    * Returns true on success. */
   bool read_full_buffer_from_disk(RenderBuffers *buffers);
@@ -110,11 +109,6 @@ class TileManager {
   /* Get tile configuration for its index.
    * The tile index must be within [0, state_.tile_state_). */
   Tile get_tile_for_index(int index) const;
-
-  /* Configure image specification for tile file storage.
-   * Note that this only configures meta information about the output without actually opening the
-   * file for write. */
-  void configure_image_spec(const vector<Pass *> &passes);
 
   bool open_tile_output();
   bool close_tile_output();

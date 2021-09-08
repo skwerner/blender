@@ -16,6 +16,8 @@
 
 #pragma once
 
+#include <type_traits>
+
 #include "graph/node_type.h"
 
 #include "util/util_array.h"
@@ -113,6 +115,15 @@ struct Node {
   void set(const SocketType &input, ustring value);
   void set(const SocketType &input, const Transform &value);
   void set(const SocketType &input, Node *value);
+
+  /* Implicitly cast enums and enum classes to integer, which matches an internal way of how
+   * enumerator values are stored and accessed in a generic API. */
+  template<class ValueType, typename std::enable_if_t<std::is_enum_v<ValueType>> * = nullptr>
+  void set(const SocketType &input, const ValueType &value)
+  {
+    static_assert(sizeof(ValueType) <= sizeof(int), "Enumerator type should fit int");
+    set(input, static_cast<int>(value));
+  }
 
   /* set array values. the memory from the input array will taken over
    * by the node and the input array will be empty after return */

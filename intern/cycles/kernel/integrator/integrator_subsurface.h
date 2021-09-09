@@ -55,7 +55,8 @@ ccl_device int subsurface_bounce(INTEGRATOR_STATE_ARGS, ShaderData *sd, const Sh
   INTEGRATOR_STATE_WRITE(isect, object) = sd->object;
 
   /* Pass BSSRDF parameters. */
-  INTEGRATOR_STATE_WRITE(path, flag) |= PATH_RAY_SUBSURFACE;
+  const uint32_t path_flag = INTEGRATOR_STATE_WRITE(path, flag);
+  INTEGRATOR_STATE_WRITE(path, flag) = (path_flag & ~PATH_RAY_CAMERA) | PATH_RAY_SUBSURFACE;
   INTEGRATOR_STATE_WRITE(path, throughput) *= shader_bssrdf_sample_weight(sd, sc);
 
   if (kernel_data.kernel_features & KERNEL_FEATURE_LIGHT_PASSES) {

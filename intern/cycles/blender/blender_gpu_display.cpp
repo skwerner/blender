@@ -423,6 +423,24 @@ DeviceGraphicsInteropDestination BlenderGPUDisplay::do_graphics_interop_get()
   return interop_dst;
 }
 
+void BlenderGPUDisplay::graphics_interop_activate()
+{
+  if (!gl_context_) {
+    return;
+  }
+
+  WM_opengl_context_activate(gl_context_);
+}
+
+void BlenderGPUDisplay::graphics_interop_deactivate()
+{
+  if (!gl_context_) {
+    return;
+  }
+
+  WM_opengl_context_release(gl_context_);
+}
+
 /* --------------------------------------------------------------------
  * Drawing.
  */

@@ -83,6 +83,8 @@ class PathTraceWork {
                                    PassMode pass_mode,
                                    int num_samples) = 0;
 
+  virtual void destroy_gpu_resources(GPUDisplay *gpu_display) = 0;
+
   /* Copy data from/to given render buffers.
    * Will copy pixels from a corresponding place (from multi-device point of view) of the render
    * buffers, and copy work's render buffers to the corresponding place of the destination. */

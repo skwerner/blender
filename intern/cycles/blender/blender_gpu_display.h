@@ -100,6 +100,9 @@ class BlenderGPUDisplay : public GPUDisplay {
   BlenderGPUDisplay(BL::RenderEngine &b_engine, BL::Scene &b_scene);
   ~BlenderGPUDisplay();
 
+  virtual void graphics_interop_activate() override;
+  virtual void graphics_interop_deactivate() override;
+
  protected:
   virtual bool do_update_begin(int texture_width, int texture_height) override;
   virtual void do_update_end() override;

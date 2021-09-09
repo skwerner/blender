@@ -55,6 +55,7 @@ class PathTrace {
             DeviceScene *device_scene,
             RenderScheduler &render_scheduler,
             TileManager &tile_manager);
+  ~PathTrace();
 
   /* Create devices and load kernels which are created on-demand (for example, denoising devices).
    * The progress is reported to the currently configure progress object (via `set_progress`). */

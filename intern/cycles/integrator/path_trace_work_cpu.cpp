@@ -179,6 +179,10 @@ void PathTraceWorkCPU::copy_to_gpu_display(GPUDisplay *gpu_display,
   gpu_display->unmap_texture_buffer();
 }
 
+void PathTraceWorkCPU::destroy_gpu_resources(GPUDisplay * /*gpu_display*/)
+{
+}
+
 bool PathTraceWorkCPU::copy_render_buffers_from_device()
 {
   return buffers_->copy_from_device();

@@ -756,6 +756,16 @@ bool PathTraceWorkGPU::copy_to_gpu_display_interop(GPUDisplay *gpu_display,
   return true;
 }
 
+void PathTraceWorkGPU::destroy_gpu_resources(GPUDisplay *gpu_display)
+{
+  if (!device_graphics_interop_) {
+    return;
+  }
+  gpu_display->graphics_interop_activate();
+  device_graphics_interop_ = nullptr;
+  gpu_display->graphics_interop_deactivate();
+}
+
 void PathTraceWorkGPU::get_render_tile_film_pixels(const PassAccessor::Destination &destination,
                                                    PassMode pass_mode,
                                                    int num_samples)

@@ -185,6 +185,14 @@ DeviceGraphicsInteropDestination GPUDisplay::graphics_interop_get()
   return do_graphics_interop_get();
 }
 
+void GPUDisplay::graphics_interop_activate()
+{
+}
+
+void GPUDisplay::graphics_interop_deactivate()
+{
+}
+
 /* --------------------------------------------------------------------
  * Drawing.
  */

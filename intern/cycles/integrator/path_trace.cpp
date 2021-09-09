@@ -64,6 +64,18 @@ PathTrace::PathTrace(Device *device,
   render_scheduler.set_need_schedule_rebalance(path_trace_works_.size() > 1);
 }
 
+PathTrace::~PathTrace()
+{
+  /* Destroy any GPU resource which was used for graphics interop.
+   * Need to have access to the GPUDisplay as it is the only source of drawing context which is
+   * used for interop. */
+  if (gpu_display_) {
+    for (auto &&path_trace_work : path_trace_works_) {
+      path_trace_work->destroy_gpu_resources(gpu_display_.get());
+    }
+  }
+}
+
 void PathTrace::load_kernels()
 {
   if (denoiser_) {

@@ -151,6 +151,11 @@ class GPUDisplay {
    * device API. */
   DeviceGraphicsInteropDestination graphics_interop_get();
 
+  /* (De)activate GPU display for graphics interoperability outside of regular display udpate
+   * routines. */
+  virtual void graphics_interop_activate();
+  virtual void graphics_interop_deactivate();
+
   /* --------------------------------------------------------------------
    * Drawing.
    */

@@ -515,6 +515,10 @@ bool DRW_engine_external_use_for_image_editor(void)
     return false;
   }
 
+  if (image->render_slot != image->last_render_slot) {
+    return false;
+  }
+
   RenderEngine *engine = external_engine_get();
   if (engine == NULL) {
     return false;

@@ -20,12 +20,16 @@ CCL_NAMESPACE_BEGIN
 
 #ifdef __SHADER_RAYTRACE__
 
+#  ifdef __KERNEL_OPTIX__
+extern "C" __device__ float __direct_callable__svm_node_ao(INTEGRATOR_STATE_CONST_ARGS,
+#  else
 ccl_device float svm_ao(INTEGRATOR_STATE_CONST_ARGS,
-                        ShaderData *sd,
-                        float3 N,
-                        float max_dist,
-                        int num_samples,
-                        int flags)
+#  endif
+                                                           ShaderData *sd,
+                                                           float3 N,
+                                                           float max_dist,
+                                                           int num_samples,
+                                                           int flags)
 {
   if (flags & NODE_AO_GLOBAL_RADIUS) {
     max_dist = kernel_data.integrator.ao_bounces_distance;
@@ -85,6 +89,7 @@ ccl_device float svm_ao(INTEGRATOR_STATE_CONST_ARGS,
   return ((float)unoccluded) / num_samples;
 }
 
+template<uint node_feature_mask>
 #  if defined(__KERNEL_OPTIX__)
 ccl_device_inline
 #  else
@@ -93,16 +98,6 @@ ccl_device_noinline
     void
     svm_node_ao(INTEGRATOR_STATE_CONST_ARGS, ShaderData *sd, float *stack, uint4 node)
 {
-#  if defined(__KERNEL_OPTIX__)
-  optixDirectCall<void>(0, INTEGRATOR_STATE_PASS, sd, stack, node);
-}
-
-extern "C" __device__ void __direct_callable__svm_node_ao(INTEGRATOR_STATE_CONST_ARGS,
-                                                          ShaderData *sd,
-                                                          float *stack,
-                                                          uint4 node)
-{
-#  endif
   uint flags, dist_offset, normal_offset, out_ao_offset;
   svm_unpack_node_uchar4(node.y, &flags, &dist_offset, &normal_offset, &out_ao_offset);
 
@@ -111,7 +106,16 @@ extern "C" __device__ void __direct_callable__svm_node_ao(INTEGRATOR_STATE_CONST
 
   float dist = stack_load_float_default(stack, dist_offset, node.w);
   float3 normal = stack_valid(normal_offset) ? stack_load_float3(stack, normal_offset) : sd->N;
-  float ao = svm_ao(INTEGRATOR_STATE_PASS, sd, normal, dist, samples, flags);
+
+  float ao = 1.0f;
+
+  if (KERNEL_NODES_FEATURE(RAYTRACE)) {
+#  ifdef __KERNEL_OPTIX__
+    ao = optixDirectCall<float>(0, INTEGRATOR_STATE_PASS, sd, normal, dist, samples, flags);
+#  else
+    ao = svm_ao(INTEGRATOR_STATE_PASS, sd, normal, dist, samples, flags);
+#  endif
+  }
 
   if (stack_valid(out_ao_offset)) {
     stack_store_float(stack, out_ao_offset, ao);

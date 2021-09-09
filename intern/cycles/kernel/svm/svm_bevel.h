@@ -95,10 +95,14 @@ ccl_device void svm_bevel_cubic_sample(const float radius, float xi, float *r, f
  * http://library.imageworks.com/pdfs/imageworks-library-BSSRDF-sampling.pdf
  */
 
+#  ifdef __KERNEL_OPTIX__
+extern "C" __device__ float3 __direct_callable__svm_node_bevel(INTEGRATOR_STATE_CONST_ARGS,
+#  else
 ccl_device float3 svm_bevel(INTEGRATOR_STATE_CONST_ARGS,
-                            ShaderData *sd,
-                            float radius,
-                            int num_samples)
+#  endif
+                                                               ShaderData *sd,
+                                                               float radius,
+                                                               int num_samples)
 {
   /* Early out if no sampling needed. */
   if (radius <= 0.0f || num_samples < 1 || sd->object == OBJECT_NONE) {
@@ -276,6 +280,7 @@ ccl_device float3 svm_bevel(INTEGRATOR_STATE_CONST_ARGS,
   return is_zero(N) ? sd->N : (sd->flag & SD_BACKFACING) ? -N : N;
 }
 
+template<uint node_feature_mask>
 #  if defined(__KERNEL_OPTIX__)
 ccl_device_inline
 #  else
@@ -284,26 +289,25 @@ ccl_device_noinline
     void
     svm_node_bevel(INTEGRATOR_STATE_CONST_ARGS, ShaderData *sd, float *stack, uint4 node)
 {
-#  if defined(__KERNEL_OPTIX__)
-  optixDirectCall<void>(1, INTEGRATOR_STATE_PASS, sd, stack, node);
-}
-
-extern "C" __device__ void __direct_callable__svm_node_bevel(INTEGRATOR_STATE_CONST_ARGS,
-                                                             ShaderData *sd,
-                                                             float *stack,
-                                                             uint4 node)
-{
-#  endif
   uint num_samples, radius_offset, normal_offset, out_offset;
   svm_unpack_node_uchar4(node.y, &num_samples, &radius_offset, &normal_offset, &out_offset);
 
   float radius = stack_load_float(stack, radius_offset);
-  float3 bevel_N = svm_bevel(INTEGRATOR_STATE_PASS, sd, radius, num_samples);
 
-  if (stack_valid(normal_offset)) {
-    /* Preserve input normal. */
-    float3 ref_N = stack_load_float3(stack, normal_offset);
-    bevel_N = normalize(ref_N + (bevel_N - sd->N));
+  float3 bevel_N = sd->N;
+
+  if (KERNEL_NODES_FEATURE(RAYTRACE)) {
+#  ifdef __KERNEL_OPTIX__
+    bevel_N = optixDirectCall<float3>(1, INTEGRATOR_STATE_PASS, sd, radius, num_samples);
+#  else
+    bevel_N = svm_bevel(INTEGRATOR_STATE_PASS, sd, radius, num_samples);
+#  endif
+
+    if (stack_valid(normal_offset)) {
+      /* Preserve input normal. */
+      float3 ref_N = stack_load_float3(stack, normal_offset);
+      bevel_N = normalize(ref_N + (bevel_N - sd->N));
+    }
   }
 
   stack_store_float3(stack, out_offset, bevel_N);

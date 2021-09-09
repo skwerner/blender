@@ -545,14 +545,10 @@ ccl_device void svm_eval_nodes(INTEGRATOR_STATE_CONST_ARGS,
         break;
 #ifdef __SHADER_RAYTRACE__
       case NODE_BEVEL:
-        if (KERNEL_NODES_FEATURE(RAYTRACE)) {
-          svm_node_bevel(INTEGRATOR_STATE_PASS, sd, stack, node);
-        }
+        svm_node_bevel<node_feature_mask>(INTEGRATOR_STATE_PASS, sd, stack, node);
         break;
       case NODE_AMBIENT_OCCLUSION:
-        if (KERNEL_NODES_FEATURE(RAYTRACE)) {
-          svm_node_ao(INTEGRATOR_STATE_PASS, sd, stack, node);
-        }
+        svm_node_ao<node_feature_mask>(INTEGRATOR_STATE_PASS, sd, stack, node);
         break;
 #endif
 

@@ -237,6 +237,12 @@ struct RenderEngine *RE_engine_get(const struct Render *re);
 
 bool RE_engine_is_rendering(const struct Render *re);
 
+/* NOTE: Only used for Cycles's BLenderGPUDisplay integration with the draw manager. A subject
+ * for re-consideration. Do not use this functionality. */
+bool RE_engine_has_render_context(struct RenderEngine *engine);
+void RE_engine_render_context_enable(struct RenderEngine *engine);
+void RE_engine_render_context_disable(struct RenderEngine *engine);
+
 /* Engine Types */
 
 void RE_engines_init(void);

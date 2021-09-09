@@ -21,10 +21,16 @@
 #include "util/util_opengl.h"
 
 extern "C" {
+struct RenderEngine;
+
+bool RE_engine_has_render_context(struct RenderEngine *engine);
+void RE_engine_render_context_enable(struct RenderEngine *engine);
+void RE_engine_render_context_disable(struct RenderEngine *engine);
+
 bool DRW_opengl_context_release();
 void DRW_opengl_context_activate(bool drw_state);
 
-void *WM_opengl_context_create_from_thread();
+void *WM_opengl_context_create();
 void WM_opengl_context_activate(void *gl_context);
 void WM_opengl_context_dispose(void *gl_context);
 void WM_opengl_context_release(void *context);
@@ -271,7 +277,7 @@ uint BlenderDisplaySpaceShader::get_shader_program()
  */
 
 BlenderGPUDisplay::BlenderGPUDisplay(BL::RenderEngine &b_engine, BL::Scene &b_scene)
-    : display_shader_(BlenderDisplayShader::create(b_engine, b_scene))
+    : b_engine_(b_engine), display_shader_(BlenderDisplayShader::create(b_engine, b_scene))
 {
   /* Create context while on the main thread. */
   gl_context_create();
@@ -288,16 +294,14 @@ BlenderGPUDisplay::~BlenderGPUDisplay()
 
 bool BlenderGPUDisplay::do_update_begin(int texture_width, int texture_height)
 {
-  if (!gl_context_) {
+  if (!gl_context_enable()) {
     return false;
   }
-
-  WM_opengl_context_activate(gl_context_);
 
   glWaitSync((GLsync)gl_render_sync_, 0, GL_TIMEOUT_IGNORED);
 
   if (!gl_texture_resources_ensure()) {
-    WM_opengl_context_release(gl_context_);
+    gl_context_disable();
     return false;
   }
 
@@ -345,7 +349,7 @@ void BlenderGPUDisplay::do_update_end()
   gl_upload_sync_ = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
   glFlush();
 
-  WM_opengl_context_release(gl_context_);
+  gl_context_disable();
 }
 
 /* --------------------------------------------------------------------
@@ -425,20 +429,12 @@ DeviceGraphicsInteropDestination BlenderGPUDisplay::do_graphics_interop_get()
 
 void BlenderGPUDisplay::graphics_interop_activate()
 {
-  if (!gl_context_) {
-    return;
-  }
-
-  WM_opengl_context_activate(gl_context_);
+  gl_context_enable();
 }
 
 void BlenderGPUDisplay::graphics_interop_deactivate()
 {
-  if (!gl_context_) {
-    return;
-  }
-
-  WM_opengl_context_release(gl_context_);
+  gl_context_disable();
 }
 
 /* --------------------------------------------------------------------
@@ -509,22 +505,69 @@ void BlenderGPUDisplay::do_draw()
 
 void BlenderGPUDisplay::gl_context_create()
 {
-  const bool drw_state = DRW_opengl_context_release();
+  /* When rendering in viewport there is no render context available via engine.
+   * Check whether own context is to be created here.
+   *
+   * NOTE: If the `b_engine_`'s context is not available, we are expected to be on a main thread
+   * here. */
+  use_gl_context_ = !RE_engine_has_render_context(
+      reinterpret_cast<RenderEngine *>(b_engine_.ptr.data));
 
-  gl_context_ = WM_opengl_context_create_from_thread();
+  if (use_gl_context_) {
+    const bool drw_state = DRW_opengl_context_release();
+    gl_context_ = WM_opengl_context_create();
+    if (gl_context_) {
+      /* On Windows an old context is restored after creation, and subsequent release of context
+       * generates a Win32 error. Harmless for users, but annoying to have possible misleading
+       * error prints in the console. */
+#ifndef _WIN32
+      WM_opengl_context_release(gl_context_);
+#endif
+    }
+    else {
+      LOG(ERROR) << "Error creating OpenGL context.";
+    }
 
+    DRW_opengl_context_activate(drw_state);
+  }
+}
+
+bool BlenderGPUDisplay::gl_context_enable()
+{
+  if (use_gl_context_) {
+    if (!gl_context_) {
+      return false;
+    }
+    WM_opengl_context_activate(gl_context_);
+    return true;
+  }
+
+  RE_engine_render_context_enable(reinterpret_cast<RenderEngine *>(b_engine_.ptr.data));
+  return true;
+}
+
+void BlenderGPUDisplay::gl_context_disable()
+{
+  if (use_gl_context_) {
+    if (gl_context_) {
+      WM_opengl_context_release(gl_context_);
+    }
+    return;
+  }
+
+  RE_engine_render_context_disable(reinterpret_cast<RenderEngine *>(b_engine_.ptr.data));
+}
+
+void BlenderGPUDisplay::gl_context_dispose()
+{
   if (gl_context_) {
-    /* Context creation leaves it active. Need to release it so that it can be bound from another
-     * thread. */
-    /* TODO(sergey): Need to look again into it: seems on Windoes this generates invalid handle
-     * error in `wglMakeCurrent()`. */
-    WM_opengl_context_release(gl_context_);
-  }
-  else {
-    LOG(ERROR) << "Error creating OpenGL context.";
-  }
+    const bool drw_state = DRW_opengl_context_release();
 
-  DRW_opengl_context_activate(drw_state);
+    WM_opengl_context_activate(gl_context_);
+    WM_opengl_context_dispose(gl_context_);
+
+    DRW_opengl_context_activate(drw_state);
+  }
 }
 
 bool BlenderGPUDisplay::gl_draw_resources_ensure()
@@ -556,29 +599,25 @@ bool BlenderGPUDisplay::gl_draw_resources_ensure()
 
 void BlenderGPUDisplay::gl_resources_destroy()
 {
+  gl_context_enable();
+
   if (vertex_buffer_ != 0) {
     glDeleteBuffers(1, &vertex_buffer_);
   }
 
-  if (gl_context_) {
-    const bool drw_state = DRW_opengl_context_release();
-
-    WM_opengl_context_activate(gl_context_);
-
-    if (texture_.gl_pbo_id_) {
-      glDeleteBuffers(1, &texture_.gl_pbo_id_);
-      texture_.gl_pbo_id_ = 0;
-    }
-
-    if (texture_.gl_id_) {
-      glDeleteTextures(1, &texture_.gl_id_);
-      texture_.gl_id_ = 0;
-    }
-
-    WM_opengl_context_dispose(gl_context_);
-
-    DRW_opengl_context_activate(drw_state);
+  if (texture_.gl_pbo_id_) {
+    glDeleteBuffers(1, &texture_.gl_pbo_id_);
+    texture_.gl_pbo_id_ = 0;
   }
+
+  if (texture_.gl_id_) {
+    glDeleteTextures(1, &texture_.gl_id_);
+    texture_.gl_id_ = 0;
+  }
+
+  gl_context_disable();
+
+  gl_context_dispose();
 }
 
 bool BlenderGPUDisplay::gl_texture_resources_ensure()

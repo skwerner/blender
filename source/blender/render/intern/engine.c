@@ -1103,3 +1103,31 @@ bool RE_engine_is_rendering(const Render *re)
   }
   return re->engine->flag & RE_ENGINE_RENDERING;
 }
+
+/* -------------------------------------------------------------------- */
+/** \name OpenGL context manipulation.
+ *
+ * NOTE: Only used for Cycles's BLenderGPUDisplay integration with the draw manager. A subject
+ * for re-consideration. Do not use this functionality.
+ * \{ */
+
+bool RE_engine_has_render_context(RenderEngine *engine)
+{
+  if (engine->re == NULL) {
+    return false;
+  }
+
+  return RE_gl_context_get(engine->re) != NULL;
+}
+
+void RE_engine_render_context_enable(RenderEngine *engine)
+{
+  DRW_render_context_enable(engine->re);
+}
+
+void RE_engine_render_context_disable(RenderEngine *engine)
+{
+  DRW_render_context_disable(engine->re);
+}
+
+/** \} */

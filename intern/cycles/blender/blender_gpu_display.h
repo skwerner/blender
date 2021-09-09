@@ -119,9 +119,11 @@ class BlenderGPUDisplay : public GPUDisplay {
 
   virtual DeviceGraphicsInteropDestination do_graphics_interop_get() override;
 
-  /* Helper function which allocates new GPU context, without affecting the current
-   * active GPU context. */
+  /* Helper function which allocates new GPU context. */
   void gl_context_create();
+  bool gl_context_enable();
+  void gl_context_disable();
+  void gl_context_dispose();
 
   /* Make sure texture is allocated and its initial configuration is performed. */
   bool gl_texture_resources_ensure();
@@ -144,10 +146,13 @@ class BlenderGPUDisplay : public GPUDisplay {
    * NOTE: The buffer needs to be bound. */
   void vertex_buffer_update();
 
-  /* OpenGL context created by Blender's Window Manager.
-   * This context is used to perform texture update from the render thread, asynchronously from the
-   * main thread which draws the viewport. */
+  BL::RenderEngine b_engine_;
+
+  /* OpenGL context which is used the render engine doesn't have its own. */
   void *gl_context_ = nullptr;
+  /* The when Blender RenderEngine side context is not available and the GPUDisplay is to create
+   * its own context. */
+  bool use_gl_context_ = false;
 
   /* Texture which contains pixels of the render result. */
   struct {
@@ -160,7 +165,7 @@ class BlenderGPUDisplay : public GPUDisplay {
     /* OpenGL resource IDs of the texture itself and Pixel Buffer Object (PBO) used to write
      * pixels to it.
      *
-     * NOTE: Allocated on the `gl_context_` context. */
+     * NOTE: Allocated on the engine's context. */
     uint gl_id_ = 0;
     uint gl_pbo_id_ = 0;
 

@@ -2426,21 +2426,16 @@ void wm_window_IME_end(wmWindow *win)
 
 void *WM_opengl_context_create(void)
 {
-  /* On Windows there is a problem creating contexts that share lists
-   * from one context that is current in another thread.
-   * So we should call this function only on the main thread.
-   */
+  /* On Windows there is a problem creating contexts that share resources (almost any object,
+   * including legacy display lists, but also textures) with a context which is current in another
+   * thread. This is a documented and behavior of both `::wglCreateContextAttribsARB()` and
+   * `::wglShareLists()`.
+   *
+   * Other platforms might successfully share resources from context which is active somewhere
+   * else, but to keep our code behave the same on all platform we expect contexts to only be
+   * created from the main thread. */
+
   BLI_assert(BLI_thread_is_main());
-
-  return WM_opengl_context_create_from_thread();
-}
-
-/* Special version of OpenGL context creation which allows context to be created from non-main
- * thread.
- * The caller takes a risk of possible driver quirks which might make certain resources not shared
- * across different contexts. */
-void *WM_opengl_context_create_from_thread(void)
-{
   BLI_assert(GPU_framebuffer_active_get() == GPU_framebuffer_back_get());
 
   GHOST_GLSettings glSettings = {0};

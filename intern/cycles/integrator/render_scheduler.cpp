@@ -227,9 +227,19 @@ void RenderScheduler::render_work_reschedule_on_cancel(RenderWork &render_work)
   /* Un-schedule samples: they will not be rendered and should not be counted. */
   state_.num_rendered_samples -= render_work.path_trace.num_samples;
 
+  const bool has_rendered_samples = get_num_rendered_samples() != 0;
+
+  /* Reset all fields of the previous work, canelling things like adaptive sampling filtering and
+   * denoising.
+   * However, need to preserve write requests, since those will not be possible to recover and
+   * writes are only to happen once. */
+  const bool tile_write = render_work.tile.write;
+  const bool full_write = render_work.full.write;
+
   render_work = RenderWork();
 
-  const bool has_rendered_samples = get_num_rendered_samples() != 0;
+  render_work.tile.write = tile_write;
+  render_work.full.write = full_write;
 
   /* Do not write tile if it has zero samples it it, treat it similarly to all other tiles which
    * got cancelled. */

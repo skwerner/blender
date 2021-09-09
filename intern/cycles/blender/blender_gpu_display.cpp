@@ -494,11 +494,18 @@ void BlenderGPUDisplay::gl_context_create()
   const bool drw_state = DRW_opengl_context_release();
 
   gl_context_ = WM_opengl_context_create_from_thread();
-  if (!gl_context_) {
+
+  if (gl_context_) {
+    /* Context creation leaves it active. Need to release it so that it can be bound from another
+     * thread. */
+    /* TODO(sergey): Need to look again into it: seems on Windoes this generates invalid handle
+     * error in `wglMakeCurrent()`. */
+    WM_opengl_context_release(gl_context_);
+  }
+  else {
     LOG(ERROR) << "Error creating OpenGL context.";
   }
 
-  WM_opengl_context_release(gl_context_);
   DRW_opengl_context_activate(drw_state);
 }
 

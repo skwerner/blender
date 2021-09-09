@@ -585,6 +585,9 @@ ccl_device_inline bool subsurface_scatter(INTEGRATOR_STATE_ARGS)
   integrator_state_write_isect(INTEGRATOR_STATE_PASS, &ss_isect.hits[0]);
   integrator_state_write_ray(INTEGRATOR_STATE_PASS, &ray);
 
+  /* Advanced random number offset for bounce. */
+  INTEGRATOR_STATE_WRITE(path, rng_offset) += PRNG_BOUNCE_NUM;
+
   const int shader = intersection_get_shader(kg, &ss_isect.hits[0]);
   const int shader_flags = kernel_tex_fetch(__shaders, shader).flags;
   if ((shader_flags & SD_HAS_RAYTRACE) || (kernel_data.film.pass_ao != PASS_UNUSED)) {

@@ -192,9 +192,6 @@ ccl_device void subsurface_random_walk_coefficients(const float3 albedo,
   subsurface_random_walk_remap(albedo.y, radius.y, anisotropy, &sigma_t_y, &alpha_y);
   subsurface_random_walk_remap(albedo.z, radius.z, anisotropy, &sigma_t_z, &alpha_z);
 
-  *sigma_t = make_float3(sigma_t_x, sigma_t_y, sigma_t_z);
-  *alpha = make_float3(alpha_x, alpha_y, alpha_z);
-
   /* Throughput already contains closure weight at this point, which includes the
    * albedo, as well as closure mixing and Fresnel weights. Divide out the albedo
    * which will be added through scattering. */
@@ -216,6 +213,9 @@ ccl_device void subsurface_random_walk_coefficients(const float3 albedo,
     (*throughput).z *= alpha_z / min_alpha;
     alpha_z = min_alpha;
   }
+
+  *sigma_t = make_float3(sigma_t_x, sigma_t_y, sigma_t_z);
+  *alpha = make_float3(alpha_x, alpha_y, alpha_z);
 }
 
 /* References for Dwivedi sampling:

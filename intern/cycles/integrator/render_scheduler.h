@@ -70,7 +70,7 @@ class RenderWork {
   struct {
     /* Write full render result.
      * Implies reading the partial file from disk. */
-    bool write;
+    bool write = false;
 
     bool denoise = false;
   } full;

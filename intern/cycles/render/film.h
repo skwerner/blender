@@ -83,9 +83,6 @@ class Film : public Node {
 
   /* Get display pass from its name.
    * Will do special logic to replace combined pass with shadow catcher matte. */
-  const Pass *get_actual_display_pass(Scene *scene,
-                                      PassType pass_type,
-                                      PassMode pass_mode = PassMode::NOISY);
   const Pass *get_actual_display_pass(Scene *scene, const Pass *pass);
 
   /* Update passes so that they contain all passes required for the configured functionality.

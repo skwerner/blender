@@ -427,18 +427,6 @@ int Film::get_aov_offset(Scene *scene, string name, bool &is_color)
   return -1;
 }
 
-const Pass *Film::get_actual_display_pass(Scene *scene, PassType pass_type, PassMode pass_mode)
-{
-  const Pass *pass = Pass::find(scene->passes, pass_type, pass_mode);
-
-  /* Fall back to noisy pass if no denoised one is found. */
-  if (pass == nullptr && pass_mode == PassMode::DENOISED) {
-    pass = Pass::find(scene->passes, pass_type, PassMode::NOISY);
-  }
-
-  return get_actual_display_pass(scene, pass);
-}
-
 const Pass *Film::get_actual_display_pass(Scene *scene, const Pass *pass)
 {
   if (!pass) {

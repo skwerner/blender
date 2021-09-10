@@ -213,8 +213,8 @@ bool PassAccessor::get_render_tile_pixels(const RenderBuffers *render_buffers,
         get_pass_float3(render_buffers, buffer_params, destination);
       }
       else if (pass_info.num_components == 4) {
-        if (type == PASS_COMBINED && destination.num_components == 3) {
-          /* Special case for combined pass access ignoring alpha channel. */
+        if (destination.num_components == 3) {
+          /* Special case for denoiser access of RGBA passes ignoring alpha channel. */
           get_pass_float3(render_buffers, buffer_params, destination);
         }
         else if (type == PASS_COMBINED || type == PASS_SHADOW_CATCHER ||

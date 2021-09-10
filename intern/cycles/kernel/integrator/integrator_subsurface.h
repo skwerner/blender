@@ -199,6 +199,23 @@ ccl_device void subsurface_random_walk_coefficients(const float3 albedo,
    * albedo, as well as closure mixing and Fresnel weights. Divide out the albedo
    * which will be added through scattering. */
   *throughput = safe_divide_color(*throughput, albedo);
+
+  /* With low albedo values (like 0.025) we get diffusion_length 1.0 and
+   * infinite phase functions. To avoid a sharp discontinuity as we go from
+   * such values to 0.0, increase alpha and reduce the throughput to compensate. */
+  const float min_alpha = 0.2f;
+  if (alpha_x < min_alpha) {
+    (*throughput).x *= alpha_x / min_alpha;
+    alpha_x = min_alpha;
+  }
+  if (alpha_y < min_alpha) {
+    (*throughput).y *= alpha_y / min_alpha;
+    alpha_y = min_alpha;
+  }
+  if (alpha_z < min_alpha) {
+    (*throughput).z *= alpha_z / min_alpha;
+    alpha_z = min_alpha;
+  }
 }
 
 /* References for Dwivedi sampling:

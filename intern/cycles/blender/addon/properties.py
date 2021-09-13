@@ -325,6 +325,7 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         "Zero disables the limit",
         min=0.0,
         default=0.0,
+        step=100.0,
         unit='TIME_ABSOLUTE',
     )
 

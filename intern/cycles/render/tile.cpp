@@ -335,6 +335,11 @@ static bool configure_buffer_from_image_spec(BufferParams *buffer_params,
 
   buffer_params->update_passes(passes);
 
+  /* The base NodeOwner does not take ownership over nodes, so need to free passes explicitly. */
+  foreach (Pass *pass, passes) {
+    delete pass;
+  }
+
   return true;
 }
 

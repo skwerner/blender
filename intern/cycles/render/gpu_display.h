@@ -77,11 +77,9 @@ class GPUDisplay {
   /* --------------------------------------------------------------------
    * Update procedure.
    *
-   * These callsi indicates a desire of the caller to update content of the displayed texture. They
-   * will perform proper mutex locks, avoiding re-draws while update is in process. They will also
-   * perform proper context activation in the particular GPUDisplay implementation. */
+   * These calls indicates a desire of the caller to update content of the displayed texture. */
 
-  /* Returns truth when update is ready. Update should be finished with update_end().
+  /* Returns true when update is ready. Update should be finished with update_end().
    *
    * If false is returned then no update is possible, and no update_end() call is needed.
    *
@@ -162,15 +160,16 @@ class GPUDisplay {
 
   /* Draw the current state of the texture.
    *
-   * Returns truth if this call did draw an updated state of the texture. */
+   * Returns true if this call did draw an updated state of the texture. */
   bool draw();
 
  protected:
   /* Implementation-specific calls which subclasses are to implement.
    * These `do_foo()` method corresponds to their `foo()` calls, but they are purely virtual to
    * simplify their particular implementation. */
-
-  virtual bool do_update_begin(int texture_width, int texture_height) = 0;
+  virtual bool do_update_begin(const GPUDisplayParams &params,
+                               int texture_width,
+                               int texture_height) = 0;
   virtual void do_update_end() = 0;
 
   virtual void do_copy_pixels_to_texture(const half4 *rgba_pixels,
@@ -178,17 +177,21 @@ class GPUDisplay {
                                          int texture_y,
                                          int pixels_width,
                                          int pixels_height) = 0;
-  virtual void do_draw() = 0;
 
   virtual half4 *do_map_texture_buffer() = 0;
   virtual void do_unmap_texture_buffer() = 0;
 
+  /* Note that this might be called in parallel to do_update_begin() and do_update_end(),
+   * the subclass is responsible for appropriate mutex locks to avoid multiple threads
+   * editing and drawing the texture at the same time. */
+  virtual void do_draw(const GPUDisplayParams &params) = 0;
+
   virtual DeviceGraphicsInteropDestination do_graphics_interop_get() = 0;
 
+ private:
   thread_mutex mutex_;
   GPUDisplayParams params_;
 
- private:
   /* Mark texture as its content has been updated.
    * Used from places which knows that the texture content has been brough up-to-date, so that the
    * drawing knows whether it can be performed, and whether drawing happenned with an up-to-date

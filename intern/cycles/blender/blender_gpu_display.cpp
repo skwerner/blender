@@ -292,8 +292,19 @@ BlenderGPUDisplay::~BlenderGPUDisplay()
  * Update procedure.
  */
 
-bool BlenderGPUDisplay::do_update_begin(int texture_width, int texture_height)
+bool BlenderGPUDisplay::do_update_begin(const GPUDisplayParams &params,
+                                        int texture_width,
+                                        int texture_height)
 {
+  /* Note that it's the responsibility of BlenderGPUDisplay to ensure updating and drawing
+   * the texture does not happen at the same time. This is achieved indirectly.
+   *
+   * When enabling the OpenGL context, it uses an internal mutex lock DST.gl_context_lock.
+   * This same lock is also held when do_draw() is called, which together ensure mutual
+   * exclusion.
+   *
+   * This locking is not performed at the GPU display level, because that would cause lock
+   * inversion. */
   if (!gl_context_enable()) {
     return false;
   }
@@ -325,8 +336,8 @@ bool BlenderGPUDisplay::do_update_begin(int texture_width, int texture_height)
    * too much data to GPU when resolution divider is not 1. */
   /* TODO(sergey): Investigate whether keeping the PBO exact size of the texute makes non-interop
    * mode faster. */
-  const int buffer_width = params_.full_size.x;
-  const int buffer_height = params_.full_size.y;
+  const int buffer_width = params.full_size.x;
+  const int buffer_height = params.full_size.y;
   if (texture_.buffer_width != buffer_width || texture_.buffer_height != buffer_height) {
     const size_t size_in_bytes = sizeof(half4) * buffer_width * buffer_height;
     glBindBuffer(GL_PIXEL_UNPACK_BUFFER, texture_.gl_pbo_id_);
@@ -441,8 +452,9 @@ void BlenderGPUDisplay::graphics_interop_deactivate()
  * Drawing.
  */
 
-void BlenderGPUDisplay::do_draw()
+void BlenderGPUDisplay::do_draw(const GPUDisplayParams &params)
 {
+  /* See do_update_begin() for why no locking is required here. */
   const bool transparent = true;  // TODO(sergey): Derive this from Film.
 
   if (!gl_draw_resources_ensure()) {
@@ -456,7 +468,7 @@ void BlenderGPUDisplay::do_draw()
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
   }
 
-  display_shader_->bind(params_.full_size.x, params_.full_size.y);
+  display_shader_->bind(params.full_size.x, params.full_size.y);
 
   glActiveTexture(GL_TEXTURE0);
   glBindTexture(GL_TEXTURE_2D, texture_.gl_id_);
@@ -464,7 +476,7 @@ void BlenderGPUDisplay::do_draw()
   glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer_);
 
   texture_update_if_needed();
-  vertex_buffer_update();
+  vertex_buffer_update(params);
 
   /* TODO(sergey): Does it make sense/possible to cache/reuse the VAO? */
   GLuint vertex_array_object;
@@ -671,7 +683,7 @@ void BlenderGPUDisplay::texture_update_if_needed()
   texture_.need_update = false;
 }
 
-void BlenderGPUDisplay::vertex_buffer_update()
+void BlenderGPUDisplay::vertex_buffer_update(const GPUDisplayParams &params)
 {
   /* Invalidate old contents - avoids stalling if the buffer is still waiting in queue to be
    * rendered. */
@@ -684,23 +696,23 @@ void BlenderGPUDisplay::vertex_buffer_update()
 
   vpointer[0] = 0.0f;
   vpointer[1] = 0.0f;
-  vpointer[2] = params_.offset.x;
-  vpointer[3] = params_.offset.y;
+  vpointer[2] = params.offset.x;
+  vpointer[3] = params.offset.y;
 
   vpointer[4] = 1.0f;
   vpointer[5] = 0.0f;
-  vpointer[6] = (float)params_.size.x + params_.offset.x;
-  vpointer[7] = params_.offset.y;
+  vpointer[6] = (float)params.size.x + params.offset.x;
+  vpointer[7] = params.offset.y;
 
   vpointer[8] = 1.0f;
   vpointer[9] = 1.0f;
-  vpointer[10] = (float)params_.size.x + params_.offset.x;
-  vpointer[11] = (float)params_.size.y + params_.offset.y;
+  vpointer[10] = (float)params.size.x + params.offset.x;
+  vpointer[11] = (float)params.size.y + params.offset.y;
 
   vpointer[12] = 0.0f;
   vpointer[13] = 1.0f;
-  vpointer[14] = params_.offset.x;
-  vpointer[15] = (float)params_.size.y + params_.offset.y;
+  vpointer[14] = params.offset.x;
+  vpointer[15] = (float)params.size.y + params.offset.y;
 
   glUnmapBuffer(GL_ARRAY_BUFFER);
 }

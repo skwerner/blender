@@ -104,7 +104,9 @@ class BlenderGPUDisplay : public GPUDisplay {
   virtual void graphics_interop_deactivate() override;
 
  protected:
-  virtual bool do_update_begin(int texture_width, int texture_height) override;
+  virtual bool do_update_begin(const GPUDisplayParams &params,
+                               int texture_width,
+                               int texture_height) override;
   virtual void do_update_end() override;
 
   virtual void do_copy_pixels_to_texture(const half4 *rgba_pixels,
@@ -112,7 +114,7 @@ class BlenderGPUDisplay : public GPUDisplay {
                                          int texture_y,
                                          int pixels_width,
                                          int pixels_height) override;
-  virtual void do_draw() override;
+  virtual void do_draw(const GPUDisplayParams &params) override;
 
   virtual half4 *do_map_texture_buffer() override;
   virtual void do_unmap_texture_buffer() override;
@@ -144,7 +146,7 @@ class BlenderGPUDisplay : public GPUDisplay {
    * This buffer is used to render texture in the viewport.
    *
    * NOTE: The buffer needs to be bound. */
-  void vertex_buffer_update();
+  void vertex_buffer_update(const GPUDisplayParams &params);
 
   BL::RenderEngine b_engine_;
 

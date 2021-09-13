@@ -134,9 +134,6 @@ ccl_device void subsurface_shader_data_setup(INTEGRATOR_STATE_ARGS, ShaderData *
 ccl_device void subsurface_random_walk_remap(
     const float albedo, const float d, float g, float *sigma_t, float *alpha)
 {
-  /* Not well defined for negative anisotropy, just clamp for now. */
-  g = fmaxf(g, 0.0f);
-
   /* Compute attenuation and scattering coefficients from albedo. */
   const float g2 = g * g;
   const float g3 = g2 * g;

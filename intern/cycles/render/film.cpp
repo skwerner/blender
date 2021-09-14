@@ -508,7 +508,7 @@ void Film::update_passes(Scene *scene, bool add_sample_count_pass)
 
   const vector<Pass *> passes_immutable = scene->passes;
   for (const Pass *pass : passes_immutable) {
-    const PassInfo &info = pass->get_info();
+    const PassInfo info = pass->get_info();
     /* Add utility passes needed to generate some light passes. */
     if (info.divide_type != PASS_NONE) {
       add_auto_pass(scene, info.divide_type);

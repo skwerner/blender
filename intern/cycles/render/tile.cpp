@@ -53,7 +53,7 @@ static std::vector<std::string> exr_channel_names_for_passes(const vector<Pass *
       continue;
     }
 
-    const PassInfo &pass_info = pass->get_info();
+    const PassInfo pass_info = pass->get_info();
     num_channels += pass_info.num_components;
 
     /* EXR canonically expects first part of channel names to be sorted alphabetically, which is

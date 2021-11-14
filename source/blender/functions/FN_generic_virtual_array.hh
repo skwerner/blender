@@ -27,12 +27,19 @@
 
 #include "BLI_virtual_array.hh"
 
+#include "FN_generic_array.hh"
 #include "FN_generic_span.hh"
 
 namespace blender::fn {
 
 template<typename T> class GVArray_Typed;
 template<typename T> class GVMutableArray_Typed;
+
+class GVArray;
+class GVMutableArray;
+
+using GVArrayPtr = std::unique_ptr<GVArray>;
+using GVMutableArrayPtr = std::unique_ptr<GVMutableArray>;
 
 /* A generically typed version of `VArray<T>`. */
 class GVArray {
@@ -60,7 +67,7 @@ class GVArray {
 
   bool is_empty() const
   {
-    return size_;
+    return size_ == 0;
   }
 
   /* Copies the value at the given index into the provided storage. The `r_value` pointer is
@@ -117,17 +124,22 @@ class GVArray {
     BLI_assert(this->is_single());
     if (size_ == 1) {
       this->get(0, r_value);
+      return;
     }
     this->get_internal_single_impl(r_value);
   }
 
   /* Same as `get_internal_single`, but `r_value` points to initialized memory. */
-  void get_single_to_uninitialized(void *r_value) const
+  void get_internal_single_to_uninitialized(void *r_value) const
   {
-    type_->construct_default(r_value);
+    type_->default_construct(r_value);
     this->get_internal_single(r_value);
   }
 
+  void materialize(void *dst) const;
+  void materialize(const IndexMask mask, void *dst) const;
+
+  void materialize_to_uninitialized(void *dst) const;
   void materialize_to_uninitialized(const IndexMask mask, void *dst) const;
 
   template<typename T> const VArray<T> *try_get_internal_varray() const
@@ -142,6 +154,8 @@ class GVArray {
     return GVArray_Typed<T>(*this);
   }
 
+  GVArrayPtr shallow_copy() const;
+
  protected:
   virtual void get_impl(const int64_t index, void *r_value) const;
   virtual void get_to_uninitialized_impl(const int64_t index, void *r_value) const = 0;
@@ -151,6 +165,9 @@ class GVArray {
 
   virtual bool is_single_impl() const;
   virtual void get_internal_single_impl(void *UNUSED(r_value)) const;
+
+  virtual void materialize_impl(const IndexMask mask, void *dst) const;
+  virtual void materialize_to_uninitialized_impl(const IndexMask mask, void *dst) const;
 
   virtual const void *try_get_internal_varray_impl() const;
 };
@@ -204,16 +221,21 @@ class GVMutableArray : public GVArray {
 
   void fill(const void *value);
 
+  /* Copy the values from the source buffer to all elements in the virtual array. */
+  void set_all(const void *src)
+  {
+    this->set_all_impl(src);
+  }
+
  protected:
   virtual void set_by_copy_impl(const int64_t index, const void *value);
   virtual void set_by_relocate_impl(const int64_t index, void *value);
   virtual void set_by_move_impl(const int64_t index, void *value) = 0;
 
+  virtual void set_all_impl(const void *src);
+
   virtual void *try_get_internal_mutable_varray_impl();
 };
-
-using GVArrayPtr = std::unique_ptr<GVArray>;
-using GVMutableArrayPtr = std::unique_ptr<GVMutableArray>;
 
 class GVArray_For_GSpan : public GVArray {
  protected:
@@ -361,9 +383,29 @@ template<typename T> class GVArray_For_VArray : public GVArray {
     *(T *)r_value = varray_->get_internal_single();
   }
 
+  void materialize_impl(const IndexMask mask, void *dst) const override
+  {
+    varray_->materialize(mask, MutableSpan((T *)dst, mask.min_array_size()));
+  }
+
+  void materialize_to_uninitialized_impl(const IndexMask mask, void *dst) const override
+  {
+    varray_->materialize_to_uninitialized(mask, MutableSpan((T *)dst, mask.min_array_size()));
+  }
+
   const void *try_get_internal_varray_impl() const override
   {
     return varray_;
+  }
+};
+
+class GVArray_For_GArray : public GVArray_For_GSpan {
+ protected:
+  GArray<> array_;
+
+ public:
+  GVArray_For_GArray(GArray<> array) : GVArray_For_GSpan(array.as_span()), array_(std::move(array))
+  {
   }
 };
 
@@ -531,6 +573,21 @@ template<typename T> class GVMutableArray_For_VMutableArray : public GVMutableAr
     varray_->set(index, std::move(value_));
   }
 
+  void set_all_impl(const void *src) override
+  {
+    varray_->set_all(Span((T *)src, size_));
+  }
+
+  void materialize_impl(const IndexMask mask, void *dst) const override
+  {
+    varray_->materialize(mask, MutableSpan((T *)dst, mask.min_array_size()));
+  }
+
+  void materialize_to_uninitialized_impl(const IndexMask mask, void *dst) const override
+  {
+    varray_->materialize_to_uninitialized(mask, MutableSpan((T *)dst, mask.min_array_size()));
+  }
+
   const void *try_get_internal_varray_impl() const override
   {
     return (const VArray<T> *)varray_;
@@ -642,7 +699,7 @@ class GVArray_For_EmbeddedVArray : public GVArray_For_VArray<T> {
 
  public:
   template<typename... Args>
-  GVArray_For_EmbeddedVArray(const int64_t size, Args &&... args)
+  GVArray_For_EmbeddedVArray(const int64_t size, Args &&...args)
       : GVArray_For_VArray<T>(size), embedded_varray_(std::forward<Args>(args)...)
   {
     this->varray_ = &embedded_varray_;
@@ -657,7 +714,7 @@ class GVMutableArray_For_EmbeddedVMutableArray : public GVMutableArray_For_VMuta
 
  public:
   template<typename... Args>
-  GVMutableArray_For_EmbeddedVMutableArray(const int64_t size, Args &&... args)
+  GVMutableArray_For_EmbeddedVMutableArray(const int64_t size, Args &&...args)
       : GVMutableArray_For_VMutableArray<T>(size), embedded_varray_(std::forward<Args>(args)...)
   {
     this->varray_ = &embedded_varray_;
@@ -786,7 +843,7 @@ template<typename T> class GVArray_Typed {
   }
 
   /* Support implicit cast to the typed virtual array for convenience when `varray->typed<T>()` is
-   * used within an expression.  */
+   * used within an expression. */
   operator const VArray<T> &() const
   {
     return *varray_;
@@ -862,6 +919,52 @@ template<typename T> class GVMutableArray_Typed {
   int64_t size() const
   {
     return varray_->size();
+  }
+};
+
+class GVArray_For_SlicedGVArray : public GVArray {
+ protected:
+  const GVArray &varray_;
+  int64_t offset_;
+
+ public:
+  GVArray_For_SlicedGVArray(const GVArray &varray, const IndexRange slice)
+      : GVArray(varray.type(), slice.size()), varray_(varray), offset_(slice.start())
+  {
+    BLI_assert(slice.one_after_last() <= varray.size());
+  }
+
+  /* TODO: Add #materialize method. */
+  void get_impl(const int64_t index, void *r_value) const override;
+  void get_to_uninitialized_impl(const int64_t index, void *r_value) const override;
+};
+
+/**
+ * Utility class to create the "best" sliced virtual array.
+ */
+class GVArray_Slice {
+ private:
+  const GVArray *varray_;
+  /* Of these optional virtual arrays, at most one is constructed at any time. */
+  std::optional<GVArray_For_GSpan> varray_span_;
+  std::optional<GVArray_For_SlicedGVArray> varray_any_;
+
+ public:
+  GVArray_Slice(const GVArray &varray, const IndexRange slice);
+
+  const GVArray &operator*()
+  {
+    return *varray_;
+  }
+
+  const GVArray *operator->()
+  {
+    return varray_;
+  }
+
+  operator const GVArray &()
+  {
+    return *varray_;
   }
 };
 

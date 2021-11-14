@@ -85,9 +85,19 @@ enum {
    * freed ones).
    */
   ID_REMAP_FORCE_INTERNAL_RUNTIME_POINTERS = 1 << 7,
+  /** Force handling user count even for IDs that are outside of Main (used in some cases when
+   * dealing with IDs temporarily out of Main, but which will be put in it ultimately).
+   */
+  ID_REMAP_FORCE_USER_REFCOUNT = 1 << 8,
+  /**
+   * Force obdata pointers to also be processed, even when object (`id_owner`) is in Edit mode.
+   * This is required by some tools creating/deleting IDs while operating in Edit mode, like e.g.
+   * the 'separate' mesh operator.
+   */
+  ID_REMAP_FORCE_OBDATA_IN_EDITMODE = 1 << 9,
 };
 
-/* Note: Requiring new_id to be non-null, this *may* not be the case ultimately,
+/* NOTE: Requiring new_id to be non-null, this *may* not be the case ultimately,
  * but makes things simpler for now. */
 void BKE_libblock_remap_locked(struct Main *bmain,
                                void *old_idv,
@@ -107,7 +117,8 @@ void BKE_libblock_relink_ex(struct Main *bmain,
                             void *new_idv,
                             const short remap_flags) ATTR_NONNULL(1, 2);
 
-void BKE_libblock_relink_to_newid(struct ID *id) ATTR_NONNULL();
+void BKE_libblock_relink_to_newid(struct Main *bmain, struct ID *id, const int remap_flag)
+    ATTR_NONNULL();
 
 typedef void (*BKE_library_free_notifier_reference_cb)(const void *);
 typedef void (*BKE_library_remap_editor_id_reference_cb)(struct ID *, struct ID *);

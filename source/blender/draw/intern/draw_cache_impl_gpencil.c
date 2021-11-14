@@ -301,7 +301,7 @@ static void gpencil_buffer_add_point(gpStrokeVert *verts,
                                      int v,
                                      bool is_endpoint)
 {
-  /* Note: we use the sign of strength and thickness to pass cap flag. */
+  /* NOTE: we use the sign of strength and thickness to pass cap flag. */
   const bool round_cap0 = (gps->caps[0] == GP_STROKE_CAP_ROUND);
   const bool round_cap1 = (gps->caps[1] == GP_STROKE_CAP_ROUND);
   gpStrokeVert *vert = &verts[v];
@@ -405,7 +405,7 @@ static void gpencil_batches_ensure(Object *ob, GpencilBatchCache *cache, int cfr
   if (cache->vbo == NULL) {
     /* Should be discarded together. */
     BLI_assert(cache->vbo == NULL && cache->ibo == NULL);
-    BLI_assert(cache->stroke_batch == NULL && cache->stroke_batch == NULL);
+    BLI_assert(cache->fill_batch == NULL && cache->stroke_batch == NULL);
     /* TODO/PERF: Could be changed to only do it if needed.
      * For now it's simpler to assume we always need it
      * since multiple viewport could or could not need it.
@@ -422,7 +422,7 @@ static void gpencil_batches_ensure(Object *ob, GpencilBatchCache *cache, int cfr
         .tri_len = 0,
         .curve_len = 0,
     };
-    BKE_gpencil_visible_stroke_iter(
+    BKE_gpencil_visible_stroke_advanced_iter(
         NULL, ob, NULL, gpencil_object_verts_count_cb, &iter, do_onion, cfra);
 
     /* Create VBOs. */
@@ -439,12 +439,15 @@ static void gpencil_batches_ensure(Object *ob, GpencilBatchCache *cache, int cfr
     GPU_indexbuf_init(&iter.ibo, GPU_PRIM_TRIS, iter.tri_len, iter.vert_len);
 
     /* Fill buffers with data. */
-    BKE_gpencil_visible_stroke_iter(NULL, ob, NULL, gpencil_stroke_iter_cb, &iter, do_onion, cfra);
+    BKE_gpencil_visible_stroke_advanced_iter(
+        NULL, ob, NULL, gpencil_stroke_iter_cb, &iter, do_onion, cfra);
 
     /* Mark last 2 verts as invalid. */
     for (int i = 0; i < 2; i++) {
       iter.verts[iter.vert_len + i].mat = -1;
     }
+    /* Also mark first vert as invalid. */
+    iter.verts[0].mat = -1;
 
     /* Finish the IBO. */
     cache->ibo = GPU_indexbuf_build(&iter.ibo);
@@ -514,7 +517,7 @@ GPUBatch *DRW_cache_gpencil_face_wireframe_get(Object *ob)
 
     /* IMPORTANT: Keep in sync with gpencil_edit_batches_ensure() */
     bool do_onion = true;
-    BKE_gpencil_visible_stroke_iter(
+    BKE_gpencil_visible_stroke_advanced_iter(
         NULL, ob, NULL, gpencil_lines_indices_cb, &iter, do_onion, cfra);
 
     GPUIndexBuf *ibo = GPU_indexbuf_build(&iter.ibo);
@@ -551,6 +554,9 @@ bGPDstroke *DRW_cache_gpencil_sbuffer_stroke_data_get(Object *ob)
     gps->caps[0] = gps->caps[1] = GP_STROKE_CAP_ROUND;
     gps->runtime.stroke_start = 1; /* Add one for the adjacency index. */
     copy_v4_v4(gps->vert_color_fill, gpd->runtime.vert_color_fill);
+    /* Caps. */
+    gps->caps[0] = gps->caps[1] = (short)brush->gpencil_settings->caps_type;
+
     gpd->runtime.sbuffer_gps = gps;
   }
   return gpd->runtime.sbuffer_gps;
@@ -843,8 +849,8 @@ static void gpencil_edit_batches_ensure(Object *ob, GpencilBatchCache *cache, in
     int vert_len = GPU_vertbuf_get_vertex_len(cache->vbo);
 
     gpEditIterData iter;
-    iter.vgindex = ob->actdef - 1;
-    if (!BLI_findlink(&ob->defbase, iter.vgindex)) {
+    iter.vgindex = gpd->vertex_group_active_index - 1;
+    if (!BLI_findlink(&gpd->vertex_group_names, iter.vgindex)) {
       iter.vgindex = -1;
     }
 
@@ -856,7 +862,7 @@ static void gpencil_edit_batches_ensure(Object *ob, GpencilBatchCache *cache, in
     iter.verts = (gpEditVert *)GPU_vertbuf_get_data(cache->edit_vbo);
 
     /* Fill buffers with data. */
-    BKE_gpencil_visible_stroke_iter(
+    BKE_gpencil_visible_stroke_advanced_iter(
         NULL, ob, NULL, gpencil_edit_stroke_iter_cb, &iter, do_onion, cfra);
 
     /* Create the batches */
@@ -883,7 +889,7 @@ static void gpencil_edit_batches_ensure(Object *ob, GpencilBatchCache *cache, in
     cache->edit_curve_vbo = GPU_vertbuf_create_with_format(format);
 
     /* Count data. */
-    BKE_gpencil_visible_stroke_iter(
+    BKE_gpencil_visible_stroke_advanced_iter(
         NULL, ob, NULL, gpencil_edit_curve_stroke_count_cb, &iterdata, false, cfra);
 
     gpEditCurveIterData iter;
@@ -894,7 +900,7 @@ static void gpencil_edit_batches_ensure(Object *ob, GpencilBatchCache *cache, in
       iter.verts = (gpEditCurveVert *)GPU_vertbuf_get_data(cache->edit_curve_vbo);
 
       /* Fill buffers with data. */
-      BKE_gpencil_visible_stroke_iter(
+      BKE_gpencil_visible_stroke_advanced_iter(
           NULL, ob, NULL, gpencil_edit_curve_stroke_iter_cb, &iter, false, cfra);
 
       cache->edit_curve_handles_batch = GPU_batch_create(

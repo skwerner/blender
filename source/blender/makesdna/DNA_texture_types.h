@@ -54,10 +54,10 @@ typedef struct MTex {
   float ofs[3], size[3], rot, random_angle;
 
   char _pad0[2];
-  short colormodel, pmapto, pmaptoneg;
+  short colormodel;
   short normapspace, which_output;
   float r, g, b, k;
-  float def_var, rt;
+  float def_var;
 
   /* common */
   float colfac, varfac;
@@ -128,9 +128,9 @@ typedef struct PointDensity {
   struct Object *object;
   /** `index + 1` in ob.particlesystem, non-ID pointer not allowed */
   int psys;
-  /** cache points in worldspace, object space, ... ? */
+  /** cache points in world-space, object space, ... ? */
   short psys_cache_space;
-  /** cache points in worldspace, object space, ... ? */
+  /** cache points in world-space, object space, ... ? */
   short ob_cache_space;
   /** vertex attribute layer for color source, MAX_CUSTOMDATA_LAYER_NAME */
   char vertex_attribute_name[64];
@@ -218,10 +218,12 @@ typedef struct Tex {
 
 } Tex;
 
-/* used for mapping and texture nodes. note: rot is now in radians */
-
+/** Used for mapping and texture nodes. */
 typedef struct TexMapping {
-  float loc[3], rot[3], size[3];
+  float loc[3];
+  /** Rotation in radians. */
+  float rot[3];
+  float size[3];
   int flag;
   char projx, projy, projz, mapping;
   int type;

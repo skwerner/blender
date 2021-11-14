@@ -291,12 +291,18 @@ class MATERIAL_PT_lineart(MaterialButtonsPanel, Panel):
         mat = context.material
         lineart = mat.lineart
 
-        layout.prop(lineart, "use_transparency")
+        layout.prop(lineart, "use_material_mask", text="Material Mask")
 
-        row = layout.row(align=True, heading="Masks")
-        row.active = lineart.use_transparency
+        col = layout.column(align=True)
+        col.active = lineart.use_material_mask
+        row = col.row(align=True, heading="Masks")
         for i in range(8):
-            row.prop(lineart, "use_transparency_mask", text=str(i), index=i, toggle=True)
+            row.prop(lineart, "use_material_mask_bits", text=" ", index=i, toggle=True)
+            if i == 3:
+                row = col.row(align=True)
+
+        row = layout.row(align=True, heading="Custom Occlusion")
+        row.prop(lineart, "mat_occlusion", text="Levels")
 
 
 classes = (

@@ -383,6 +383,7 @@ class BUILTIN_KSI_Available(KeyingSetInfo):
 
 ###############################
 
+
 class WholeCharacterMixin:
     # these prefixes should be avoided, as they are not really bones
     # that animators should be touching (or need to touch)
@@ -522,17 +523,13 @@ class WholeCharacterMixin:
 
         # go over all custom properties for bone
         for prop in bone.keys():
-            # ignore special "_RNA_UI" used for UI editing
-            if prop == "_RNA_UI":
-                continue
-
             # for now, just add all of 'em
             prop_rna = type(bone).bl_rna.properties.get(prop, None)
             if prop_rna is None:
                 prop_path = '["%s"]' % bpy.utils.escape_identifier(prop)
                 try:
                     rna_property = bone.path_resolve(prop_path, False)
-                except ValueError as ex:
+                except ValueError:
                     # This happens when a custom property is set to None. In that case it cannot
                     # be converted to an FCurve-compatible value, so we can't keyframe it anyway.
                     continue
@@ -582,7 +579,7 @@ class BUILTIN_KSI_DeltaLocation(KeyingSetInfo):
     iterator = keyingsets_utils.RKS_ITER_selected_objects
 
     # generator - delta location channels only
-    def generate(self, context, ks, data):
+    def generate(self, _context, ks, data):
         # get id-block and path info
         id_block, base_path, grouping = keyingsets_utils.get_transform_generators_base_info(data)
 
@@ -608,7 +605,7 @@ class BUILTIN_KSI_DeltaRotation(KeyingSetInfo):
     iterator = keyingsets_utils.RKS_ITER_selected_objects
 
     # generator - delta location channels only
-    def generate(self, context, ks, data):
+    def generate(self, _context, ks, data):
         # get id-block and path info
         id_block, base_path, grouping = keyingsets_utils.get_transform_generators_base_info(data)
 
@@ -642,7 +639,7 @@ class BUILTIN_KSI_DeltaScale(KeyingSetInfo):
     iterator = keyingsets_utils.RKS_ITER_selected_objects
 
     # generator - delta location channels only
-    def generate(self, context, ks, data):
+    def generate(self, _context, ks, data):
         # get id-block and path info
         id_block, base_path, grouping = keyingsets_utils.get_transform_generators_base_info(data)
 

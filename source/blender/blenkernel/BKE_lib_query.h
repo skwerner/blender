@@ -70,12 +70,15 @@ enum {
   /** That ID is used as library override's reference by its owner. */
   IDWALK_CB_OVERRIDE_LIBRARY_REFERENCE = (1 << 5),
 
+  /** That ID pointer is not overridable. */
+  IDWALK_CB_OVERRIDE_LIBRARY_NOT_OVERRIDABLE = (1 << 6),
+
   /**
    * Indicates that this is an internal runtime ID pointer, like e.g. `ID.newid` or `ID.original`.
    * \note Those should be ignored in most cases, and won't be processed/generated anyway unless
    * `IDWALK_DO_INTERNAL_RUNTIME_POINTERS` option is enabled.
    */
-  IDWALK_CB_INTERNAL = (1 << 6),
+  IDWALK_CB_INTERNAL = (1 << 7),
 
   /**
    * This ID usage is fully refcounted.
@@ -140,7 +143,8 @@ enum {
 
 typedef struct LibraryForeachIDData LibraryForeachIDData;
 
-bool BKE_lib_query_foreachid_process(struct LibraryForeachIDData *data,
+bool BKE_lib_query_foreachid_iter_stop(struct LibraryForeachIDData *data);
+void BKE_lib_query_foreachid_process(struct LibraryForeachIDData *data,
                                      struct ID **id_pp,
                                      int cb_flag);
 int BKE_lib_query_foreachid_process_flags_get(struct LibraryForeachIDData *data);
@@ -151,22 +155,33 @@ int BKE_lib_query_foreachid_process_callback_flag_override(struct LibraryForeach
 #define BKE_LIB_FOREACHID_PROCESS_ID(_data, _id, _cb_flag) \
   { \
     CHECK_TYPE_ANY((_id), ID *, void *); \
-    if (!BKE_lib_query_foreachid_process((_data), (ID **)&(_id), (_cb_flag))) { \
+    BKE_lib_query_foreachid_process((_data), (ID **)&(_id), (_cb_flag)); \
+    if (BKE_lib_query_foreachid_iter_stop((_data))) { \
       return; \
     } \
   } \
   ((void)0)
 
-#define BKE_LIB_FOREACHID_PROCESS(_data, _id_super, _cb_flag) \
+#define BKE_LIB_FOREACHID_PROCESS_IDSUPER(_data, _id_super, _cb_flag) \
   { \
     CHECK_TYPE(&((_id_super)->id), ID *); \
-    if (!BKE_lib_query_foreachid_process((_data), (ID **)&(_id_super), (_cb_flag))) { \
+    BKE_lib_query_foreachid_process((_data), (ID **)&(_id_super), (_cb_flag)); \
+    if (BKE_lib_query_foreachid_iter_stop((_data))) { \
       return; \
     } \
   } \
   ((void)0)
 
-bool BKE_library_foreach_ID_embedded(struct LibraryForeachIDData *data, struct ID **id_pp);
+#define BKE_LIB_FOREACHID_PROCESS_FUNCTION_CALL(_data, _func_call) \
+  { \
+    _func_call; \
+    if (BKE_lib_query_foreachid_iter_stop((_data))) { \
+      return; \
+    } \
+  } \
+  ((void)0)
+
+void BKE_library_foreach_ID_embedded(struct LibraryForeachIDData *data, struct ID **id_pp);
 void BKE_lib_query_idpropertiesForeachIDLink_callback(struct IDProperty *id_prop, void *user_data);
 
 /* Loop over all of the ID's this datablock links to. */

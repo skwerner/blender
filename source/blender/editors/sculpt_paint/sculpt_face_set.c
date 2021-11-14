@@ -949,10 +949,6 @@ static int sculpt_face_sets_change_visibility_exec(bContext *C, wmOperator *op)
 
   MEM_SAFE_FREE(nodes);
 
-  if (BKE_pbvh_type(pbvh) == PBVH_FACES) {
-    BKE_mesh_flush_hidden_from_verts(ob->data);
-  }
-
   SCULPT_tag_update_overlays(C);
 
   return OPERATOR_FINISHED;
@@ -1237,7 +1233,7 @@ static void sculpt_face_set_edit_fair_face_set(Object *ob,
   const int totvert = SCULPT_vertex_count_get(ss);
 
   Mesh *mesh = ob->data;
-  bool *fair_vertices = MEM_malloc_arrayN(sizeof(bool), totvert, "fair vertices");
+  bool *fair_vertices = MEM_malloc_arrayN(totvert, sizeof(bool), "fair vertices");
 
   SCULPT_boundary_info_ensure(ob);
 

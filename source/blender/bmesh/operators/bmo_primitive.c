@@ -788,7 +788,7 @@ void bmo_create_grid_exec(BMesh *bm, BMOperator *op)
 }
 
 /**
- * Fills first available UVmap with grid-like UVs for all faces OpFlag-ged by given flag.
+ * Fills first available UV-map with grid-like UV's for all faces with `oflag` set.
  *
  * \param bm: The BMesh to operate on
  * \param x_segments: The x-resolution of the grid
@@ -854,7 +854,7 @@ void BM_mesh_calc_uvs_grid(BMesh *bm,
 
 void bmo_create_uvsphere_exec(BMesh *bm, BMOperator *op)
 {
-  const float dia = BMO_slot_float_get(op->slots_in, "diameter");
+  const float rad = BMO_slot_float_get(op->slots_in, "radius");
   const int seg = BMO_slot_int_get(op->slots_in, "u_segments");
   const int tot = BMO_slot_int_get(op->slots_in, "v_segments");
 
@@ -867,22 +867,22 @@ void bmo_create_uvsphere_exec(BMesh *bm, BMOperator *op)
   BMIter iter;
   const float axis[3] = {0, 0, 1};
   float vec[3], mat[4][4], cmat[3][3];
-  float phi, phid;
   int a;
 
   BMO_slot_mat4_get(op->slots_in, "matrix", mat);
 
-  phid = 2.0f * (float)M_PI / tot;
+  const float phid = (float)M_PI / tot;
   /* phi = 0.25f * (float)M_PI; */ /* UNUSED */
 
   /* one segment first */
-  phi = 0;
-  phid /= 2;
   for (a = 0; a <= tot; a++) {
     /* Going in this direction, then edge extruding, makes normals face outward */
+    /* Calculate with doubles for higher precision, see: T87779. */
+    const float phi = M_PI * ((double)a / (double)tot);
+
     vec[0] = 0.0;
-    vec[1] = dia * sinf(phi);
-    vec[2] = dia * cosf(phi);
+    vec[1] = rad * sinf(phi);
+    vec[2] = rad * cosf(phi);
     eve = BM_vert_create(bm, vec, NULL, BM_CREATE_NOP);
     BMO_vert_flag_enable(bm, eve, VERT_MARK);
 
@@ -891,7 +891,6 @@ void bmo_create_uvsphere_exec(BMesh *bm, BMOperator *op)
       BMO_edge_flag_enable(bm, e, EDGE_ORIG);
     }
 
-    phi += phid;
     preveve = eve;
   }
 
@@ -922,12 +921,12 @@ void bmo_create_uvsphere_exec(BMesh *bm, BMOperator *op)
   {
     float len, len2, vec2[3];
 
-    len = 2 * dia * sinf(phid / 2.0f);
+    len = 2 * rad * sinf(phid / 2.0f);
 
     /* Length of one segment in shortest parallel. */
-    vec[0] = dia * sinf(phid);
+    vec[0] = rad * sinf(phid);
     vec[1] = 0.0f;
-    vec[2] = dia * cosf(phid);
+    vec[2] = rad * cosf(phid);
 
     mul_v3_m3v3(vec2, cmat, vec);
     len2 = len_v3v3(vec, vec2);
@@ -974,8 +973,8 @@ void bmo_create_uvsphere_exec(BMesh *bm, BMOperator *op)
 
 void bmo_create_icosphere_exec(BMesh *bm, BMOperator *op)
 {
-  const float dia = BMO_slot_float_get(op->slots_in, "diameter");
-  const float dia_div = dia / 200.0f;
+  const float rad = BMO_slot_float_get(op->slots_in, "radius");
+  const float rad_div = rad / 200.0f;
   const int subdiv = BMO_slot_int_get(op->slots_in, "subdivisions");
 
   const int cd_loop_uv_offset = CustomData_get_offset(&bm->ldata, CD_MLOOPUV);
@@ -995,9 +994,9 @@ void bmo_create_icosphere_exec(BMesh *bm, BMOperator *op)
   /* phi = 0.25f * (float)M_PI; */          /* UNUSED */
 
   for (a = 0; a < 12; a++) {
-    vec[0] = dia_div * icovert[a][0];
-    vec[1] = dia_div * icovert[a][1];
-    vec[2] = dia_div * icovert[a][2];
+    vec[0] = rad_div * icovert[a][0];
+    vec[1] = rad_div * icovert[a][1];
+    vec[2] = rad_div * icovert[a][2];
     eva[a] = BM_vert_create(bm, vec, NULL, BM_CREATE_NOP);
 
     BMO_vert_flag_enable(bm, eva[a], VERT_MARK);
@@ -1042,7 +1041,7 @@ void bmo_create_icosphere_exec(BMesh *bm, BMOperator *op)
                  "cuts=%i "
                  "use_grid_fill=%b use_sphere=%b",
                  EDGE_MARK,
-                 dia,
+                 rad,
                  (1 << (subdiv - 1)) - 1,
                  true,
                  true);
@@ -1132,7 +1131,7 @@ static void bm_mesh_calc_uvs_sphere_face(BMFace *f, const int cd_loop_uv_offset)
 }
 
 /**
- * Fills first available UVmap with spherical projected UVs for all faces OpFlag-ged by given flag.
+ * Fills first available UV-map with spherical projected UVs for all faces with `oflag` set.
  *
  * \param bm: The BMesh to operate on
  * \param oflag: The flag to check faces with.
@@ -1272,7 +1271,7 @@ void bmo_create_circle_exec(BMesh *bm, BMOperator *op)
   const bool calc_uvs = (cd_loop_uv_offset != -1) && BMO_slot_bool_get(op->slots_in, "calc_uvs");
 
   BMVert *v1, *lastv1 = NULL, *cent1, *firstv1 = NULL;
-  float vec[3], mat[4][4], phi, phid;
+  float vec[3], mat[4][4];
   int a;
 
   if (!segs) {
@@ -1280,9 +1279,6 @@ void bmo_create_circle_exec(BMesh *bm, BMOperator *op)
   }
 
   BMO_slot_mat4_get(op->slots_in, "matrix", mat);
-
-  phid = 2.0f * (float)M_PI / segs;
-  phi = 0;
 
   if (cap_ends) {
     zero_v3(vec);
@@ -1292,8 +1288,11 @@ void bmo_create_circle_exec(BMesh *bm, BMOperator *op)
     BMO_vert_flag_enable(bm, cent1, VERT_MARK);
   }
 
-  for (a = 0; a < segs; a++, phi += phid) {
+  for (a = 0; a < segs; a++) {
     /* Going this way ends up with normal(s) upward */
+
+    /* Calculate with doubles for higher precision, see: T87779. */
+    const float phi = (2.0 * M_PI) * ((double)a / (double)segs);
     vec[0] = -radius * sinf(phi);
     vec[1] = radius * cosf(phi);
     vec[2] = 0.0f;
@@ -1345,7 +1344,7 @@ void bmo_create_circle_exec(BMesh *bm, BMOperator *op)
 }
 
 /**
- * Fills first available UVmap with 2D projected UVs for all faces OpFlag-ged by given flag.
+ * Fills first available UV-map with 2D projected UVs for all faces with `oflag` set.
  *
  * \param bm: The BMesh to operate on.
  * \param mat: The transform matrix applied to the created circle.
@@ -1392,9 +1391,9 @@ void bmo_create_cone_exec(BMesh *bm, BMOperator *op)
 {
   BMVert *v1, *v2, *lastv1 = NULL, *lastv2 = NULL, *cent1, *cent2, *firstv1, *firstv2;
   BMFace *f;
-  float vec[3], mat[4][4], phi, phid;
-  const float dia1 = BMO_slot_float_get(op->slots_in, "diameter1");
-  const float dia2 = BMO_slot_float_get(op->slots_in, "diameter2");
+  float vec[3], mat[4][4];
+  const float rad1 = BMO_slot_float_get(op->slots_in, "radius1");
+  const float rad2 = BMO_slot_float_get(op->slots_in, "radius2");
   const float depth_half = 0.5f * BMO_slot_float_get(op->slots_in, "depth");
   int segs = BMO_slot_int_get(op->slots_in, "segments");
   const bool cap_ends = BMO_slot_bool_get(op->slots_in, "cap_ends");
@@ -1408,9 +1407,6 @@ void bmo_create_cone_exec(BMesh *bm, BMOperator *op)
   }
 
   BMO_slot_mat4_get(op->slots_in, "matrix", mat);
-
-  phid = 2.0f * (float)M_PI / segs;
-  phi = 0;
 
   if (cap_ends) {
     vec[0] = vec[1] = 0.0f;
@@ -1432,15 +1428,17 @@ void bmo_create_cone_exec(BMesh *bm, BMOperator *op)
   const int side_faces_len = segs - 1;
   BMFace **side_faces = MEM_mallocN(sizeof(*side_faces) * side_faces_len, __func__);
 
-  for (int i = 0; i < segs; i++, phi += phid) {
-    vec[0] = dia1 * sinf(phi);
-    vec[1] = dia1 * cosf(phi);
+  for (int i = 0; i < segs; i++) {
+    /* Calculate with doubles for higher precision, see: T87779. */
+    const float phi = (2.0 * M_PI) * ((double)i / (double)segs);
+    vec[0] = rad1 * sinf(phi);
+    vec[1] = rad1 * cosf(phi);
     vec[2] = -depth_half;
     mul_m4_v3(mat, vec);
     v1 = BM_vert_create(bm, vec, NULL, BM_CREATE_NOP);
 
-    vec[0] = dia2 * sinf(phi);
-    vec[1] = dia2 * cosf(phi);
+    vec[0] = rad2 * sinf(phi);
+    vec[1] = rad2 * cosf(phi);
     vec[2] = depth_half;
     mul_m4_v3(mat, vec);
     v2 = BM_vert_create(bm, vec, NULL, BM_CREATE_NOP);
@@ -1498,11 +1496,11 @@ void bmo_create_cone_exec(BMesh *bm, BMOperator *op)
   }
 
   if (calc_uvs) {
-    BM_mesh_calc_uvs_cone(bm, mat, dia2, dia1, segs, cap_ends, FACE_MARK, cd_loop_uv_offset);
+    BM_mesh_calc_uvs_cone(bm, mat, rad2, rad1, segs, cap_ends, FACE_MARK, cd_loop_uv_offset);
   }
 
   /* Collapse vertices at the first end. */
-  if (dia1 == 0.0f) {
+  if (rad1 == 0.0f) {
     if (cap_ends) {
       BM_vert_kill(bm, cent1);
     }
@@ -1514,7 +1512,7 @@ void bmo_create_cone_exec(BMesh *bm, BMOperator *op)
   }
 
   /* Collapse vertices at the second end. */
-  if (dia2 == 0.0f) {
+  if (rad2 == 0.0f) {
     if (cap_ends) {
       BM_vert_kill(bm, cent2);
     }
@@ -1537,7 +1535,7 @@ void bmo_create_cone_exec(BMesh *bm, BMOperator *op)
 }
 
 /**
- * Fills first available UVmap with cylinder/cone-like UVs for all faces OpFlag-ged by given flag.
+ * Fills first available UV-map with cylinder/cone-like UVs for all faces with `oflag` set.
  *
  * \param bm: The BMesh to operate on.
  * \param mat: The transform matrix applied to the created cone/cylinder.
@@ -1713,7 +1711,7 @@ void bmo_create_cube_exec(BMesh *bm, BMOperator *op)
 }
 
 /**
- * Fills first available UVmap with cube-like UVs for all faces OpFlag-ged by given flag.
+ * Fills first available UV-map with cube-like UVs for all faces with `oflag` set.
  *
  * \note Expects tagged faces to be six quads.
  * \note Caller must order faces for correct alignment.

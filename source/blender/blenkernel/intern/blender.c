@@ -90,7 +90,6 @@ void BKE_blender_free(void)
 
   IMB_exit();
   BKE_cachefiles_exit();
-  BKE_images_exit();
   DEG_free_node_types();
 
   BKE_brush_system_exit();
@@ -127,7 +126,7 @@ static void blender_version_init(void)
     version_cycle = "";
   }
   else {
-    BLI_assert(!"Invalid Blender version cycle");
+    BLI_assert_msg(0, "Invalid Blender version cycle");
   }
 
   BLI_snprintf(blender_version_string,
@@ -362,7 +361,9 @@ void BKE_blender_userdef_app_template_data_swap(UserDef *userdef_a, UserDef *use
   DATA_SWAP(app_flag);
 
   /* We could add others. */
-  FLAG_SWAP(uiflag, int, USER_SAVE_PROMPT);
+  FLAG_SWAP(uiflag, int, USER_SAVE_PROMPT | USER_SPLASH_DISABLE | USER_SHOW_GIZMO_NAVIGATE);
+
+  DATA_SWAP(ui_scale);
 
 #undef SWAP_TYPELESS
 #undef DATA_SWAP

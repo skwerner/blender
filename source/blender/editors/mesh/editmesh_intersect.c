@@ -116,8 +116,12 @@ static void edbm_intersect_select(BMEditMesh *em, struct Mesh *me, bool do_selec
     }
   }
 
-  EDBM_mesh_normals_update(em);
-  EDBM_update_generic(me, true, true);
+  EDBM_update(me,
+              &(const struct EDBMUpdate_Params){
+                  .calc_looptri = true,
+                  .calc_normals = true,
+                  .is_destructive = true,
+              });
 }
 
 /* -------------------------------------------------------------------- */
@@ -476,7 +480,8 @@ void MESH_OT_intersect_boolean(struct wmOperatorType *ot)
                   false,
                   "Swap",
                   "Use with difference intersection to swap which side is kept");
-  RNA_def_boolean(ot->srna, "use_self", false, "Self", "Do self-union or self-intersection");
+  RNA_def_boolean(
+      ot->srna, "use_self", false, "Self Intersection", "Do self-union or self-intersection");
   RNA_def_float_distance(
       ot->srna, "threshold", 0.000001f, 0.0, 0.01, "Merge Threshold", "", 0.0, 0.001);
   RNA_def_enum(ot->srna,
@@ -963,8 +968,12 @@ static int edbm_face_split_by_edges_exec(bContext *C, wmOperator *UNUSED(op))
     }
 #endif
 
-    EDBM_mesh_normals_update(em);
-    EDBM_update_generic(obedit->data, true, true);
+    EDBM_update(obedit->data,
+                &(const struct EDBMUpdate_Params){
+                    .calc_looptri = true,
+                    .calc_normals = true,
+                    .is_destructive = true,
+                });
 
 #ifdef USE_NET_ISLAND_CONNECT
     /* we may have remaining isolated regions remaining,
@@ -1068,8 +1077,12 @@ static int edbm_face_split_by_edges_exec(bContext *C, wmOperator *UNUSED(op))
 
       BLI_ghash_free(face_edge_map, NULL, NULL);
 
-      EDBM_mesh_normals_update(em);
-      EDBM_update_generic(obedit->data, true, true);
+      EDBM_update(obedit->data,
+                  &(const struct EDBMUpdate_Params){
+                      .calc_looptri = true,
+                      .calc_normals = true,
+                      .is_destructive = true,
+                  });
     }
 
     BLI_stack_free(edges_loose);

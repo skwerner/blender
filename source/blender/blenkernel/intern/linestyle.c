@@ -155,12 +155,14 @@ static void linestyle_foreach_id(ID *id, LibraryForeachIDData *data)
 
   for (int i = 0; i < MAX_MTEX; i++) {
     if (linestyle->mtex[i]) {
-      BKE_texture_mtex_foreach_id(data, linestyle->mtex[i]);
+      BKE_LIB_FOREACHID_PROCESS_FUNCTION_CALL(
+          data, BKE_texture_mtex_foreach_id(data, linestyle->mtex[i]));
     }
   }
   if (linestyle->nodetree) {
     /* nodetree **are owned by IDs**, treat them as mere sub-data and not real ID! */
-    BKE_library_foreach_ID_embedded(data, (ID **)&linestyle->nodetree);
+    BKE_LIB_FOREACHID_PROCESS_FUNCTION_CALL(
+        data, BKE_library_foreach_ID_embedded(data, (ID **)&linestyle->nodetree));
   }
 
   LISTBASE_FOREACH (LineStyleModifier *, lsm, &linestyle->color_modifiers) {
@@ -168,7 +170,7 @@ static void linestyle_foreach_id(ID *id, LibraryForeachIDData *data)
       LineStyleColorModifier_DistanceFromObject *p = (LineStyleColorModifier_DistanceFromObject *)
           lsm;
       if (p->target) {
-        BKE_LIB_FOREACHID_PROCESS(data, p->target, IDWALK_CB_NOP);
+        BKE_LIB_FOREACHID_PROCESS_IDSUPER(data, p->target, IDWALK_CB_NOP);
       }
     }
   }
@@ -177,7 +179,7 @@ static void linestyle_foreach_id(ID *id, LibraryForeachIDData *data)
       LineStyleAlphaModifier_DistanceFromObject *p = (LineStyleAlphaModifier_DistanceFromObject *)
           lsm;
       if (p->target) {
-        BKE_LIB_FOREACHID_PROCESS(data, p->target, IDWALK_CB_NOP);
+        BKE_LIB_FOREACHID_PROCESS_IDSUPER(data, p->target, IDWALK_CB_NOP);
       }
     }
   }
@@ -186,7 +188,7 @@ static void linestyle_foreach_id(ID *id, LibraryForeachIDData *data)
       LineStyleThicknessModifier_DistanceFromObject *p =
           (LineStyleThicknessModifier_DistanceFromObject *)lsm;
       if (p->target) {
-        BKE_LIB_FOREACHID_PROCESS(data, p->target, IDWALK_CB_NOP);
+        BKE_LIB_FOREACHID_PROCESS_IDSUPER(data, p->target, IDWALK_CB_NOP);
       }
     }
   }
@@ -457,27 +459,26 @@ static void write_linestyle_geometry_modifiers(BlendWriter *writer, ListBase *mo
 static void linestyle_blend_write(BlendWriter *writer, ID *id, const void *id_address)
 {
   FreestyleLineStyle *linestyle = (FreestyleLineStyle *)id;
-  if (linestyle->id.us > 0 || BLO_write_is_undo(writer)) {
-    BLO_write_id_struct(writer, FreestyleLineStyle, id_address, &linestyle->id);
-    BKE_id_blend_write(writer, &linestyle->id);
 
-    if (linestyle->adt) {
-      BKE_animdata_blend_write(writer, linestyle->adt);
-    }
+  BLO_write_id_struct(writer, FreestyleLineStyle, id_address, &linestyle->id);
+  BKE_id_blend_write(writer, &linestyle->id);
 
-    write_linestyle_color_modifiers(writer, &linestyle->color_modifiers);
-    write_linestyle_alpha_modifiers(writer, &linestyle->alpha_modifiers);
-    write_linestyle_thickness_modifiers(writer, &linestyle->thickness_modifiers);
-    write_linestyle_geometry_modifiers(writer, &linestyle->geometry_modifiers);
-    for (int a = 0; a < MAX_MTEX; a++) {
-      if (linestyle->mtex[a]) {
-        BLO_write_struct(writer, MTex, linestyle->mtex[a]);
-      }
+  if (linestyle->adt) {
+    BKE_animdata_blend_write(writer, linestyle->adt);
+  }
+
+  write_linestyle_color_modifiers(writer, &linestyle->color_modifiers);
+  write_linestyle_alpha_modifiers(writer, &linestyle->alpha_modifiers);
+  write_linestyle_thickness_modifiers(writer, &linestyle->thickness_modifiers);
+  write_linestyle_geometry_modifiers(writer, &linestyle->geometry_modifiers);
+  for (int a = 0; a < MAX_MTEX; a++) {
+    if (linestyle->mtex[a]) {
+      BLO_write_struct(writer, MTex, linestyle->mtex[a]);
     }
-    if (linestyle->nodetree) {
-      BLO_write_struct(writer, bNodeTree, linestyle->nodetree);
-      ntreeBlendWrite(writer, linestyle->nodetree);
-    }
+  }
+  if (linestyle->nodetree) {
+    BLO_write_struct(writer, bNodeTree, linestyle->nodetree);
+    ntreeBlendWrite(writer, linestyle->nodetree);
   }
 }
 
@@ -752,7 +753,7 @@ IDTypeInfo IDType_ID_LS = {
     .name = "FreestyleLineStyle",
     .name_plural = "linestyles",
     .translation_context = BLT_I18NCONTEXT_ID_FREESTYLELINESTYLE,
-    .flags = 0,
+    .flags = IDTYPE_FLAGS_APPEND_IS_REUSABLE,
 
     .init_data = linestyle_init_data,
     .copy_data = linestyle_copy_data,

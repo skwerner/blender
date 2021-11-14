@@ -156,10 +156,9 @@ def bake_action_iter(
     # Note: BBONE_PROPS is a list so we can preserve the ordering
     BBONE_PROPS = [
         'bbone_curveinx', 'bbone_curveoutx',
-        'bbone_curveiny', 'bbone_curveouty',
+        'bbone_curveinz', 'bbone_curveoutz',
         'bbone_rollin', 'bbone_rollout',
-        'bbone_scaleinx', 'bbone_scaleoutx',
-        'bbone_scaleiny', 'bbone_scaleouty',
+        'bbone_scalein', 'bbone_scaleout',
         'bbone_easein', 'bbone_easeout'
     ]
 
@@ -296,7 +295,7 @@ def bake_action_iter(
                     pbone.keyframe_insert("rotation_axis_angle", index=-1, frame=f, group=name)
                 else:  # euler, XYZ, ZXY etc
                     if euler_prev is not None:
-                        euler = pbone.matrix_basis.to_euler(obj.rotation_mode, euler_prev)
+                        euler = pbone.matrix_basis.to_euler(pbone.rotation_mode, euler_prev)
                         pbone.rotation_euler = euler
                         del euler
                     euler_prev = pbone.rotation_euler.copy()

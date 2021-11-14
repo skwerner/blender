@@ -97,7 +97,6 @@ typedef struct {
   int launch_event;
   float mcenter[2];
   void *draw_handle_pixel;
-  short gizmo_flag;
   short value_mode; /* Which value does mouse movement and numeric input affect? */
   float segments;   /* Segments as float so smooth mouse pan works in small increments */
 
@@ -279,7 +278,7 @@ static bool edbm_bevel_init(bContext *C, wmOperator *op, const bool is_modal)
   for (int i = 0; i < NUM_VALUE_KINDS; i++) {
     opdata->shift_value[i] = -1.0f;
     opdata->initial_length[i] = -1.0f;
-    /* note: scale for OFFSET_VALUE will get overwritten in edbm_bevel_invoke */
+    /* NOTE: scale for #OFFSET_VALUE will get overwritten in #edbm_bevel_invoke. */
     opdata->scale[i] = value_scale_per_inch[i] / pixels_per_inch;
 
     initNumInput(&opdata->num_input[i]);
@@ -307,11 +306,6 @@ static bool edbm_bevel_init(bContext *C, wmOperator *op, const bool is_modal)
     opdata->draw_handle_pixel = ED_region_draw_cb_activate(
         region->type, ED_region_draw_mouse_line_cb, opdata->mcenter, REGION_DRAW_POST_PIXEL);
     G.moving = G_TRANSFORM_EDIT;
-
-    if (v3d) {
-      opdata->gizmo_flag = v3d->gizmo_flag;
-      v3d->gizmo_flag = V3D_GIZMO_HIDE;
-    }
   }
 
   return true;
@@ -347,7 +341,7 @@ static bool edbm_bevel_calc(wmOperator *op)
 
     /* revert to original mesh */
     if (opdata->is_modal) {
-      EDBM_redo_state_restore(opdata->ob_store[ob_index].mesh_backup, em, false);
+      EDBM_redo_state_restore(&opdata->ob_store[ob_index].mesh_backup, em, false);
     }
 
     const int material = CLAMPIS(material_init, -1, obedit->totcol - 1);
@@ -403,9 +397,12 @@ static bool edbm_bevel_calc(wmOperator *op)
       continue;
     }
 
-    EDBM_mesh_normals_update(em);
-
-    EDBM_update_generic(obedit->data, true, true);
+    EDBM_update(obedit->data,
+                &(const struct EDBMUpdate_Params){
+                    .calc_looptri = true,
+                    .calc_normals = true,
+                    .is_destructive = true,
+                });
     changed = true;
   }
   return changed;
@@ -430,15 +427,11 @@ static void edbm_bevel_exit(bContext *C, wmOperator *op)
   }
 
   if (opdata->is_modal) {
-    View3D *v3d = CTX_wm_view3d(C);
     ARegion *region = CTX_wm_region(C);
     for (uint ob_index = 0; ob_index < opdata->ob_store_len; ob_index++) {
-      EDBM_redo_state_free(&opdata->ob_store[ob_index].mesh_backup, NULL, false);
+      EDBM_redo_state_free(&opdata->ob_store[ob_index].mesh_backup);
     }
     ED_region_draw_cb_exit(region->type, opdata->draw_handle_pixel);
-    if (v3d) {
-      v3d->gizmo_flag = opdata->gizmo_flag;
-    }
     G.moving = 0;
   }
   MEM_SAFE_FREE(opdata->ob_store);
@@ -453,8 +446,13 @@ static void edbm_bevel_cancel(bContext *C, wmOperator *op)
     for (uint ob_index = 0; ob_index < opdata->ob_store_len; ob_index++) {
       Object *obedit = opdata->ob_store[ob_index].ob;
       BMEditMesh *em = BKE_editmesh_from_object(obedit);
-      EDBM_redo_state_free(&opdata->ob_store[ob_index].mesh_backup, em, true);
-      EDBM_update_generic(obedit->data, false, true);
+      EDBM_redo_state_restore_and_free(&opdata->ob_store[ob_index].mesh_backup, em, true);
+      EDBM_update(obedit->data,
+                  &(const struct EDBMUpdate_Params){
+                      .calc_looptri = false,
+                      .calc_normals = true,
+                      .is_destructive = true,
+                  });
     }
   }
 
@@ -707,7 +705,7 @@ static int edbm_bevel_modal(bContext *C, wmOperator *op, const wmEvent *event)
     }
   }
   else if (etype == MOUSEPAN) {
-    float delta = 0.02f * (event->y - event->prevy);
+    float delta = 0.02f * (event->xy[1] - event->prev_xy[1]);
     if (opdata->segments >= 1 && opdata->segments + delta < 1) {
       opdata->segments = 1;
     }
@@ -766,8 +764,7 @@ static int edbm_bevel_modal(bContext *C, wmOperator *op, const wmEvent *event)
         }
       }
         /* Update offset accordingly to new offset_type. */
-        if (!has_numinput &&
-            (opdata->value_mode == OFFSET_VALUE || opdata->value_mode == OFFSET_VALUE_PERCENT)) {
+        if (!has_numinput && (ELEM(opdata->value_mode, OFFSET_VALUE, OFFSET_VALUE_PERCENT))) {
           edbm_bevel_mouse_set_value(op, event);
         }
         edbm_bevel_calc(op);

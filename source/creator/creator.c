@@ -54,7 +54,6 @@
 #include "BKE_cachefile.h"
 #include "BKE_callbacks.h"
 #include "BKE_context.h"
-#include "BKE_font.h"
 #include "BKE_global.h"
 #include "BKE_gpencil_modifier.h"
 #include "BKE_idtype.h"
@@ -65,6 +64,7 @@
 #include "BKE_particle.h"
 #include "BKE_shader_fx.h"
 #include "BKE_sound.h"
+#include "BKE_vfont.h"
 #include "BKE_volume.h"
 
 #include "DEG_depsgraph.h"
@@ -132,7 +132,6 @@ struct ApplicationState app_state = {
 /** \name Application Level Callbacks
  *
  * Initialize callbacks for the modules that need them.
- *
  * \{ */
 
 static void callback_mem_error(const char *errorStr)
@@ -208,6 +207,41 @@ char **environ = NULL;
 
 #endif /* WITH_PYTHON_MODULE */
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name GMP Allocator Workaround
+ * \{ */
+
+#if (defined(WITH_TBB_MALLOC) && defined(_MSC_VER) && defined(NDEBUG) && defined(WITH_GMP)) || \
+    defined(DOXYGEN)
+#  include "gmp.h"
+#  include "tbb/scalable_allocator.h"
+
+void *gmp_alloc(size_t size)
+{
+  return scalable_malloc(size);
+}
+void *gmp_realloc(void *ptr, size_t old_size, size_t new_size)
+{
+  return scalable_realloc(ptr, new_size);
+}
+
+void gmp_free(void *ptr, size_t size)
+{
+  scalable_free(ptr);
+}
+/**
+ * Use TBB's scalable_allocator on Windows.
+ * `TBBmalloc` correctly captures all allocations already,
+ * however, GMP is built with MINGW since it doesn't build with MSVC,
+ * which TBB has issues hooking into automatically.
+ */
+void gmp_blender_init_allocator()
+{
+  mp_set_memory_functions(gmp_alloc, gmp_realloc, gmp_free);
+}
+#endif
 /** \} */
 
 /* -------------------------------------------------------------------- */
@@ -343,6 +377,10 @@ int main(int argc,
   CCL_init_logging(argv[0]);
 #endif
 
+#if defined(WITH_TBB_MALLOC) && defined(_MSC_VER) && defined(NDEBUG) && defined(WITH_GMP)
+  gmp_blender_init_allocator();
+#endif
+
   main_callback_setup();
 
 #if defined(__APPLE__) && !defined(WITH_PYTHON_MODULE) && !defined(WITH_HEADLESS)
@@ -376,7 +414,6 @@ int main(int argc,
 
   BKE_idtype_init();
   BKE_cachefiles_init();
-  BKE_images_init();
   BKE_modifier_init();
   BKE_gpencil_modifier_init();
   BKE_shaderfx_init();
@@ -514,7 +551,8 @@ int main(int argc,
     WM_exit(C);
   }
   else {
-    if (!G.file_loaded) {
+    /* When no file is loaded, show the splash screen. */
+    if (!G.relbase_valid) {
       WM_init_splash(C);
     }
     WM_main(C);

@@ -22,9 +22,13 @@
  * A script writer should never directly access this module.
  */
 
+/* Future-proof, See https://docs.python.org/3/c-api/arg.html#strings-and-buffers */
+#define PY_SSIZE_T_CLEAN
+
 #include <Python.h>
 
 #include "BLI_string.h"
+#include "BLI_string_utils.h"
 #include "BLI_utildefines.h"
 
 #include "BKE_appdir.h"
@@ -56,6 +60,7 @@
 
 /* external util modules */
 #include "../generic/idprop_py_api.h"
+#include "../generic/idprop_py_ui_api.h"
 #include "bpy_msgbus.h"
 
 #ifdef WITH_FREESTYLE
@@ -118,7 +123,7 @@ static PyObject *bpy_blend_paths(PyObject *UNUSED(self), PyObject *args, PyObjec
   bool local = false;
 
   static const char *_keywords[] = {"absolute", "packed", "local", NULL};
-  static _PyArg_Parser _parser = {"|O&O&O&:blend_paths", _keywords, 0};
+  static _PyArg_Parser _parser = {"|$O&O&O&:blend_paths", _keywords, 0};
   if (!_PyArg_ParseTupleAndKeywordsFast(args,
                                         kw,
                                         &_parser,
@@ -148,6 +153,52 @@ static PyObject *bpy_blend_paths(PyObject *UNUSED(self), PyObject *args, PyObjec
   return list;
 }
 
+PyDoc_STRVAR(bpy_flip_name_doc,
+             ".. function:: flip_name(name, strip_digits=False)\n"
+             "\n"
+             "   Flip a name between left/right sides, useful for \n"
+             "   mirroring bone names.\n"
+             "\n"
+             "   :arg name: Bone name to flip.\n"
+             "   :type name: string\n"
+             "   :arg strip_digits: Whether to remove ``.###`` suffix.\n"
+             "   :type strip_digits: bool\n"
+             "   :return: The flipped name.\n"
+             "   :rtype: string\n");
+static PyObject *bpy_flip_name(PyObject *UNUSED(self), PyObject *args, PyObject *kw)
+{
+  const char *name_src = NULL;
+  Py_ssize_t name_src_len;
+  bool strip_digits = false;
+
+  static const char *_keywords[] = {"", "strip_digits", NULL};
+  static _PyArg_Parser _parser = {
+      "s#" /* `name` */
+      "|$" /* Optional, keyword only arguments. */
+      "O&" /* `strip_digits` */
+      /* Name to show in the case of an error. */
+      ":flip_name",
+      _keywords,
+      0,
+  };
+  if (!_PyArg_ParseTupleAndKeywordsFast(
+          args, kw, &_parser, &name_src, &name_src_len, PyC_ParseBool, &strip_digits)) {
+    return NULL;
+  }
+
+  /* Worst case we gain one extra byte (besides null-terminator) by changing
+  "Left" to "Right", because only the first appearance of "Left" gets replaced. */
+  const size_t size = name_src_len + 2;
+  char *name_dst = PyMem_MALLOC(size);
+  const size_t name_dst_len = BLI_string_flip_side_name(name_dst, name_src, strip_digits, size);
+
+  PyObject *result = PyUnicode_FromStringAndSize(name_dst, name_dst_len);
+
+  PyMem_FREE(name_dst);
+
+  return result;
+}
+
 // PyDoc_STRVAR(bpy_user_resource_doc[] = /* now in bpy/utils.py */
 static PyObject *bpy_user_resource(PyObject *UNUSED(self), PyObject *args, PyObject *kw)
 {
@@ -164,8 +215,8 @@ static PyObject *bpy_user_resource(PyObject *UNUSED(self), PyObject *args, PyObj
 
   const char *path;
 
-  static const char *_keywords[] = {"type", "subdir", NULL};
-  static _PyArg_Parser _parser = {"O&|s:user_resource", _keywords, 0};
+  static const char *_keywords[] = {"type", "path", NULL};
+  static _PyArg_Parser _parser = {"O&|$s:user_resource", _keywords, 0};
   if (!_PyArg_ParseTupleAndKeywordsFast(args, kw, &_parser, PyC_ParseStringEnum, &type, &subdir)) {
     return NULL;
   }
@@ -201,7 +252,7 @@ static PyObject *bpy_system_resource(PyObject *UNUSED(self), PyObject *args, PyO
   const char *path;
 
   static const char *_keywords[] = {"type", "path", NULL};
-  static _PyArg_Parser _parser = {"O&|s:system_resource", _keywords, 0};
+  static _PyArg_Parser _parser = {"O&|$s:system_resource", _keywords, 0};
   if (!_PyArg_ParseTupleAndKeywordsFast(args, kw, &_parser, PyC_ParseStringEnum, &type, &subdir)) {
     return NULL;
   }
@@ -239,7 +290,7 @@ static PyObject *bpy_resource_path(PyObject *UNUSED(self), PyObject *args, PyObj
   const char *path;
 
   static const char *_keywords[] = {"type", "major", "minor", NULL};
-  static _PyArg_Parser _parser = {"O&|ii:resource_path", _keywords, 0};
+  static _PyArg_Parser _parser = {"O&|$ii:resource_path", _keywords, 0};
   if (!_PyArg_ParseTupleAndKeywordsFast(
           args, kw, &_parser, PyC_ParseStringEnum, &type, &major, &minor)) {
     return NULL;
@@ -337,6 +388,12 @@ static PyMethodDef meth_bpy_blend_paths = {
     METH_VARARGS | METH_KEYWORDS,
     bpy_blend_paths_doc,
 };
+static PyMethodDef meth_bpy_flip_name = {
+    "flip_name",
+    (PyCFunction)bpy_flip_name,
+    METH_VARARGS | METH_KEYWORDS,
+    bpy_flip_name_doc,
+};
 static PyMethodDef meth_bpy_user_resource = {
     "user_resource",
     (PyCFunction)bpy_user_resource,
@@ -403,10 +460,11 @@ void BPy_init_modules(struct bContext *C)
     Py_DECREF(py_modpath);
   }
   else {
-    printf("bpy: couldn't find 'scripts/modules', blender probably wont start.\n");
+    printf("bpy: couldn't find 'scripts/modules', blender probably won't start.\n");
   }
   /* stand alone utility modules not related to blender directly */
   IDProp_Init_Types(); /* not actually a submodule, just types */
+  IDPropertyUIData_Init_Types();
 #ifdef WITH_FREESTYLE
   Freestyle_Init();
 #endif
@@ -416,9 +474,6 @@ void BPy_init_modules(struct bContext *C)
   /* add the module so we can import it */
   PyDict_SetItemString(PyImport_GetModuleDict(), "_bpy", mod);
   Py_DECREF(mod);
-
-  /* run first, initializes rna types */
-  BPY_rna_init();
 
   /* needs to be first so bpy_types can run */
   PyModule_AddObject(mod, "types", BPY_rna_types());
@@ -473,6 +528,8 @@ void BPy_init_modules(struct bContext *C)
   PyModule_AddObject(mod,
                      meth_bpy_unescape_identifier.ml_name,
                      (PyObject *)PyCFunction_New(&meth_bpy_unescape_identifier, NULL));
+  PyModule_AddObject(
+      mod, meth_bpy_flip_name.ml_name, (PyObject *)PyCFunction_New(&meth_bpy_flip_name, NULL));
 
   /* register funcs (bpy_rna.c) */
   PyModule_AddObject(mod,

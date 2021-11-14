@@ -18,9 +18,13 @@
 
 #pragma once
 
-#include "COM_WorkPackage.h"
+#ifdef WITH_CXX_GUARDEDALLOC
+#  include "MEM_guardedalloc.h"
+#endif
 
 namespace blender::compositor {
+
+struct WorkPackage;
 
 /**
  * \brief Abstract class for device implementations to be used by the Compositor.
@@ -30,6 +34,14 @@ namespace blender::compositor {
 class Device {
 
  public:
+  Device() = default;
+
+  Device(const Device &other) = delete;
+  Device(Device &&other) noexcept = default;
+
+  Device &operator=(const Device &other) = delete;
+  Device &operator=(Device &&other) = delete;
+
   /**
    * \brief Declaration of the virtual destructor
    * \note resolve warning gcc 4.7

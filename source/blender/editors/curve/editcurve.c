@@ -1437,20 +1437,13 @@ static int separate_exec(bContext *C, wmOperator *op)
 
     /* Some curves changed, but some curves failed: don't explain why it failed. */
     if (status.changed) {
-      BKE_reportf(op->reports,
-                  RPT_INFO,
-                  tot_errors == 1 ? "%d curve could not be separated" :
-                                    "%d curves could not be separated",
-                  tot_errors);
+      BKE_reportf(op->reports, RPT_INFO, "%d curve(s) could not be separated", tot_errors);
       return OPERATOR_FINISHED;
     }
 
     /* All curves failed: If there is more than one error give a generic error report. */
     if (((status.error_vertex_keys ? 1 : 0) + (status.error_generic ? 1 : 0)) > 1) {
-      BKE_report(op->reports,
-                 RPT_ERROR,
-                 tot_errors == 1 ? "Could not separate selected curves" :
-                                   "Could not separate selected curve");
+      BKE_report(op->reports, RPT_ERROR, "Could not separate selected curve(s)");
     }
 
     /* All curves failed due to the same error. */
@@ -1848,10 +1841,7 @@ static void ed_surf_delete_selected(Object *obedit)
             nu->pntsv = 1;
             SWAP(short, nu->orderu, nu->orderv);
             BKE_nurb_order_clamp_u(nu);
-            if (nu->knotsv) {
-              MEM_freeN(nu->knotsv);
-            }
-            nu->knotsv = NULL;
+            MEM_SAFE_FREE(nu->knotsv);
           }
           else {
             nu->pntsu = newu;
@@ -1929,7 +1919,7 @@ static void ed_curve_delete_selected(Object *obedit, View3D *v3d)
     }
 
     /* Never allow the order to exceed the number of points
-     * - note, this is ok but changes unselected nurbs, disable for now */
+     * NOTE: this is ok but changes unselected nurbs, disable for now. */
 #if 0
     if ((nu != NULL) && (nu->type == CU_NURBS)) {
       clamp_nurb_order_u(nu);
@@ -1988,7 +1978,7 @@ static void ed_curve_delete_selected(Object *obedit, View3D *v3d)
         nu->bp = bp1;
 
         /* Never allow the order to exceed the number of points
-         * - note, this is ok but changes unselected nurbs, disable for now */
+         * NOTE: this is ok but changes unselected nurbs, disable for now. */
 #if 0
         if (nu->type == CU_NURBS) {
           clamp_nurb_order_u(nu);
@@ -3747,8 +3737,8 @@ static void subdividenurb(Object *obedit, View3D *v3d, int number_cuts)
           }
 
           if (sel) { /* U ! */
-            /* Inserting U points is sort of 'default' Flat curves only get */
-            /* U points inserted in them.                                   */
+            /* Inserting U points is sort of 'default' Flat curves only get
+             * U points inserted in them. */
             bpn = bpnew = MEM_mallocN((sel + nu->pntsu) * nu->pntsv * sizeof(BPoint),
                                       "subdivideNurb4");
             bp = nu->bp;
@@ -3786,7 +3776,7 @@ static void subdividenurb(Object *obedit, View3D *v3d, int number_cuts)
       MEM_freeN(usel);
       MEM_freeN(vsel);
 
-    } /* End of 'if (nu->type == CU_NURBS)'  */
+    } /* End of `if (nu->type == CU_NURBS)`. */
   }
 }
 
@@ -4650,10 +4640,7 @@ static int make_segment_exec(bContext *C, wmOperator *op)
 
           /* now join the knots */
           if (nu1->type == CU_NURBS) {
-            if (nu1->knotsu != NULL) {
-              MEM_freeN(nu1->knotsu);
-              nu1->knotsu = NULL;
-            }
+            MEM_SAFE_FREE(nu1->knotsu);
 
             BKE_nurb_knot_calc_u(nu1);
           }
@@ -4714,11 +4701,7 @@ static int make_segment_exec(bContext *C, wmOperator *op)
   if (tot_errors > 0) {
     /* Some curves changed, but some curves failed: don't explain why it failed. */
     if (status.changed) {
-      BKE_reportf(op->reports,
-                  RPT_INFO,
-                  tot_errors == 1 ? "%d curve could not make segments" :
-                                    "%d curves could not make segments",
-                  tot_errors);
+      BKE_reportf(op->reports, RPT_INFO, "%d curves could not make segments", tot_errors);
       return OPERATOR_FINISHED;
     }
 
@@ -4926,7 +4909,9 @@ bool ED_curve_editnurb_select_pick(
 /** \name Spin Operator
  * \{ */
 
-/* 'cent' is in object space and 'dvec' in worldspace.
+/**
+ * \param axis: is in world-space.
+ * \param cent: is in object-space.
  */
 bool ed_editnurb_spin(
     float viewmat[4][4], View3D *v3d, Object *obedit, const float axis[3], const float cent[3])
@@ -5415,7 +5400,7 @@ static int ed_editcurve_addvert(Curve *cu,
             add_v3_v3(bezt->vec[1], ofs);
             add_v3_v3(bezt->vec[2], ofs);
 
-            if (((nu->flagu & CU_NURB_CYCLIC) == 0) && (i == 0 || i == nu->pntsu - 1)) {
+            if (((nu->flagu & CU_NURB_CYCLIC) == 0) && ELEM(i, 0, nu->pntsu - 1)) {
               BKE_nurb_handle_calc_simple_auto(nu, bezt);
             }
           }
@@ -5567,12 +5552,14 @@ static int add_vertex_invoke(bContext *C, wmOperator *op, const wmEvent *event)
     if (use_proj) {
       const float mval[2] = {UNPACK2(event->mval)};
 
-      struct SnapObjectContext *snap_context = ED_transform_snap_object_context_create_view3d(
-          vc.scene, 0, vc.region, vc.v3d);
+      struct SnapObjectContext *snap_context = ED_transform_snap_object_context_create(vc.scene,
+                                                                                       0);
 
       ED_transform_snap_object_project_view3d(
           snap_context,
           vc.depsgraph,
+          vc.region,
+          vc.v3d,
           SCE_SNAP_MODE_FACE,
           &(const struct SnapObjectParams){
               .snap_select = (vc.obedit != NULL) ? SNAP_NOT_ACTIVE : SNAP_ALL,
@@ -5626,7 +5613,7 @@ static int add_vertex_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 void CURVE_OT_vertex_add(wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "Add Vertex";
+  ot->name = "Extrude to Cursor or Add";
   ot->idname = "CURVE_OT_vertex_add";
   ot->description = "Add a new control point (linked to only selected end-curve one, if any)";
 
@@ -5636,7 +5623,7 @@ void CURVE_OT_vertex_add(wmOperatorType *ot)
   ot->poll = ED_operator_editcurve;
 
   /* flags */
-  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_DEPENDS_ON_CURSOR;
 
   /* properties */
   RNA_def_float_vector_xyz(ot->srna,
@@ -6646,7 +6633,7 @@ void CURVE_OT_dissolve_verts(wmOperatorType *ot)
 
 static bool nurb_bezt_flag_any(const Nurb *nu, const char flag_test)
 {
-  BezTriple *bezt = nu->bezt;
+  const BezTriple *bezt;
   int i;
 
   for (i = nu->pntsu, bezt = nu->bezt; i--; bezt++) {
@@ -6877,7 +6864,7 @@ int ED_curve_join_objects_exec(bContext *C, wmOperator *op)
 
           LISTBASE_FOREACH (Nurb *, nu, &cu->nurb) {
             Nurb *newnu = BKE_nurb_duplicate(nu);
-            if (ob_active->totcol) { /* TODO, merge material lists */
+            if (ob_active->totcol) { /* TODO: merge material lists. */
               CLAMP(newnu->mat_nr, 0, ob_active->totcol - 1);
             }
             else {

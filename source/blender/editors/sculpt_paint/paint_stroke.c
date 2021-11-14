@@ -541,7 +541,7 @@ static void paint_brush_stroke_add_step(bContext *C,
  * It's strange that only texpaint had these guards. */
 #if 0
   /* special exception here for too high pressure values on first touch in
-   * windows for some tablets, then we just skip first touch ..  */
+   * windows for some tablets, then we just skip first touch. */
   if (tablet && (pressure >= 0.99f) &&
       ((pop->s.brush->flag & BRUSH_SPACING_PRESSURE) ||
        BKE_brush_use_alpha_pressure(pop->s.brush) ||
@@ -846,7 +846,7 @@ static int paint_space_stroke(bContext *C,
   while (length > 0.0f) {
     float spacing = paint_space_stroke_spacing_variable(
         C, scene, stroke, pressure, dpressure, length);
-    float mouse[3];
+    float mouse[2];
 
     if (length >= spacing) {
       if (use_scene_spacing) {
@@ -856,7 +856,7 @@ static int paint_space_stroke(bContext *C,
         add_v3_v3v3(final_world_space_position,
                     stroke->last_world_space_position,
                     final_world_space_position);
-        ED_view3d_project(region, final_world_space_position, mouse);
+        ED_view3d_project_v2(region, final_world_space_position, mouse);
       }
       else {
         mouse[0] = stroke->last_mouse_position[0] + dmouse[0] * spacing;
@@ -1115,7 +1115,7 @@ bool paint_supports_dynamic_tex_coords(Brush *br, ePaintMode mode)
 
 #define PAINT_STROKE_MODAL_CANCEL 1
 
-/* called in paint_ops.c, on each regeneration of keymaps  */
+/* Called in paint_ops.c, on each regeneration of key-maps. */
 struct wmKeyMap *paint_stroke_modal_keymap(struct wmKeyConfig *keyconf)
 {
   static struct EnumPropertyItem modal_items[] = {
@@ -1184,14 +1184,43 @@ static void paint_line_strokes_spacing(bContext *C,
                                        const float new_pos[2])
 {
   UnifiedPaintSettings *ups = stroke->ups;
+  Paint *paint = BKE_paint_get_active_from_context(C);
+  Brush *brush = BKE_paint_brush(paint);
+  ePaintMode mode = BKE_paintmode_get_active_from_context(C);
+  ARegion *region = CTX_wm_region(C);
+
+  const bool use_scene_spacing = paint_stroke_use_scene_spacing(brush, mode);
 
   float mouse[2], dmouse[2];
   float length;
+  float d_world_space_position[3] = {0.0f};
+  float world_space_position_old[3], world_space_position_new[3];
 
-  sub_v2_v2v2(dmouse, new_pos, old_pos);
   copy_v2_v2(stroke->last_mouse_position, old_pos);
 
-  length = normalize_v2(dmouse);
+  if (use_scene_spacing) {
+    bool hit_old = SCULPT_stroke_get_location(C, world_space_position_old, old_pos);
+    bool hit_new = SCULPT_stroke_get_location(C, world_space_position_new, new_pos);
+    mul_m4_v3(stroke->vc.obact->obmat, world_space_position_old);
+    mul_m4_v3(stroke->vc.obact->obmat, world_space_position_new);
+    if (hit_old && hit_new && stroke->stroke_over_mesh) {
+      sub_v3_v3v3(d_world_space_position, world_space_position_new, world_space_position_old);
+      length = len_v3(d_world_space_position);
+      stroke->stroke_over_mesh = true;
+    }
+    else {
+      length = 0.0f;
+      zero_v3(d_world_space_position);
+      stroke->stroke_over_mesh = hit_new;
+      if (stroke->stroke_over_mesh) {
+        copy_v3_v3(stroke->last_world_space_position, world_space_position_old);
+      }
+    }
+  }
+  else {
+    sub_v2_v2v2(dmouse, new_pos, old_pos);
+    length = normalize_v2(dmouse);
+  }
 
   BLI_assert(length >= 0.0f);
 
@@ -1205,8 +1234,18 @@ static void paint_line_strokes_spacing(bContext *C,
     *length_residue = 0.0;
 
     if (length >= spacing) {
-      mouse[0] = stroke->last_mouse_position[0] + dmouse[0] * spacing_final;
-      mouse[1] = stroke->last_mouse_position[1] + dmouse[1] * spacing_final;
+      if (use_scene_spacing) {
+        float final_world_space_position[3];
+        normalize_v3(d_world_space_position);
+        mul_v3_v3fl(final_world_space_position, d_world_space_position, spacing_final);
+        add_v3_v3v3(
+            final_world_space_position, world_space_position_old, final_world_space_position);
+        ED_view3d_project_v2(region, final_world_space_position, mouse);
+      }
+      else {
+        mouse[0] = stroke->last_mouse_position[0] + dmouse[0] * spacing_final;
+        mouse[1] = stroke->last_mouse_position[1] + dmouse[1] * spacing_final;
+      }
 
       ups->overlap_factor = paint_stroke_integrate_overlap(stroke->brush, 1.0);
 
@@ -1302,6 +1341,13 @@ static bool paint_stroke_curve_end(bContext *C, wmOperator *op, PaintStroke *str
         if (!stroke->stroke_started) {
           stroke->last_pressure = 1.0;
           copy_v2_v2(stroke->last_mouse_position, data + 2 * j);
+
+          if (paint_stroke_use_scene_spacing(br, BKE_paintmode_get_active_from_context(C))) {
+            stroke->stroke_over_mesh = SCULPT_stroke_get_location(
+                C, stroke->last_world_space_position, data + 2 * j);
+            mul_m4_v3(stroke->vc.obact->obmat, stroke->last_world_space_position);
+          }
+
           stroke->stroke_started = stroke->test_start(C, op, stroke->last_mouse_position);
 
           if (stroke->stroke_started) {
@@ -1416,7 +1462,7 @@ int paint_stroke_modal(bContext *C, wmOperator *op, const wmEvent *event)
 
     if (paint_supports_smooth_stroke(br, mode)) {
       stroke->stroke_cursor = WM_paint_cursor_activate(
-          SPACE_TYPE_ANY, RGN_TYPE_ANY, paint_poll, paint_draw_smooth_cursor, stroke);
+          SPACE_TYPE_ANY, RGN_TYPE_ANY, PAINT_brush_tool_poll, paint_draw_smooth_cursor, stroke);
     }
 
     stroke->stroke_init = true;
@@ -1443,7 +1489,7 @@ int paint_stroke_modal(bContext *C, wmOperator *op, const wmEvent *event)
 
       if (br->flag & BRUSH_LINE) {
         stroke->stroke_cursor = WM_paint_cursor_activate(
-            SPACE_TYPE_ANY, RGN_TYPE_ANY, paint_poll, paint_draw_line_cursor, stroke);
+            SPACE_TYPE_ANY, RGN_TYPE_ANY, PAINT_brush_tool_poll, paint_draw_line_cursor, stroke);
       }
 
       first_dab = true;
@@ -1613,7 +1659,7 @@ void paint_stroke_set_mode_data(PaintStroke *stroke, void *mode_data)
   stroke->mode_data = mode_data;
 }
 
-bool paint_poll(bContext *C)
+bool PAINT_brush_tool_poll(bContext *C)
 {
   Paint *p = BKE_paint_get_active_from_context(C);
   Object *ob = CTX_data_active_object(C);

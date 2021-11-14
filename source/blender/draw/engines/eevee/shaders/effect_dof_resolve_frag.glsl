@@ -34,13 +34,13 @@ out vec4 fragColor;
 
 void dof_slight_focus_gather(float radius, out vec4 out_color, out float out_weight)
 {
-  /* offset coord to avoid correlation with sampling pattern.  */
+  /* offset coord to avoid correlation with sampling pattern. */
   vec4 noise = texelfetch_noise_tex(gl_FragCoord.xy + 7.0);
 
   DofGatherData fg_accum = GATHER_DATA_INIT;
   DofGatherData bg_accum = GATHER_DATA_INIT;
 
-  int i_radius = clamp(int(radius), 0, int(layer_threshold));
+  int i_radius = clamp(int(radius + 0.5), 0, int(layer_threshold));
   const int resolve_ring_density = DOF_SLIGHT_FOCUS_DENSITY;
   ivec2 texel = ivec2(gl_FragCoord.xy);
 
@@ -199,7 +199,7 @@ void main(void)
     fragColor = fragColor * (1.0 - layer_weight) + layer_color;
   }
 
-  /* Fix float precision issue in alpha compositing.  */
+  /* Fix float precision issue in alpha compositing. */
   if (fragColor.a > 0.99) {
     fragColor.a = 1.0;
   }

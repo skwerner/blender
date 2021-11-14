@@ -260,7 +260,7 @@ bool ED_view3d_context_activate(bContext *C)
     return false;
   }
 
-  /* bad context switch .. */
+  /* Bad context switch. */
   CTX_wm_area_set(C, area);
   CTX_wm_region_set(C, region);
 
@@ -299,8 +299,8 @@ void ED_view3d_clipping_calc(
     float xs = (ELEM(val, 0, 3)) ? rect->xmin : rect->xmax;
     float ys = (ELEM(val, 0, 1)) ? rect->ymin : rect->ymax;
 
-    ED_view3d_unproject(region, xs, ys, 0.0, bb->vec[val]);
-    ED_view3d_unproject(region, xs, ys, 1.0, bb->vec[4 + val]);
+    ED_view3d_unproject_v3(region, xs, ys, 0.0, bb->vec[val]);
+    ED_view3d_unproject_v3(region, xs, ys, 1.0, bb->vec[4 + val]);
   }
 
   /* optionally transform to object space */
@@ -506,8 +506,8 @@ void ED_view3d_lock_clear(View3D *v3d)
 /**
  * For viewport operators that exit camera perspective.
  *
- * \note This differs from simply setting ``rv3d->persp = persp`` because it
- * sets the ``ofs`` and ``dist`` values of the viewport so it matches the camera,
+ * \note This differs from simply setting `rv3d->persp = persp` because it
+ * sets the `ofs` and `dist` values of the viewport so it matches the camera,
  * otherwise switching out of camera view may jump to a different part of the scene.
  */
 void ED_view3d_persp_switch_from_camera(const Depsgraph *depsgraph,
@@ -530,7 +530,7 @@ void ED_view3d_persp_switch_from_camera(const Depsgraph *depsgraph,
 }
 /**
  * Action to take when rotating the view,
- * handle auto-persp and logic for switching out of views.
+ * handle auto-perspective and logic for switching out of views.
  *
  * shared with NDOF.
  */
@@ -1017,7 +1017,7 @@ static float view_autodist_depth_margin(ARegion *region, const int mval[2], int 
   }
 
   ViewDepths depth_temp = {0};
-  view3d_update_depths_rect(region, &depth_temp, &rect);
+  view3d_depths_rect_create(region, &rect, &depth_temp);
   float depth_close = view3d_depth_near(&depth_temp);
   MEM_SAFE_FREE(depth_temp.depths);
   return depth_close;
@@ -1044,7 +1044,7 @@ bool ED_view3d_autodist(Depsgraph *depsgraph,
   bool depth_ok = false;
 
   /* Get Z Depths, needed for perspective, nice for ortho */
-  ED_view3d_depth_override(depsgraph, region, v3d, NULL, V3D_DEPTH_NO_GPENCIL, false);
+  ED_view3d_depth_override(depsgraph, region, v3d, NULL, V3D_DEPTH_NO_GPENCIL, NULL);
 
   /* Attempt with low margin's first */
   int i = 0;
@@ -1057,7 +1057,7 @@ bool ED_view3d_autodist(Depsgraph *depsgraph,
     float centx = (float)mval[0] + 0.5f;
     float centy = (float)mval[1] + 0.5f;
 
-    if (ED_view3d_unproject(region, centx, centy, depth_close, mouse_worldloc)) {
+    if (ED_view3d_unproject_v3(region, centx, centy, depth_close, mouse_worldloc)) {
       return true;
     }
   }
@@ -1091,20 +1091,13 @@ bool ED_view3d_autodist_simple(ARegion *region,
 
   float centx = (float)mval[0] + 0.5f;
   float centy = (float)mval[1] + 0.5f;
-  return ED_view3d_unproject(region, centx, centy, depth, mouse_worldloc);
-}
-
-bool ED_view3d_autodist_depth(ARegion *region, const int mval[2], int margin, float *depth)
-{
-  *depth = view_autodist_depth_margin(region, mval, margin);
-
-  return (*depth != FLT_MAX);
+  return ED_view3d_unproject_v3(region, centx, centy, depth, mouse_worldloc);
 }
 
 static bool depth_segment_cb(int x, int y, void *userData)
 {
   struct {
-    ARegion *region;
+    const ViewDepths *vd;
     int margin;
     float depth;
   } *data = userData;
@@ -1114,27 +1107,25 @@ static bool depth_segment_cb(int x, int y, void *userData)
   mval[0] = x;
   mval[1] = y;
 
-  depth = view_autodist_depth_margin(data->region, mval, data->margin);
-
-  if (depth != FLT_MAX) {
+  if (ED_view3d_depth_read_cached(data->vd, mval, data->margin, &depth)) {
     data->depth = depth;
     return false;
   }
   return true;
 }
 
-bool ED_view3d_autodist_depth_seg(
-    ARegion *region, const int mval_sta[2], const int mval_end[2], int margin, float *depth)
+bool ED_view3d_depth_read_cached_seg(
+    const ViewDepths *vd, const int mval_sta[2], const int mval_end[2], int margin, float *depth)
 {
   struct {
-    ARegion *region;
+    const ViewDepths *vd;
     int margin;
     float depth;
   } data = {NULL};
   int p1[2];
   int p2[2];
 
-  data.region = region;
+  data.vd = vd;
   data.margin = margin;
   data.depth = FLT_MAX;
 
@@ -1691,22 +1682,23 @@ bool ED_view3d_depth_read_cached(const ViewDepths *vd,
     return true;
   }
 
+  /* Grease-pencil and annotations also need the returned depth value to be high
+   * so the caller can detect it's invalid. */
+  *r_depth = FLT_MAX;
   return false;
 }
 
-bool ED_view3d_depth_read_cached_normal(const ViewContext *vc,
+bool ED_view3d_depth_read_cached_normal(const ARegion *region,
+                                        const ViewDepths *depths,
                                         const int mval[2],
                                         float r_normal[3])
 {
-  /* Note: we could support passing in a radius.
+  /* NOTE: we could support passing in a radius.
    * For now just read 9 pixels. */
 
   /* pixels surrounding */
   bool depths_valid[9] = {false};
   float coords[9][3] = {{0}};
-
-  ARegion *region = vc->region;
-  const ViewDepths *depths = vc->rv3d->depths;
 
   for (int x = 0, i = 0; x < 2; x++) {
     for (int y = 0; y < 2; y++) {
@@ -1716,7 +1708,7 @@ bool ED_view3d_depth_read_cached_normal(const ViewContext *vc,
       ED_view3d_depth_read_cached(depths, mval_ofs, 0, &depth_fl);
       const double depth = (double)depth_fl;
       if ((depth > depths->depth_range[0]) && (depth < depths->depth_range[1])) {
-        if (ED_view3d_depth_unproject(region, mval_ofs, depth, coords[i])) {
+        if (ED_view3d_depth_unproject_v3(region, mval_ofs, depth, coords[i])) {
           depths_valid[i] = true;
         }
       }
@@ -1751,21 +1743,14 @@ bool ED_view3d_depth_read_cached_normal(const ViewContext *vc,
   return false;
 }
 
-bool ED_view3d_depth_unproject(const ARegion *region,
-                               const int mval[2],
-                               const double depth,
-                               float r_location_world[3])
+bool ED_view3d_depth_unproject_v3(const ARegion *region,
+                                  const int mval[2],
+                                  const double depth,
+                                  float r_location_world[3])
 {
   float centx = (float)mval[0] + 0.5f;
   float centy = (float)mval[1] + 0.5f;
-  return ED_view3d_unproject(region, centx, centy, depth, r_location_world);
-}
-
-void ED_view3d_depth_tag_update(RegionView3D *rv3d)
-{
-  if (rv3d->depths) {
-    rv3d->depths->damaged = true;
-  }
+  return ED_view3d_unproject_v3(region, centx, centy, depth, r_location_world);
 }
 
 /** \} */

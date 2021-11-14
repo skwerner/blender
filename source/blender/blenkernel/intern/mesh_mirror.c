@@ -70,9 +70,9 @@ Mesh *BKE_mesh_mirror_bisect_on_mirror_plane_for_modifier(MirrorModifierData *mm
   /* Define bisecting plane (aka mirror plane). */
   float plane[4];
   if (!do_bisect_flip_axis) {
-    /* That reversed condition is a tad weird, but for some reason that's how you keep
-     * the part of the mesh which is on the non-mirrored side when flip option is disabled,
-     * think that that is the expected behavior. */
+    /* That reversed condition is a little weird, but for some reason that's how you keep
+     * the part of the mesh which is on the non-mirrored side when flip option is disabled.
+     * I think this is the expected behavior. */
     negate_v3(plane_no);
   }
   plane_from_point_normal_v3(plane, plane_co, plane_no);
@@ -183,6 +183,19 @@ Mesh *BKE_mesh_mirror_apply_mirror_on_axis_for_modifier(MirrorModifierData *mmd,
     if (do_bisect) {
       copy_v3_v3(plane_co, itmp[3]);
       copy_v3_v3(plane_no, itmp[axis]);
+
+      /* Account for non-uniform scale in `ob`, see: T87592. */
+      float ob_scale[3] = {
+          len_squared_v3(ob->obmat[0]),
+          len_squared_v3(ob->obmat[1]),
+          len_squared_v3(ob->obmat[2]),
+      };
+      /* Scale to avoid precision loss with extreme values. */
+      const float ob_scale_max = max_fff(UNPACK3(ob_scale));
+      if (LIKELY(ob_scale_max != 0.0f)) {
+        mul_v3_fl(ob_scale, 1.0f / ob_scale_max);
+        mul_v3_v3(plane_no, ob_scale);
+      }
     }
   }
   else if (do_bisect) {
@@ -247,10 +260,16 @@ Mesh *BKE_mesh_mirror_apply_mirror_on_axis_for_modifier(MirrorModifierData *mmd,
     mul_m4_v3(mtx, mv->co);
 
     if (do_vtargetmap) {
-      /* compare location of the original and mirrored vertex, to see if they
-       * should be mapped for merging */
+      /* Compare location of the original and mirrored vertex,
+       * to see if they should be mapped for merging.
+       *
+       * Always merge from the copied into the original vertices so it's possible to
+       * generate a 1:1 mapping by scanning vertices from the beginning of the array
+       * as is done in #BKE_editmesh_vert_coords_when_deformed. Without this,
+       * the coordinates returned will sometimes point to the copied vertex locations, see: T91444.
+       */
       if (UNLIKELY(len_squared_v3v3(mv_prev->co, mv->co) < tolerance_sq)) {
-        *vtmap_a = maxVerts + i;
+        *vtmap_b = i;
         tot_vtargetmap++;
 
         /* average location */
@@ -258,10 +277,11 @@ Mesh *BKE_mesh_mirror_apply_mirror_on_axis_for_modifier(MirrorModifierData *mmd,
         copy_v3_v3(mv_prev->co, mv->co);
       }
       else {
-        *vtmap_a = -1;
+        *vtmap_b = -1;
       }
 
-      *vtmap_b = -1; /* fill here to avoid 2x loops */
+      /* Fill here to avoid 2x loops. */
+      *vtmap_a = -1;
 
       vtmap_a++;
       vtmap_b++;
@@ -380,15 +400,14 @@ Mesh *BKE_mesh_mirror_apply_mirror_on_axis_for_modifier(MirrorModifierData *mmd,
 
     /* calculate custom normals into loop_normals, then mirror first half into second half */
 
-    BKE_mesh_calc_normals_poly(result->mvert,
-                               NULL,
-                               result->totvert,
-                               result->mloop,
-                               result->mpoly,
-                               totloop,
-                               totpoly,
-                               poly_normals,
-                               false);
+    BKE_mesh_calc_normals_poly_and_vertex(result->mvert,
+                                          result->totvert,
+                                          result->mloop,
+                                          totloop,
+                                          result->mpoly,
+                                          totpoly,
+                                          poly_normals,
+                                          NULL);
 
     BKE_mesh_normals_loop_split(result->mvert,
                                 result->totvert,

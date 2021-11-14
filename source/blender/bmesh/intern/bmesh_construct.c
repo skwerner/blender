@@ -31,6 +31,7 @@
 
 #include "BKE_customdata.h"
 
+#include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 
 #include "bmesh.h"
@@ -415,7 +416,7 @@ static void bm_vert_attrs_copy(
     BMesh *bm_src, BMesh *bm_dst, const BMVert *v_src, BMVert *v_dst, CustomDataMask mask_exclude)
 {
   if ((bm_src == bm_dst) && (v_src == v_dst)) {
-    BLI_assert(!"BMVert: source and target match");
+    BLI_assert_msg(0, "BMVert: source and target match");
     return;
   }
   if ((mask_exclude & CD_MASK_NORMAL) == 0) {
@@ -430,7 +431,7 @@ static void bm_edge_attrs_copy(
     BMesh *bm_src, BMesh *bm_dst, const BMEdge *e_src, BMEdge *e_dst, CustomDataMask mask_exclude)
 {
   if ((bm_src == bm_dst) && (e_src == e_dst)) {
-    BLI_assert(!"BMEdge: source and target match");
+    BLI_assert_msg(0, "BMEdge: source and target match");
     return;
   }
   CustomData_bmesh_free_block_data_exclude_by_type(&bm_dst->edata, e_dst->head.data, mask_exclude);
@@ -442,7 +443,7 @@ static void bm_loop_attrs_copy(
     BMesh *bm_src, BMesh *bm_dst, const BMLoop *l_src, BMLoop *l_dst, CustomDataMask mask_exclude)
 {
   if ((bm_src == bm_dst) && (l_src == l_dst)) {
-    BLI_assert(!"BMLoop: source and target match");
+    BLI_assert_msg(0, "BMLoop: source and target match");
     return;
   }
   CustomData_bmesh_free_block_data_exclude_by_type(&bm_dst->ldata, l_dst->head.data, mask_exclude);
@@ -454,7 +455,7 @@ static void bm_face_attrs_copy(
     BMesh *bm_src, BMesh *bm_dst, const BMFace *f_src, BMFace *f_dst, CustomDataMask mask_exclude)
 {
   if ((bm_src == bm_dst) && (f_src == f_dst)) {
-    BLI_assert(!"BMFace: source and target match");
+    BLI_assert_msg(0, "BMFace: source and target match");
     return;
   }
   if ((mask_exclude & CD_MASK_NORMAL) == 0) {
@@ -589,6 +590,25 @@ static BMFace *bm_mesh_copy_new_face(
   return f_new;
 }
 
+void BM_mesh_copy_init_customdata_from_mesh(BMesh *bm_dst,
+                                            const Mesh *me_src,
+                                            const BMAllocTemplate *allocsize)
+{
+  if (allocsize == NULL) {
+    allocsize = &bm_mesh_allocsize_default;
+  }
+
+  CustomData_copy(&me_src->vdata, &bm_dst->vdata, CD_MASK_BMESH.vmask, CD_CALLOC, 0);
+  CustomData_copy(&me_src->edata, &bm_dst->edata, CD_MASK_BMESH.emask, CD_CALLOC, 0);
+  CustomData_copy(&me_src->ldata, &bm_dst->ldata, CD_MASK_BMESH.lmask, CD_CALLOC, 0);
+  CustomData_copy(&me_src->pdata, &bm_dst->pdata, CD_MASK_BMESH.pmask, CD_CALLOC, 0);
+
+  CustomData_bmesh_init_pool(&bm_dst->vdata, allocsize->totvert, BM_VERT);
+  CustomData_bmesh_init_pool(&bm_dst->edata, allocsize->totedge, BM_EDGE);
+  CustomData_bmesh_init_pool(&bm_dst->ldata, allocsize->totloop, BM_LOOP);
+  CustomData_bmesh_init_pool(&bm_dst->pdata, allocsize->totface, BM_FACE);
+}
+
 void BM_mesh_copy_init_customdata(BMesh *bm_dst, BMesh *bm_src, const BMAllocTemplate *allocsize)
 {
   if (allocsize == NULL) {
@@ -673,7 +693,7 @@ BMesh *BM_mesh_copy(BMesh *bm_old)
   ftable = MEM_mallocN(sizeof(BMFace *) * bm_old->totface, "BM_mesh_copy ftable");
 
   BM_ITER_MESH_INDEX (v, &iter, bm_old, BM_VERTS_OF_MESH, i) {
-    /* copy between meshes so cant use 'example' argument */
+    /* copy between meshes so can't use 'example' argument */
     v_new = BM_vert_create(bm_new, v->co, NULL, BM_CREATE_SKIP_CD);
     BM_elem_attrs_copy_ex(bm_old, bm_new, v, v_new, 0xff, 0x0);
     v_new->head.hflag = v->head.hflag; /* low level! don't do this for normal api use */
@@ -800,7 +820,7 @@ short BM_edge_flag_to_mflag(BMEdge *e)
           ((hflag & BM_ELEM_DRAW) ? ME_EDGEDRAW : 0) |
           ((hflag & BM_ELEM_SMOOTH) == 0 ? ME_SHARP : 0) |
           ((hflag & BM_ELEM_HIDDEN) ? ME_HIDE : 0) |
-          ((BM_edge_is_wire(e)) ? ME_LOOSEEDGE : 0) | /* not typical */
+          (BM_edge_is_wire(e) ? ME_LOOSEEDGE : 0) | /* not typical */
           ME_EDGERENDER);
 }
 char BM_face_flag_to_mflag(BMFace *f)

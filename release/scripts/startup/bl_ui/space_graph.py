@@ -179,6 +179,7 @@ class GRAPH_MT_select(Menu):
         props.include_handles = True
 
         layout.operator("graph.select_circle")
+        layout.operator_menu_enum("graph.select_lasso", "mode")
 
         layout.separator()
         layout.operator("graph.select_column", text="Columns on Selected Keys").mode = 'KEYS'
@@ -337,6 +338,18 @@ class GRAPH_MT_key_snap(Menu):
         layout.operator("graph.snap_cursor_value", text="Cursor Value to Selection")
 
 
+class GRAPH_MT_view_pie(Menu):
+    bl_label = "View"
+
+    def draw(self, context):
+        layout = self.layout
+
+        pie = layout.menu_pie()
+        pie.operator("graph.view_all")
+        pie.operator("graph.view_selected", icon='ZOOM_SELECTED')
+        pie.operator("graph.view_frame")
+
+
 class GRAPH_MT_delete(Menu):
     bl_label = "Delete"
 
@@ -467,6 +480,7 @@ classes = (
     GRAPH_MT_channel_context_menu,
     GRAPH_MT_pivot_pie,
     GRAPH_MT_snap_pie,
+    GRAPH_MT_view_pie,
     GRAPH_PT_filters,
 )
 

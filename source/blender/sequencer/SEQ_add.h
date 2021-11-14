@@ -36,6 +36,7 @@ typedef enum eSeqLoadFlags {
   SEQ_LOAD_SOUND_CACHE = (1 << 1),
   SEQ_LOAD_SOUND_MONO = (1 << 2),
   SEQ_LOAD_MOVIE_SYNC_FPS = (1 << 3),
+  SEQ_LOAD_SET_VIEW_TRANSFORM = (1 << 4),
 } eSeqLoadFlags;
 
 /* Api for adding new sequence strips. */
@@ -78,14 +79,16 @@ struct Sequence *SEQ_add_image_strip(struct Main *bmain,
 struct Sequence *SEQ_add_sound_strip(struct Main *bmain,
                                      struct Scene *scene,
                                      struct ListBase *seqbase,
-                                     struct SeqLoadData *load_data);
+                                     struct SeqLoadData *load_data,
+                                     const double audio_offset);
 struct Sequence *SEQ_add_meta_strip(struct Scene *scene,
                                     struct ListBase *seqbase,
                                     struct SeqLoadData *load_data);
 struct Sequence *SEQ_add_movie_strip(struct Main *bmain,
                                      struct Scene *scene,
                                      struct ListBase *seqbase,
-                                     struct SeqLoadData *load_data);
+                                     struct SeqLoadData *load_data,
+                                     double *r_start_offset);
 struct Sequence *SEQ_add_scene_strip(struct Scene *scene,
                                      struct ListBase *seqbase,
                                      struct SeqLoadData *load_data);

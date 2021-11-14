@@ -77,14 +77,14 @@ int EEVEE_occlusion_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
     common_data->ao_bounce_fac = (scene_eval->eevee.flag & SCE_EEVEE_GTAO_BOUNCE) ? 1.0f : 0.0f;
 
     effects->gtao_horizons_renderpass = DRW_texture_pool_query_2d(
-        fs_size[0], fs_size[1], GPU_RGBA8, &draw_engine_eevee_type);
+        UNPACK2(effects->hiz_size), GPU_RGBA8, &draw_engine_eevee_type);
     GPU_framebuffer_ensure_config(
         &fbl->gtao_fb,
         {GPU_ATTACHMENT_NONE, GPU_ATTACHMENT_TEXTURE(effects->gtao_horizons_renderpass)});
 
     if (G.debug_value == 6) {
       effects->gtao_horizons_debug = DRW_texture_pool_query_2d(
-          fs_size[0], fs_size[1], GPU_RGBA8, &draw_engine_eevee_type);
+          UNPACK2(fs_size), GPU_RGBA8, &draw_engine_eevee_type);
       GPU_framebuffer_ensure_config(
           &fbl->gtao_debug_fb,
           {GPU_ATTACHMENT_NONE, GPU_ATTACHMENT_TEXTURE(effects->gtao_horizons_debug)});
@@ -120,19 +120,12 @@ void EEVEE_occlusion_output_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata
   const eGPUTextureFormat texture_format = (tot_samples > 128) ? GPU_R32F : GPU_R16F;
 
   DefaultTextureList *dtxl = DRW_viewport_texture_list_get();
-  const float clear[4] = {0.0f, 0.0f, 0.0f, 0.0f};
 
   /* Should be enough precision for many samples. */
   DRW_texture_ensure_fullscreen_2d(&txl->ao_accum, texture_format, 0);
 
   GPU_framebuffer_ensure_config(&fbl->ao_accum_fb,
                                 {GPU_ATTACHMENT_NONE, GPU_ATTACHMENT_TEXTURE(txl->ao_accum)});
-
-  /* Clear texture. */
-  if (effects->taa_current_sample == 1) {
-    GPU_framebuffer_bind(fbl->ao_accum_fb);
-    GPU_framebuffer_clear_color(fbl->ao_accum_fb, clear);
-  }
 
   /* Accumulation pass */
   DRWState state = DRW_STATE_WRITE_COLOR | DRW_STATE_BLEND_ADD;
@@ -195,19 +188,31 @@ void EEVEE_occlusion_cache_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
   }
 }
 
-void EEVEE_occlusion_compute(EEVEE_ViewLayerData *UNUSED(sldata), EEVEE_Data *vedata)
+void EEVEE_occlusion_compute(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
 {
   EEVEE_PassList *psl = vedata->psl;
   EEVEE_FramebufferList *fbl = vedata->fbl;
   EEVEE_StorageList *stl = vedata->stl;
   EEVEE_EffectsInfo *effects = stl->effects;
+  EEVEE_CommonUniformBuffer *common_data = &sldata->common_data;
 
   if ((effects->enabled_effects & EFFECT_GTAO) != 0) {
     DRW_stats_group_start("GTAO Horizon Scan");
 
     GPU_framebuffer_bind(fbl->gtao_fb);
 
+    /** NOTE(fclem): Kind of fragile. We need this to make sure everything lines up
+     * nicely during planar reflection. */
+    if (common_data->ray_type != EEVEE_RAY_GLOSSY) {
+      const float *viewport_size = DRW_viewport_size_get();
+      GPU_framebuffer_viewport_set(fbl->gtao_fb, 0, 0, UNPACK2(viewport_size));
+    }
+
     DRW_draw_pass(psl->ao_horizon_search);
+
+    if (common_data->ray_type != EEVEE_RAY_GLOSSY) {
+      GPU_framebuffer_viewport_reset(fbl->gtao_fb);
+    }
 
     if (GPU_mip_render_workaround() ||
         GPU_type_matches(GPU_DEVICE_INTEL_UHD, GPU_OS_WIN, GPU_DRIVER_ANY)) {
@@ -246,6 +251,7 @@ void EEVEE_occlusion_output_accumulate(EEVEE_ViewLayerData *sldata, EEVEE_Data *
 {
   EEVEE_FramebufferList *fbl = vedata->fbl;
   EEVEE_PassList *psl = vedata->psl;
+  EEVEE_EffectsInfo *effects = vedata->stl->effects;
 
   if (fbl->ao_accum_fb != NULL) {
     DefaultTextureList *dtxl = DRW_viewport_texture_list_get();
@@ -255,6 +261,13 @@ void EEVEE_occlusion_output_accumulate(EEVEE_ViewLayerData *sldata, EEVEE_Data *
     EEVEE_occlusion_compute(sldata, vedata);
 
     GPU_framebuffer_bind(fbl->ao_accum_fb);
+
+    /* Clear texture. */
+    if (effects->taa_current_sample == 1) {
+      const float clear[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+      GPU_framebuffer_clear_color(fbl->ao_accum_fb, clear);
+    }
+
     DRW_draw_pass(psl->ao_accum_ps);
 
     /* Restore */

@@ -154,7 +154,9 @@ void OUTLINER_OT_highlight_update(wmOperatorType *ot)
 /** \name Toggle Open/Closed Operator
  * \{ */
 
-/* Open or close a tree element, optionally toggling all children recursively */
+/**
+ * Open or close a tree element, optionally toggling all children recursively.
+ */
 void outliner_item_openclose(SpaceOutliner *space_outliner,
                              TreeElement *te,
                              bool open,
@@ -761,7 +763,7 @@ static int outliner_id_copy_tag(SpaceOutliner *space_outliner, ListBase *tree)
     if (tselem->flag & TSE_SELECTED && ELEM(tselem->type, TSE_SOME_ID, TSE_LAYER_COLLECTION)) {
       ID *id = tselem->id;
       if (!(id->tag & LIB_TAG_DOIT)) {
-        BKE_copybuffer_tag_ID(tselem->id);
+        BKE_copybuffer_copy_tag_ID(tselem->id);
         num_ids++;
       }
     }
@@ -779,7 +781,7 @@ static int outliner_id_copy_exec(bContext *C, wmOperator *op)
   SpaceOutliner *space_outliner = CTX_wm_space_outliner(C);
   char str[FILE_MAX];
 
-  BKE_copybuffer_begin(bmain);
+  BKE_copybuffer_copy_begin(bmain);
 
   const int num_ids = outliner_id_copy_tag(space_outliner, &space_outliner->tree);
   if (num_ids == 0) {
@@ -788,7 +790,7 @@ static int outliner_id_copy_exec(bContext *C, wmOperator *op)
   }
 
   BLI_join_dirfile(str, sizeof(str), BKE_tempdir_base(), "copybuffer.blend");
-  BKE_copybuffer_save(bmain, str, op->reports);
+  BKE_copybuffer_copy_end(bmain, str, op->reports);
 
   BKE_reportf(op->reports, RPT_INFO, "Copied %d selected data-block(s)", num_ids);
 
@@ -964,7 +966,7 @@ void OUTLINER_OT_lib_relocate(wmOperatorType *ot)
 
 /* XXX This does not work with several items
  * (it is only called once in the end, due to the 'deferred'
- * filebrowser invocation through event system...). */
+ * file-browser invocation through event system...). */
 void lib_relocate_fn(bContext *C,
                      ReportList *UNUSED(reports),
                      Scene *UNUSED(scene),
@@ -1599,8 +1601,10 @@ void OUTLINER_OT_show_one_level(wmOperatorType *ot)
 /** \name Show Hierarchy Operator
  * \{ */
 
-/* Helper function for tree_element_shwo_hierarchy() -
- * recursively checks whether subtrees have any objects. */
+/**
+ * Helper function for #tree_element_shwo_hierarchy() -
+ * recursively checks whether subtrees have any objects.
+ */
 static int subtree_has_objects(ListBase *lb)
 {
   LISTBASE_FOREACH (TreeElement *, te, lb) {
@@ -1769,7 +1773,7 @@ static void tree_element_to_path(TreeElement *te,
           char buf[128], *name;
 
           temnext = (TreeElement *)(ld->next->data);
-          /* tsenext = TREESTORE(temnext); */ /* UNUSED */
+          // tsenext = TREESTORE(temnext); /* UNUSED */
 
           nextptr = &temnext->rnaptr;
           name = RNA_struct_name_get_alloc(nextptr, buf, sizeof(buf), NULL);

@@ -39,9 +39,11 @@
 #  include "BLI_math_mpq.hh"
 #  include "BLI_mpq2.hh"
 #  include "BLI_mpq3.hh"
+#  include "BLI_polyfill_2d.h"
 #  include "BLI_set.hh"
 #  include "BLI_span.hh"
 #  include "BLI_task.h"
+#  include "BLI_task.hh"
 #  include "BLI_threads.h"
 #  include "BLI_vector.hh"
 #  include "BLI_vector_set.hh"
@@ -49,6 +51,10 @@
 #  include "PIL_time.h"
 
 #  include "BLI_mesh_intersect.hh"
+
+#  ifdef WITH_TBB
+#    include <tbb/parallel_sort.h>
+#  endif
 
 // #  define PERFDEBUG
 
@@ -405,6 +411,11 @@ class IMeshArena::IMeshArenaImpl : NonCopyable, NonMovable {
     return add_or_find_vert(mco, co, orig);
   }
 
+  const Vert *add_or_find_vert(Vert *vert)
+  {
+    return add_or_find_vert_(vert);
+  }
+
   Face *add_face(Span<const Vert *> verts, int orig, Span<int> edge_origs, Span<bool> is_intersect)
   {
     Face *f = new Face(verts, next_face_id_++, orig, edge_origs, is_intersect);
@@ -485,10 +496,9 @@ class IMeshArena::IMeshArenaImpl : NonCopyable, NonMovable {
  private:
   const Vert *add_or_find_vert(const mpq3 &mco, const double3 &dco, int orig)
   {
-    /* Don't allocate Vert yet, in case it is already there. */
-    Vert vtry(mco, dco, NO_INDEX, NO_INDEX);
+    Vert *vtry = new Vert(mco, dco, NO_INDEX, NO_INDEX);
     const Vert *ans;
-    VSetKey vskey(&vtry);
+    VSetKey vskey(vtry);
     if (intersect_use_threading) {
 #  ifdef USE_SPINLOCK
       BLI_spin_lock(&lock_);
@@ -498,7 +508,9 @@ class IMeshArena::IMeshArenaImpl : NonCopyable, NonMovable {
     }
     const VSetKey *lookup = vset_.lookup_key_ptr(vskey);
     if (!lookup) {
-      vskey.vert = new Vert(mco, dco, next_vert_id_++, orig);
+      vtry->id = next_vert_id_++;
+      vtry->orig = orig;
+      vskey.vert = vtry;  // new Vert(mco, dco, next_vert_id_++, orig);
       vset_.add_new(vskey);
       allocated_verts_.append(std::unique_ptr<Vert>(vskey.vert));
       ans = vskey.vert;
@@ -509,6 +521,45 @@ class IMeshArena::IMeshArenaImpl : NonCopyable, NonMovable {
        * This is the intended semantics: if the Vert already
        * exists then we are merging verts and using the first-seen
        * one as the canonical one. */
+      delete vtry;
+      ans = lookup->vert;
+    }
+    if (intersect_use_threading) {
+#  ifdef USE_SPINLOCK
+      BLI_spin_unlock(&lock_);
+#  else
+      BLI_mutex_unlock(mutex_);
+#  endif
+    }
+    return ans;
+  };
+
+  const Vert *add_or_find_vert_(Vert *vtry)
+  {
+    const Vert *ans;
+    VSetKey vskey(vtry);
+    if (intersect_use_threading) {
+#  ifdef USE_SPINLOCK
+      BLI_spin_lock(&lock_);
+#  else
+      BLI_mutex_lock(mutex_);
+#  endif
+    }
+    const VSetKey *lookup = vset_.lookup_key_ptr(vskey);
+    if (!lookup) {
+      vtry->id = next_vert_id_++;
+      vskey.vert = vtry;  // new Vert(mco, dco, next_vert_id_++, orig);
+      vset_.add_new(vskey);
+      allocated_verts_.append(std::unique_ptr<Vert>(vskey.vert));
+      ans = vskey.vert;
+    }
+    else {
+      /* It was a duplicate, so return the existing one.
+       * Note that the returned Vert may have a different orig.
+       * This is the intended semantics: if the Vert already
+       * exists then we are merging verts and using the first-seen
+       * one as the canonical one. */
+      delete vtry;
       ans = lookup->vert;
     }
     if (intersect_use_threading) {
@@ -547,6 +598,11 @@ int IMeshArena::tot_allocated_faces() const
 const Vert *IMeshArena::add_or_find_vert(const mpq3 &co, int orig)
 {
   return pimpl_->add_or_find_vert(co, orig);
+}
+
+const Vert *IMeshArena::add_or_find_vert(Vert *vert)
+{
+  return pimpl_->add_or_find_vert(vert);
 }
 
 Face *IMeshArena::add_face(Span<const Vert *> verts,
@@ -632,7 +688,11 @@ void IMesh::populate_vert(int max_verts)
    * TODO: when all debugged, set fix_order = false. */
   const bool fix_order = true;
   if (fix_order) {
+#  ifdef WITH_TBB
+    tbb::parallel_sort(vert_.begin(), vert_.end(), [](const Vert *a, const Vert *b) {
+#  else
     std::sort(vert_.begin(), vert_.end(), [](const Vert *a, const Vert *b) {
+#  endif
       if (a->orig != NO_INDEX && b->orig != NO_INDEX) {
         return a->orig < b->orig;
       }
@@ -743,62 +803,12 @@ std::ostream &operator<<(std::ostream &os, const IMesh &mesh)
   return os;
 }
 
-struct BoundingBox {
-  float3 min{FLT_MAX, FLT_MAX, FLT_MAX};
-  float3 max{-FLT_MAX, -FLT_MAX, -FLT_MAX};
-
-  BoundingBox() = default;
-  BoundingBox(const float3 &min, const float3 &max) : min(min), max(max)
-  {
-  }
-
-  void combine(const float3 &p)
-  {
-    min.x = min_ff(min.x, p.x);
-    min.y = min_ff(min.y, p.y);
-    min.z = min_ff(min.z, p.z);
-    max.x = max_ff(max.x, p.x);
-    max.y = max_ff(max.y, p.y);
-    max.z = max_ff(max.z, p.z);
-  }
-
-  void combine(const double3 &p)
-  {
-    min.x = min_ff(min.x, static_cast<float>(p.x));
-    min.y = min_ff(min.y, static_cast<float>(p.y));
-    min.z = min_ff(min.z, static_cast<float>(p.z));
-    max.x = max_ff(max.x, static_cast<float>(p.x));
-    max.y = max_ff(max.y, static_cast<float>(p.y));
-    max.z = max_ff(max.z, static_cast<float>(p.z));
-  }
-
-  void combine(const BoundingBox &bb)
-  {
-    min.x = min_ff(min.x, bb.min.x);
-    min.y = min_ff(min.y, bb.min.y);
-    min.z = min_ff(min.z, bb.min.z);
-    max.x = max_ff(max.x, bb.max.x);
-    max.y = max_ff(max.y, bb.max.y);
-    max.z = max_ff(max.z, bb.max.z);
-  }
-
-  void expand(float pad)
-  {
-    min.x -= pad;
-    min.y -= pad;
-    min.z -= pad;
-    max.x += pad;
-    max.y += pad;
-    max.z += pad;
-  }
-};
-
 /**
  * Assume bounding boxes have been expanded by a sufficient epsilon on all sides
  * so that the comparisons against the bb bounds are sufficient to guarantee that
  * if an overlap or even touching could happen, this will return true.
  */
-static bool bbs_might_intersect(const BoundingBox &bb_a, const BoundingBox &bb_b)
+bool bbs_might_intersect(const BoundingBox &bb_a, const BoundingBox &bb_b)
 {
   return isect_aabb_aabb_v3(bb_a.min, bb_a.max, bb_b.min, bb_b.max);
 }
@@ -1086,7 +1096,7 @@ static mpq2 project_3d_to_2d(const mpq3 &p3d, int proj_axis)
  * So the sign of E is the same as the sign of E_exact if
  *    |E| > supremum(E) * index(E) * DBL_EPSILON
  *
- * Note: a possible speedup would be to have a simple function
+ * NOTE: a possible speedup would be to have a simple function
  * that calculates the error bound if one knows that all values
  * are less than some global maximum - most of the function would
  * be calculated ahead of time. The global max could be passed
@@ -1152,11 +1162,11 @@ static int filter_plane_side(const double3 &p,
 }
 
 /*
- * interesect_tri_tri and helper functions.
+ * #intersect_tri_tri and helper functions.
  * This code uses the algorithm of Guigue and Devillers, as described
  * in "Faster Triangle-Triangle Intersection Tests".
- * Adapted from github code by Eric Haines:
- * github.com/erich666/jgt-code/tree/master/Volume_08/Number_1/Guigue2003
+ * Adapted from code by Eric Haines:
+ * https://github.com/erich666/jgt-code/tree/master/Volume_08/Number_1/Guigue2003
  */
 
 /**
@@ -1164,13 +1174,19 @@ static int filter_plane_side(const double3 &p,
  * Assumes ab is not perpendicular to n.
  * This works because the ratio of the projections of ab and ac onto n is the same as
  * the ratio along the line ab of the intersection point to the whole of ab.
+ * The ab, ac, and dotbuf arguments are used as a temporaries; declaring them
+ * in the caller can avoid many allocs and frees of mpq3 and mpq_class structures.
  */
-static inline mpq3 tti_interp(const mpq3 &a, const mpq3 &b, const mpq3 &c, const mpq3 &n)
+static inline mpq3 tti_interp(
+    const mpq3 &a, const mpq3 &b, const mpq3 &c, const mpq3 &n, mpq3 &ab, mpq3 &ac, mpq3 &dotbuf)
 {
-  mpq3 ab = a - b;
-  mpq_class den = mpq3::dot(ab, n);
+  ab = a;
+  ab -= b;
+  ac = a;
+  ac -= c;
+  mpq_class den = mpq3::dot_with_buffer(ab, n, dotbuf);
   BLI_assert(den != 0);
-  mpq_class alpha = mpq3::dot(a - c, n) / den;
+  mpq_class alpha = mpq3::dot_with_buffer(ac, n, dotbuf) / den;
   return a - alpha * ab;
 }
 
@@ -1178,11 +1194,28 @@ static inline mpq3 tti_interp(const mpq3 &a, const mpq3 &b, const mpq3 &c, const
  * Return +1, 0, -1 as a + ad is above, on, or below the oriented plane containing a, b, c in CCW
  * order. This is the same as -oriented(a, b, c, a + ad), but uses fewer arithmetic operations.
  * TODO: change arguments to `const Vert *` and use floating filters.
+ * The ba, ca, n, and dotbuf arguments are used as temporaries; declaring them
+ * in the caller can avoid many allocs and frees of mpq3 and mpq_class structures.
  */
-static inline int tti_above(const mpq3 &a, const mpq3 &b, const mpq3 &c, const mpq3 &ad)
+static inline int tti_above(const mpq3 &a,
+                            const mpq3 &b,
+                            const mpq3 &c,
+                            const mpq3 &ad,
+                            mpq3 &ba,
+                            mpq3 &ca,
+                            mpq3 &n,
+                            mpq3 &dotbuf)
 {
-  mpq3 n = mpq3::cross(b - a, c - a);
-  return sgn(mpq3::dot(ad, n));
+  ba = b;
+  ba -= a;
+  ca = c;
+  ca -= a;
+
+  n.x = ba.y * ca.z - ba.z * ca.y;
+  n.y = ba.z * ca.x - ba.x * ca.z;
+  n.z = ba.x * ca.y - ba.y * ca.x;
+
+  return sgn(mpq3::dot_with_buffer(ad, n, dotbuf));
 }
 
 /**
@@ -1226,20 +1259,21 @@ static ITT_value itt_canon2(const mpq3 &p1,
   mpq3 p1p2 = p2 - p1;
   mpq3 intersect_1;
   mpq3 intersect_2;
+  mpq3 buf[4];
   bool no_overlap = false;
   /* Top test in classification tree. */
-  if (tti_above(p1, q1, r2, p1p2) > 0) {
+  if (tti_above(p1, q1, r2, p1p2, buf[0], buf[1], buf[2], buf[3]) > 0) {
     /* Middle right test in classification tree. */
-    if (tti_above(p1, r1, r2, p1p2) <= 0) {
+    if (tti_above(p1, r1, r2, p1p2, buf[0], buf[1], buf[2], buf[3]) <= 0) {
       /* Bottom right test in classification tree. */
-      if (tti_above(p1, r1, q2, p1p2) > 0) {
+      if (tti_above(p1, r1, q2, p1p2, buf[0], buf[1], buf[2], buf[3]) > 0) {
         /* Overlap is [k [i l] j]. */
         if (dbg_level > 0) {
           std::cout << "overlap [k [i l] j]\n";
         }
         /* i is intersect with p1r1. l is intersect with p2r2. */
-        intersect_1 = tti_interp(p1, r1, p2, n2);
-        intersect_2 = tti_interp(p2, r2, p1, n1);
+        intersect_1 = tti_interp(p1, r1, p2, n2, buf[0], buf[1], buf[2]);
+        intersect_2 = tti_interp(p2, r2, p1, n1, buf[0], buf[1], buf[2]);
       }
       else {
         /* Overlap is [i [k l] j]. */
@@ -1247,8 +1281,8 @@ static ITT_value itt_canon2(const mpq3 &p1,
           std::cout << "overlap [i [k l] j]\n";
         }
         /* k is intersect with p2q2. l is intersect is p2r2. */
-        intersect_1 = tti_interp(p2, q2, p1, n1);
-        intersect_2 = tti_interp(p2, r2, p1, n1);
+        intersect_1 = tti_interp(p2, q2, p1, n1, buf[0], buf[1], buf[2]);
+        intersect_2 = tti_interp(p2, r2, p1, n1, buf[0], buf[1], buf[2]);
       }
     }
     else {
@@ -1261,7 +1295,7 @@ static ITT_value itt_canon2(const mpq3 &p1,
   }
   else {
     /* Middle left test in classification tree. */
-    if (tti_above(p1, q1, q2, p1p2) < 0) {
+    if (tti_above(p1, q1, q2, p1p2, buf[0], buf[1], buf[2], buf[3]) < 0) {
       /* No overlap: [i j] [k l]. */
       if (dbg_level > 0) {
         std::cout << "no overlap: [i j] [k l]\n";
@@ -1270,14 +1304,14 @@ static ITT_value itt_canon2(const mpq3 &p1,
     }
     else {
       /* Bottom left test in classification tree. */
-      if (tti_above(p1, r1, q2, p1p2) >= 0) {
+      if (tti_above(p1, r1, q2, p1p2, buf[0], buf[1], buf[2], buf[3]) >= 0) {
         /* Overlap is [k [i j] l]. */
         if (dbg_level > 0) {
           std::cout << "overlap [k [i j] l]\n";
         }
         /* i is intersect with p1r1. j is intersect with p1q1. */
-        intersect_1 = tti_interp(p1, r1, p2, n2);
-        intersect_2 = tti_interp(p1, q1, p2, n2);
+        intersect_1 = tti_interp(p1, r1, p2, n2, buf[0], buf[1], buf[2]);
+        intersect_2 = tti_interp(p1, q1, p2, n2, buf[0], buf[1], buf[2]);
       }
       else {
         /* Overlap is [i [k j] l]. */
@@ -1285,8 +1319,8 @@ static ITT_value itt_canon2(const mpq3 &p1,
           std::cout << "overlap [i [k j] l]\n";
         }
         /* k is intersect with p2q2. j is intersect with p1q1. */
-        intersect_1 = tti_interp(p2, q2, p1, n1);
-        intersect_2 = tti_interp(p1, q1, p2, n2);
+        intersect_1 = tti_interp(p2, q2, p1, n1, buf[0], buf[1], buf[2]);
+        intersect_2 = tti_interp(p1, q1, p2, n2, buf[0], buf[1], buf[2]);
       }
     }
   }
@@ -1411,7 +1445,7 @@ static ITT_value intersect_tri_tri(const IMesh &tm, int t1, int t2)
   int sr1 = filter_plane_side(d_r1, d_r2, d_n2, abs_d_r1, abs_d_r2, abs_d_n2);
   if ((sp1 > 0 && sq1 > 0 && sr1 > 0) || (sp1 < 0 && sq1 < 0 && sr1 < 0)) {
 #  ifdef PERFDEBUG
-    incperfcount(2); /* Tri tri intersects decided by filter plane tests. */
+    incperfcount(2); /* Triangle-triangle intersects decided by filter plane tests. */
 #  endif
     if (dbg_level > 0) {
       std::cout << "no intersection, all t1's verts above or below t2\n";
@@ -1429,7 +1463,7 @@ static ITT_value intersect_tri_tri(const IMesh &tm, int t1, int t2)
   int sr2 = filter_plane_side(d_r2, d_r1, d_n1, abs_d_r2, abs_d_r1, abs_d_n1);
   if ((sp2 > 0 && sq2 > 0 && sr2 > 0) || (sp2 < 0 && sq2 < 0 && sr2 < 0)) {
 #  ifdef PERFDEBUG
-    incperfcount(2); /* Tri tri intersects decided by filter plane tests. */
+    incperfcount(2); /* Triangle-triangle intersects decided by filter plane tests. */
 #  endif
     if (dbg_level > 0) {
       std::cout << "no intersection, all t2's verts above or below t1\n";
@@ -1437,6 +1471,7 @@ static ITT_value intersect_tri_tri(const IMesh &tm, int t1, int t2)
     return ITT_value(INONE);
   }
 
+  mpq3 buf[2];
   const mpq3 &p1 = vp1->co_exact;
   const mpq3 &q1 = vq1->co_exact;
   const mpq3 &r1 = vr1->co_exact;
@@ -1446,13 +1481,19 @@ static ITT_value intersect_tri_tri(const IMesh &tm, int t1, int t2)
 
   const mpq3 &n2 = tri2.plane->norm_exact;
   if (sp1 == 0) {
-    sp1 = sgn(mpq3::dot(p1 - r2, n2));
+    buf[0] = p1;
+    buf[0] -= r2;
+    sp1 = sgn(mpq3::dot_with_buffer(buf[0], n2, buf[1]));
   }
   if (sq1 == 0) {
-    sq1 = sgn(mpq3::dot(q1 - r2, n2));
+    buf[0] = q1;
+    buf[0] -= r2;
+    sq1 = sgn(mpq3::dot_with_buffer(buf[0], n2, buf[1]));
   }
   if (sr1 == 0) {
-    sr1 = sgn(mpq3::dot(r1 - r2, n2));
+    buf[0] = r1;
+    buf[0] -= r2;
+    sr1 = sgn(mpq3::dot_with_buffer(buf[0], n2, buf[1]));
   }
 
   if (dbg_level > 1) {
@@ -1464,7 +1505,7 @@ static ITT_value intersect_tri_tri(const IMesh &tm, int t1, int t2)
       std::cout << "no intersection, all t1's verts above or below t2 (exact)\n";
     }
 #  ifdef PERFDEBUG
-    incperfcount(3); /* Tri tri intersects decided by exact plane tests. */
+    incperfcount(3); /* Triangle-triangle intersects decided by exact plane tests. */
 #  endif
     return ITT_value(INONE);
   }
@@ -1472,13 +1513,19 @@ static ITT_value intersect_tri_tri(const IMesh &tm, int t1, int t2)
   /* Repeat for signs of t2's vertices with respect to plane of t1. */
   const mpq3 &n1 = tri1.plane->norm_exact;
   if (sp2 == 0) {
-    sp2 = sgn(mpq3::dot(p2 - r1, n1));
+    buf[0] = p2;
+    buf[0] -= r1;
+    sp2 = sgn(mpq3::dot_with_buffer(buf[0], n1, buf[1]));
   }
   if (sq2 == 0) {
-    sq2 = sgn(mpq3::dot(q2 - r1, n1));
+    buf[0] = q2;
+    buf[0] -= r1;
+    sq2 = sgn(mpq3::dot_with_buffer(buf[0], n1, buf[1]));
   }
   if (sr2 == 0) {
-    sr2 = sgn(mpq3::dot(r2 - r1, n1));
+    buf[0] = r2;
+    buf[0] -= r1;
+    sr2 = sgn(mpq3::dot_with_buffer(buf[0], n1, buf[1]));
   }
 
   if (dbg_level > 1) {
@@ -1490,7 +1537,7 @@ static ITT_value intersect_tri_tri(const IMesh &tm, int t1, int t2)
       std::cout << "no intersection, all t2's verts above or below t1 (exact)\n";
     }
 #  ifdef PERFDEBUG
-    incperfcount(3); /* Tri tri intersects decided by exact plane tests. */
+    incperfcount(3); /* Triangle-triangle intersects decided by exact plane tests. */
 #  endif
     return ITT_value(INONE);
   }
@@ -1576,6 +1623,9 @@ struct CDT_data {
   Vector<bool> is_reversed;
   /** Result of running CDT on input with (vert, edge, face). */
   CDT_result<mpq_class> cdt_out;
+  /** To speed up get_cdt_edge_orig, sometimes populate this map from vertex pair to output edge.
+   */
+  Map<std::pair<int, int>, int> verts_to_edge;
   int proj_axis;
 };
 
@@ -1734,6 +1784,30 @@ static CDT_data prepare_cdt_input_for_cluster(const IMesh &tm,
   return ans;
 }
 
+/* Return a copy of the argument with the integers ordered in ascending order. */
+static inline std::pair<int, int> sorted_int_pair(std::pair<int, int> pair)
+{
+  if (pair.first <= pair.second) {
+    return pair;
+  }
+  return std::pair<int, int>(pair.second, pair.first);
+}
+
+/**
+ * Build cd.verts_to_edge to map from a pair of cdt output indices to an index in cd.cdt_out.edge.
+ * Order the vertex indices so that the smaller one is first in the pair.
+ */
+static void populate_cdt_edge_map(Map<std::pair<int, int>, int> &verts_to_edge,
+                                  const CDT_result<mpq_class> &cdt_out)
+{
+  verts_to_edge.reserve(cdt_out.edge.size());
+  for (int e : cdt_out.edge.index_range()) {
+    std::pair<int, int> vpair = sorted_int_pair(cdt_out.edge[e]);
+    /* There should be only one edge for each vertex pair. */
+    verts_to_edge.add(vpair, e);
+  }
+}
+
 /**
  * Fills in cd.cdt_out with result of doing the cdt calculation on (vert, edge, face).
  */
@@ -1766,6 +1840,10 @@ static void do_cdt(CDT_data &cd)
   }
   cdt_in.epsilon = 0; /* TODO: needs attention for non-exact T. */
   cd.cdt_out = blender::meshintersect::delaunay_2d_calc(cdt_in, CDT_INSIDE);
+  constexpr int make_edge_map_threshold = 15;
+  if (cd.cdt_out.edge.size() >= make_edge_map_threshold) {
+    populate_cdt_edge_map(cd.verts_to_edge, cd.cdt_out);
+  }
   if (dbg_level > 0) {
     std::cout << "\nCDT result\nVerts:\n";
     for (int i : cd.cdt_out.vert.index_range()) {
@@ -1797,48 +1875,440 @@ static void do_cdt(CDT_data &cd)
   }
 }
 
+/* Find an original edge index that goes with the edge that the CDT output edge
+ * that goes between verts i0 and i1 (in the CDT output vert indexing scheme).
+ * There may be more than one: if so, prefer one that was originally a face edge.
+ * The input to CDT for a triangle with some intersecting segments from other triangles
+ * will have both edges and a face constraint for the main triangle (this is redundant
+ * but allows us to discover which face edge goes with which output edges).
+ * If there is any face edge, return one of those as the original.
+ * If there is no face edge but there is another edge in the input problem, then that
+ * edge must have come from intersection with another triangle, so set *r_is_intersect
+ * to true in that case. */
 static int get_cdt_edge_orig(
     int i0, int i1, const CDT_data &cd, const IMesh &in_tm, bool *r_is_intersect)
 {
   int foff = cd.cdt_out.face_edge_offset;
   *r_is_intersect = false;
-  for (int e : cd.cdt_out.edge.index_range()) {
-    std::pair<int, int> edge = cd.cdt_out.edge[e];
-    if ((edge.first == i0 && edge.second == i1) || (edge.first == i1 && edge.second == i0)) {
-      /* Pick an arbitrary orig, but not one equal to NO_INDEX, if we can help it. */
-      /* TODO: if edge has origs from more than on part of the nary input,
-       * then want to set *r_is_intersect to true. */
-      for (int orig_index : cd.cdt_out.edge_orig[e]) {
-        /* orig_index encodes the triangle and pos within the triangle of the input edge. */
-        if (orig_index >= foff) {
-          int in_face_index = (orig_index / foff) - 1;
-          int pos = orig_index % foff;
-          /* We need to retrieve the edge orig field from the Face used to populate the
-           * in_face_index'th face of the CDT, at the pos'th position of the face. */
-          int in_tm_face_index = cd.input_face[in_face_index];
-          BLI_assert(in_tm_face_index < in_tm.face_size());
-          const Face *facep = in_tm.face(in_tm_face_index);
-          BLI_assert(pos < facep->size());
-          bool is_rev = cd.is_reversed[in_face_index];
-          int eorig = is_rev ? facep->edge_orig[2 - pos] : facep->edge_orig[pos];
-          if (eorig != NO_INDEX) {
-            return eorig;
-          }
-        }
-        else {
-          /* This edge came from an edge input to the CDT problem,
-           * so it is an intersect edge. */
-          *r_is_intersect = true;
-          /* TODO: maybe there is an orig index:
-           * This happens if an input edge was formed by an input face having
-           * an edge that is co-planar with the cluster, while the face as a whole is not. */
-          return NO_INDEX;
-        }
+  int e = NO_INDEX;
+  if (cd.verts_to_edge.size() > 0) {
+    /* Use the populated map to find the edge, if any, between vertices i0 and i1. */
+    std::pair<int, int> vpair = sorted_int_pair(std::pair<int, int>(i0, i1));
+    e = cd.verts_to_edge.lookup_default(vpair, NO_INDEX);
+  }
+  else {
+    for (int ee : cd.cdt_out.edge.index_range()) {
+      std::pair<int, int> edge = cd.cdt_out.edge[ee];
+      if ((edge.first == i0 && edge.second == i1) || (edge.first == i1 && edge.second == i0)) {
+        e = ee;
+        break;
       }
-      return NO_INDEX;
     }
   }
+  if (e == NO_INDEX) {
+    return NO_INDEX;
+  }
+
+  /* Pick an arbitrary orig, but not one equal to NO_INDEX, if we can help it. */
+  /* TODO: if edge has origs from more than one part of the nary input,
+   * then want to set *r_is_intersect to true. */
+  int face_eorig = NO_INDEX;
+  bool have_non_face_eorig = false;
+  for (int orig_index : cd.cdt_out.edge_orig[e]) {
+    /* orig_index encodes the triangle and pos within the triangle of the input edge. */
+    if (orig_index >= foff) {
+      if (face_eorig == NO_INDEX) {
+        int in_face_index = (orig_index / foff) - 1;
+        int pos = orig_index % foff;
+        /* We need to retrieve the edge orig field from the Face used to populate the
+         * in_face_index'th face of the CDT, at the pos'th position of the face. */
+        int in_tm_face_index = cd.input_face[in_face_index];
+        BLI_assert(in_tm_face_index < in_tm.face_size());
+        const Face *facep = in_tm.face(in_tm_face_index);
+        BLI_assert(pos < facep->size());
+        bool is_rev = cd.is_reversed[in_face_index];
+        int eorig = is_rev ? facep->edge_orig[2 - pos] : facep->edge_orig[pos];
+        if (eorig != NO_INDEX) {
+          face_eorig = eorig;
+        }
+      }
+    }
+    else {
+      if (!have_non_face_eorig) {
+        have_non_face_eorig = true;
+      }
+      if (face_eorig != NO_INDEX && have_non_face_eorig) {
+        /* Only need at most one orig for each type. */
+        break;
+      }
+    }
+  }
+  if (face_eorig != NO_INDEX) {
+    return face_eorig;
+  }
+  if (have_non_face_eorig) {
+    /* This must have been an input to the CDT problem that was an intersection edge. */
+    /* TODO: maybe there is an orig index:
+     * This happens if an input edge was formed by an input face having
+     * an edge that is co-planar with the cluster, while the face as a whole is not. */
+    *r_is_intersect = true;
+    return NO_INDEX;
+  }
   return NO_INDEX;
+}
+
+/**
+ * Make a Face from the CDT output triangle cdt_out_t, which has corresponding input triangle
+ * cdt_in_t. The triangle indices that are in cd.input_face are from IMesh tm.
+ * Return a pointer to the newly constructed Face.
+ */
+static Face *cdt_tri_as_imesh_face(
+    int cdt_out_t, int cdt_in_t, const CDT_data &cd, const IMesh &tm, IMeshArena *arena)
+{
+  const CDT_result<mpq_class> &cdt_out = cd.cdt_out;
+  int t_orig = tm.face(cd.input_face[cdt_in_t])->orig;
+  BLI_assert(cdt_out.face[cdt_out_t].size() == 3);
+  int i0 = cdt_out.face[cdt_out_t][0];
+  int i1 = cdt_out.face[cdt_out_t][1];
+  int i2 = cdt_out.face[cdt_out_t][2];
+  mpq3 v0co = unproject_cdt_vert(cd, cdt_out.vert[i0]);
+  mpq3 v1co = unproject_cdt_vert(cd, cdt_out.vert[i1]);
+  mpq3 v2co = unproject_cdt_vert(cd, cdt_out.vert[i2]);
+  /* No need to provide an original index: if coord matches
+   * an original one, then it will already be in the arena
+   * with the correct orig field. */
+  const Vert *v0 = arena->add_or_find_vert(v0co, NO_INDEX);
+  const Vert *v1 = arena->add_or_find_vert(v1co, NO_INDEX);
+  const Vert *v2 = arena->add_or_find_vert(v2co, NO_INDEX);
+  Face *facep;
+  bool is_isect0;
+  bool is_isect1;
+  bool is_isect2;
+  if (cd.is_reversed[cdt_in_t]) {
+    int oe0 = get_cdt_edge_orig(i0, i2, cd, tm, &is_isect0);
+    int oe1 = get_cdt_edge_orig(i2, i1, cd, tm, &is_isect1);
+    int oe2 = get_cdt_edge_orig(i1, i0, cd, tm, &is_isect2);
+    facep = arena->add_face(
+        {v0, v2, v1}, t_orig, {oe0, oe1, oe2}, {is_isect0, is_isect1, is_isect2});
+  }
+  else {
+    int oe0 = get_cdt_edge_orig(i0, i1, cd, tm, &is_isect0);
+    int oe1 = get_cdt_edge_orig(i1, i2, cd, tm, &is_isect1);
+    int oe2 = get_cdt_edge_orig(i2, i0, cd, tm, &is_isect2);
+    facep = arena->add_face(
+        {v0, v1, v2}, t_orig, {oe0, oe1, oe2}, {is_isect0, is_isect1, is_isect2});
+  }
+  facep->populate_plane(false);
+  return facep;
+}
+
+/* Like BLI_math's is_quad_flip_v3_first_third_fast_with_normal, with const double3's. */
+static bool is_quad_flip_first_third(const double3 &v1,
+                                     const double3 &v2,
+                                     const double3 &v3,
+                                     const double3 &v4,
+                                     const double3 &normal)
+{
+  double3 dir_v3v1 = v3 - v1;
+  double3 tangent = double3::cross_high_precision(dir_v3v1, normal);
+  double dot = double3::dot(v1, tangent);
+  return (double3::dot(v4, tangent) >= dot) || (double3::dot(v2, tangent) <= dot);
+}
+
+/**
+ * Tessellate face f into triangles and return an array of `const Face *`
+ * giving that triangulation. Intended to be used when f has => 4 vertices.
+ * Care is taken so that the original edge index associated with
+ * each edge in the output triangles either matches the original edge
+ * for the (identical) edge of f, or else is -1. So diagonals added
+ * for triangulation can later be identified by having #NO_INDEX for original.
+ *
+ * This code uses Blenlib's BLI_polyfill_calc to do triangulation, and is therefore quite fast.
+ * Unfortunately, it can product degenerate triangles that mesh_intersect will remove, leaving
+ * the mesh non-PWN.
+ */
+static Array<Face *> polyfill_triangulate_poly(Face *f, IMeshArena *arena)
+{
+  /* Similar to loop body in #BM_mesh_calc_tessellation. */
+  int flen = f->size();
+  BLI_assert(flen >= 4);
+  if (!f->plane_populated()) {
+    f->populate_plane(false);
+  }
+  const double3 &poly_normal = f->plane->norm;
+  float no[3] = {float(poly_normal[0]), float(poly_normal[1]), float(poly_normal[2])};
+  normalize_v3(no);
+  if (flen == 4) {
+    const Vert *v0 = (*f)[0];
+    const Vert *v1 = (*f)[1];
+    const Vert *v2 = (*f)[2];
+    const Vert *v3 = (*f)[3];
+    int eo_01 = f->edge_orig[0];
+    int eo_12 = f->edge_orig[1];
+    int eo_23 = f->edge_orig[2];
+    int eo_30 = f->edge_orig[3];
+    Face *f0, *f1;
+    if (UNLIKELY(is_quad_flip_first_third(v0->co, v1->co, v2->co, v3->co, f->plane->norm))) {
+      f0 = arena->add_face({v0, v1, v3}, f->orig, {eo_01, -1, eo_30}, {false, false, false});
+      f1 = arena->add_face({v1, v2, v3}, f->orig, {eo_12, eo_23, -1}, {false, false, false});
+    }
+    else {
+      f0 = arena->add_face({v0, v1, v2}, f->orig, {eo_01, eo_12, -1}, {false, false, false});
+      f1 = arena->add_face({v0, v2, v3}, f->orig, {-1, eo_23, eo_30}, {false, false, false});
+    }
+    return Array<Face *>{f0, f1};
+  }
+  /* Project along negative face normal so (x,y) can be used in 2d. */ float axis_mat[3][3];
+  float(*projverts)[2];
+  unsigned int(*tris)[3];
+  const int totfilltri = flen - 2;
+  /* Prepare projected vertices and array to receive triangles in tessellation. */
+  tris = static_cast<unsigned int(*)[3]>(MEM_malloc_arrayN(totfilltri, sizeof(*tris), __func__));
+  projverts = static_cast<float(*)[2]>(MEM_malloc_arrayN(flen, sizeof(*projverts), __func__));
+  axis_dominant_v3_to_m3_negate(axis_mat, no);
+  for (int j = 0; j < flen; ++j) {
+    const double3 &dco = (*f)[j]->co;
+    float co[3] = {float(dco[0]), float(dco[1]), float(dco[2])};
+    mul_v2_m3v3(projverts[j], axis_mat, co);
+  }
+  BLI_polyfill_calc(projverts, flen, 1, tris);
+  /* Put tessellation triangles into Face form. Record original edges where they exist. */
+  Array<Face *> ans(totfilltri);
+  for (int t = 0; t < totfilltri; ++t) {
+    unsigned int *tri = tris[t];
+    int eo[3];
+    const Vert *v[3];
+    for (int k = 0; k < 3; k++) {
+      BLI_assert(tri[k] < flen);
+      v[k] = (*f)[tri[k]];
+      /* If tri edge goes between two successive indices in
+       * the original face, then it is an original edge. */
+      if ((tri[k] + 1) % flen == tri[(k + 1) % 3]) {
+        eo[k] = f->edge_orig[tri[k]];
+      }
+      else {
+        eo[k] = NO_INDEX;
+      }
+      ans[t] = arena->add_face(
+          {v[0], v[1], v[2]}, f->orig, {eo[0], eo[1], eo[2]}, {false, false, false});
+    }
+  }
+
+  MEM_freeN(tris);
+  MEM_freeN(projverts);
+
+  return ans;
+}
+
+/**
+ * Tessellate face f into triangles and return an array of `const Face *`
+ * giving that triangulation, using an exact triangulation method.
+ *
+ * The method used is to use the CDT triangulation. Usually that triangulation
+ * will only use the existing vertices. However, if the face self-intersects
+ * then the CDT triangulation will include the intersection points.
+ * If this happens, we use the polyfill triangulator instead. We don't
+ * use the polyfill triangulator by default because it can create degenerate
+ * triangles (which we can handle but they'll create non-manifold meshes).
+ *
+ * While it is tempting to handle quadrilaterals specially, since that
+ * is by far the usual case, we need to know if the quad is convex when
+ * projected before doing so, and that takes a fair amount of computation by itself.
+ */
+static Array<Face *> exact_triangulate_poly(Face *f, IMeshArena *arena)
+{
+  int flen = f->size();
+  CDT_input<mpq_class> cdt_in;
+  cdt_in.vert = Array<mpq2>(flen);
+  cdt_in.face = Array<Vector<int>>(1);
+  cdt_in.face[0].reserve(flen);
+  for (int i : f->index_range()) {
+    cdt_in.face[0].append(i);
+  }
+  /* Project poly along dominant axis of normal to get 2d coords. */
+  if (!f->plane_populated()) {
+    f->populate_plane(false);
+  }
+  const double3 &poly_normal = f->plane->norm;
+  int axis = double3::dominant_axis(poly_normal);
+  /* If project down y axis as opposed to x or z, the orientation
+   * of the polygon will be reversed.
+   * Yet another reversal happens if the poly normal in the dominant
+   * direction is opposite that of the positive dominant axis. */
+  bool rev1 = (axis == 1);
+  bool rev2 = poly_normal[axis] < 0;
+  bool rev = rev1 ^ rev2;
+  for (int i = 0; i < flen; ++i) {
+    int ii = rev ? flen - i - 1 : i;
+    mpq2 &p2d = cdt_in.vert[ii];
+    int k = 0;
+    for (int j = 0; j < 3; ++j) {
+      if (j != axis) {
+        p2d[k++] = (*f)[ii]->co_exact[j];
+      }
+    }
+  }
+  CDT_result<mpq_class> cdt_out = delaunay_2d_calc(cdt_in, CDT_INSIDE);
+  int n_tris = cdt_out.face.size();
+  Array<Face *> ans(n_tris);
+  for (int t = 0; t < n_tris; ++t) {
+    int i_v_out[3];
+    const Vert *v[3];
+    int eo[3];
+    bool needs_steiner = false;
+    for (int i = 0; i < 3; ++i) {
+      i_v_out[i] = cdt_out.face[t][i];
+      if (cdt_out.vert_orig[i_v_out[i]].size() == 0) {
+        needs_steiner = true;
+        break;
+      }
+      v[i] = (*f)[cdt_out.vert_orig[i_v_out[i]][0]];
+    }
+    if (needs_steiner) {
+      /* Fall back on the polyfill triangulator. */
+      return polyfill_triangulate_poly(f, arena);
+    }
+    Map<std::pair<int, int>, int> verts_to_edge;
+    populate_cdt_edge_map(verts_to_edge, cdt_out);
+    int foff = cdt_out.face_edge_offset;
+    for (int i = 0; i < 3; ++i) {
+      std::pair<int, int> vpair(i_v_out[i], i_v_out[(i + 1) % 3]);
+      std::pair<int, int> vpair_canon = sorted_int_pair(vpair);
+      int e_out = verts_to_edge.lookup_default(vpair_canon, NO_INDEX);
+      BLI_assert(e_out != NO_INDEX);
+      eo[i] = NO_INDEX;
+      for (int orig : cdt_out.edge_orig[e_out]) {
+        if (orig >= foff) {
+          int pos = orig % foff;
+          BLI_assert(pos < f->size());
+          eo[i] = f->edge_orig[pos];
+          break;
+        }
+      }
+    }
+    if (rev) {
+      ans[t] = arena->add_face(
+          {v[0], v[2], v[1]}, f->orig, {eo[2], eo[1], eo[0]}, {false, false, false});
+    }
+    else {
+      ans[t] = arena->add_face(
+          {v[0], v[1], v[2]}, f->orig, {eo[0], eo[1], eo[2]}, {false, false, false});
+    }
+  }
+  return ans;
+}
+
+static bool face_is_degenerate(const Face *f)
+{
+  const Face &face = *f;
+  const Vert *v0 = face[0];
+  const Vert *v1 = face[1];
+  const Vert *v2 = face[2];
+  if (v0 == v1 || v0 == v2 || v1 == v2) {
+    return true;
+  }
+  double3 da = v2->co - v0->co;
+  double3 db = v2->co - v1->co;
+  double3 dab = double3::cross_high_precision(da, db);
+  double dab_length_squared = dab.length_squared();
+  double err_bound = supremum_dot_cross(dab, dab) * index_dot_cross * DBL_EPSILON;
+  if (dab_length_squared > err_bound) {
+    return false;
+  }
+  mpq3 a = v2->co_exact - v0->co_exact;
+  mpq3 b = v2->co_exact - v1->co_exact;
+  mpq3 ab = mpq3::cross(a, b);
+  if (ab.x == 0 && ab.y == 0 && ab.z == 0) {
+    return true;
+  }
+
+  return false;
+}
+
+/** Fast check for degenerate tris. It is OK if it returns true for nearly degenerate triangles. */
+static bool any_degenerate_tris_fast(const Array<Face *> triangulation)
+{
+  for (const Face *f : triangulation) {
+    const Vert *v0 = (*f)[0];
+    const Vert *v1 = (*f)[1];
+    const Vert *v2 = (*f)[2];
+    if (v0 == v1 || v0 == v2 || v1 == v2) {
+      return true;
+    }
+    double3 da = v2->co - v0->co;
+    double3 db = v2->co - v1->co;
+    double da_length_squared = da.length_squared();
+    double db_length_squared = db.length_squared();
+    if (da_length_squared == 0.0 || db_length_squared == 0.0) {
+      return true;
+    }
+    /* |da x db| = |da| |db| sin t, where t is angle between them.
+     * The triangle is almost degenerate if sin t is almost 0.
+     * sin^2 t = |da x db|^2 / (|da|^2 |db|^2)
+     */
+    double3 dab = double3::cross_high_precision(da, db);
+    double dab_length_squared = dab.length_squared();
+    double sin_squared_t = dab_length_squared / (da_length_squared * db_length_squared);
+    if (sin_squared_t < 1e-8) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Tessellate face f into triangles and return an array of `const Face *`
+ * giving that triangulation.
+ * Care is taken so that the original edge index associated with
+ * each edge in the output triangles either matches the original edge
+ * for the (identical) edge of f, or else is -1. So diagonals added
+ * for triangulation can later be identified by having #NO_INDEX for original.
+ */
+static Array<Face *> triangulate_poly(Face *f, IMeshArena *arena)
+{
+  /* Try the much faster method using Blender's BLI_polyfill_calc. */
+  Array<Face *> ans = polyfill_triangulate_poly(f, arena);
+
+  /* This may create degenerate triangles. If so, try the exact CDT-based triangulator. */
+  if (any_degenerate_tris_fast(ans)) {
+    return exact_triangulate_poly(f, arena);
+  }
+  return ans;
+}
+
+/**
+ * Return an #IMesh that is a triangulation of a mesh with general
+ * polygonal faces, #IMesh.
+ * Added diagonals will be distinguishable by having edge original
+ * indices of #NO_INDEX.
+ */
+IMesh triangulate_polymesh(IMesh &imesh, IMeshArena *arena)
+{
+  Vector<Face *> face_tris;
+  constexpr int estimated_tris_per_face = 3;
+  face_tris.reserve(estimated_tris_per_face * imesh.face_size());
+  threading::parallel_for(imesh.face_index_range(), 2048, [&](IndexRange range) {
+    for (int i : range) {
+      Face *f = imesh.face(i);
+      if (!f->plane_populated() && f->size() >= 4) {
+        f->populate_plane(false);
+      }
+    }
+  });
+  for (Face *f : imesh.faces()) {
+    /* Tessellate face f, following plan similar to #BM_face_calc_tessellation. */
+    int flen = f->size();
+    if (flen == 3) {
+      face_tris.append(f);
+    }
+    else {
+      Array<Face *> tris = triangulate_poly(f, arena);
+      for (Face *tri : tris) {
+        face_tris.append(tri);
+      }
+    }
+  }
+  return IMesh(face_tris);
 }
 
 /**
@@ -1862,53 +2332,15 @@ static IMesh extract_subdivided_tri(const CDT_data &cd,
     BLI_assert(false);
     return IMesh();
   }
-  int t_orig = in_tm.face(t)->orig;
   constexpr int inline_buf_size = 20;
   Vector<Face *, inline_buf_size> faces;
   for (int f : cdt_out.face.index_range()) {
     if (cdt_out.face_orig[f].contains(t_in_cdt)) {
-      BLI_assert(cdt_out.face[f].size() == 3);
-      int i0 = cdt_out.face[f][0];
-      int i1 = cdt_out.face[f][1];
-      int i2 = cdt_out.face[f][2];
-      mpq3 v0co = unproject_cdt_vert(cd, cdt_out.vert[i0]);
-      mpq3 v1co = unproject_cdt_vert(cd, cdt_out.vert[i1]);
-      mpq3 v2co = unproject_cdt_vert(cd, cdt_out.vert[i2]);
-      /* No need to provide an original index: if coord matches
-       * an original one, then it will already be in the arena
-       * with the correct orig field. */
-      const Vert *v0 = arena->add_or_find_vert(v0co, NO_INDEX);
-      const Vert *v1 = arena->add_or_find_vert(v1co, NO_INDEX);
-      const Vert *v2 = arena->add_or_find_vert(v2co, NO_INDEX);
-      Face *facep;
-      bool is_isect0;
-      bool is_isect1;
-      bool is_isect2;
-      if (cd.is_reversed[t_in_cdt]) {
-        int oe0 = get_cdt_edge_orig(i0, i2, cd, in_tm, &is_isect0);
-        int oe1 = get_cdt_edge_orig(i2, i1, cd, in_tm, &is_isect1);
-        int oe2 = get_cdt_edge_orig(i1, i0, cd, in_tm, &is_isect2);
-        facep = arena->add_face(
-            {v0, v2, v1}, t_orig, {oe0, oe1, oe2}, {is_isect0, is_isect1, is_isect2});
-      }
-      else {
-        int oe0 = get_cdt_edge_orig(i0, i1, cd, in_tm, &is_isect0);
-        int oe1 = get_cdt_edge_orig(i1, i2, cd, in_tm, &is_isect1);
-        int oe2 = get_cdt_edge_orig(i2, i0, cd, in_tm, &is_isect2);
-        facep = arena->add_face(
-            {v0, v1, v2}, t_orig, {oe0, oe1, oe2}, {is_isect0, is_isect1, is_isect2});
-      }
-      facep->populate_plane(false);
+      Face *facep = cdt_tri_as_imesh_face(f, t_in_cdt, cd, in_tm, arena);
       faces.append(facep);
     }
   }
   return IMesh(faces);
-}
-
-static IMesh extract_single_tri(const IMesh &tm, int t)
-{
-  Face *f = tm.face(t);
-  return IMesh({f});
 }
 
 static bool bvhtreeverlap_cmp(const BVHTreeOverlap &a, const BVHTreeOverlap &b)
@@ -1954,12 +2386,22 @@ class TriOverlaps {
     if (two_trees_no_self) {
       tree_b_ = BLI_bvhtree_new(tm.face_size(), FLT_EPSILON, 8, 6);
     }
+
+    /* Create a Vector containing face shape. */
+    Vector<int> shapes;
+    shapes.resize(tm.face_size());
+    threading::parallel_for(tm.face_index_range(), 2048, [&](IndexRange range) {
+      for (int t : range) {
+        shapes[t] = shape_fn(tm.face(t)->orig);
+      }
+    });
+
     float bbpts[6];
     for (int t : tm.face_index_range()) {
       const BoundingBox &bb = tri_bb[t];
       copy_v3_v3(bbpts, bb.min);
       copy_v3_v3(bbpts + 3, bb.max);
-      int shape = shape_fn(tm.face(t)->orig);
+      int shape = shapes[t];
       if (two_trees_no_self) {
         if (shape == 0) {
           BLI_bvhtree_insert(tree_, t, bbpts, 2);
@@ -2002,7 +2444,7 @@ class TriOverlaps {
       }
       overlap_tot_ += overlap_tot_;
     }
-    /* Sort the overlaps to bring all the intersects with a given indexA together.  */
+    /* Sort the overlaps to bring all the intersects with a given indexA together. */
     std::sort(overlap_, overlap_ + overlap_tot_, bvhtreeverlap_cmp);
     if (dbg_level > 0) {
       std::cout << overlap_tot_ << " overlaps found:\n";
@@ -2126,7 +2568,7 @@ static void calc_overlap_itts(Map<std::pair<int, int>, ITT_value> &itt_map,
 }
 
 /**
- * Data needed for parallelization of calc_subdivided_tris.
+ * Data needed for parallelization of calc_subdivided_non_cluster_tris.
  */
 struct OverlapTriRange {
   int tri_index;
@@ -2203,14 +2645,13 @@ static void calc_subdivided_tri_range_func(void *__restrict userdata,
  * r_tri_subdivided with the result of intersecting it with
  * all the other triangles in the mesh, if it intersects any others.
  * But don't do this for triangles that are part of a cluster.
- * Also, do nothing here if the answer is just the triangle itself.
  */
-static void calc_subdivided_tris(Array<IMesh> &r_tri_subdivided,
-                                 const IMesh &tm,
-                                 const Map<std::pair<int, int>, ITT_value> &itt_map,
-                                 const CoplanarClusterInfo &clinfo,
-                                 const TriOverlaps &ov,
-                                 IMeshArena *arena)
+static void calc_subdivided_non_cluster_tris(Array<IMesh> &r_tri_subdivided,
+                                             const IMesh &tm,
+                                             const Map<std::pair<int, int>, ITT_value> &itt_map,
+                                             const CoplanarClusterInfo &clinfo,
+                                             const TriOverlaps &ov,
+                                             IMeshArena *arena)
 {
   const int dbg_level = 0;
   if (dbg_level > 0) {
@@ -2250,6 +2691,56 @@ static void calc_subdivided_tris(Array<IMesh> &r_tri_subdivided,
   settings.use_threading = intersect_use_threading;
   BLI_task_parallel_range(
       0, overlap_tri_range_tot, &data, calc_subdivided_tri_range_func, &settings);
+  /* Now have to put in the triangles that are the same as the input ones, and not in clusters.
+   */
+  threading::parallel_for(tm.face_index_range(), 2048, [&](IndexRange range) {
+    for (int t : range) {
+      if (r_tri_subdivided[t].face_size() == 0 && clinfo.tri_cluster(t) == NO_INDEX) {
+        r_tri_subdivided[t] = IMesh({tm.face(t)});
+      }
+    }
+  });
+}
+
+/**
+ * For each cluster in clinfo, extract the triangles from the cluster
+ * that correspond to each original triangle t that is part of the cluster,
+ * and put the resulting triangles into an IMesh in tri_subdivided[t].
+ * We have already done the CDT for the triangles in the cluster, whose
+ * result is in cluster_subdivided[c] for each cluster c.
+ */
+static void calc_cluster_tris(Array<IMesh> &tri_subdivided,
+                              const IMesh &tm,
+                              const CoplanarClusterInfo &clinfo,
+                              const Array<CDT_data> &cluster_subdivided,
+                              IMeshArena *arena)
+{
+  for (int c : clinfo.index_range()) {
+    const CoplanarCluster &cl = clinfo.cluster(c);
+    const CDT_data &cd = cluster_subdivided[c];
+    /* Each triangle in cluster c should be an input triangle in cd.input_faces.
+     * (See prepare_cdt_input_for_cluster.)
+     * So accumulate a Vector of Face* for each input face by going through the
+     * output faces and making a Face for each input face that it is part of.
+     * (The Boolean algorithm wants duplicates if a given output triangle is part
+     * of more than one input triangle.)
+     */
+    int n_cluster_tris = cl.tot_tri();
+    const CDT_result<mpq_class> &cdt_out = cd.cdt_out;
+    BLI_assert(cd.input_face.size() == n_cluster_tris);
+    Array<Vector<Face *>> face_vec(n_cluster_tris);
+    for (int cdt_out_t : cdt_out.face.index_range()) {
+      for (int cdt_in_t : cdt_out.face_orig[cdt_out_t]) {
+        Face *f = cdt_tri_as_imesh_face(cdt_out_t, cdt_in_t, cd, tm, arena);
+        face_vec[cdt_in_t].append(f);
+      }
+    }
+    for (int cdt_in_t : cd.input_face.index_range()) {
+      int tm_t = cd.input_face[cdt_in_t];
+      BLI_assert(tri_subdivided[tm_t].face_size() == 0);
+      tri_subdivided[tm_t] = IMesh(face_vec[cdt_in_t]);
+    }
+  }
 }
 
 static CDT_data calc_cluster_subdivided(const CoplanarClusterInfo &clinfo,
@@ -2444,33 +2935,6 @@ static CoplanarClusterInfo find_clusters(const IMesh &tm,
   return ans;
 }
 
-static bool face_is_degenerate(const Face *f)
-{
-  const Face &face = *f;
-  const Vert *v0 = face[0];
-  const Vert *v1 = face[1];
-  const Vert *v2 = face[2];
-  if (v0 == v1 || v0 == v2 || v1 == v2) {
-    return true;
-  }
-  double3 da = v2->co - v0->co;
-  double3 db = v2->co - v1->co;
-  double3 dab = double3::cross_high_precision(da, db);
-  double dab_length_squared = dab.length_squared();
-  double err_bound = supremum_dot_cross(dab, dab) * index_dot_cross * DBL_EPSILON;
-  if (dab_length_squared > err_bound) {
-    return false;
-  }
-  mpq3 a = v2->co_exact - v0->co_exact;
-  mpq3 b = v2->co_exact - v1->co_exact;
-  mpq3 ab = mpq3::cross(a, b);
-  if (ab.x == 0 && ab.y == 0 && ab.z == 0) {
-    return true;
-  }
-
-  return false;
-}
-
 /* Data and functions to test triangle degeneracy in parallel. */
 struct DegenData {
   const IMesh &tm;
@@ -2592,11 +3056,15 @@ IMesh trimesh_nary_intersect(const IMesh &tm_in,
   double overlap_time = PIL_check_seconds_timer();
   std::cout << "intersect overlaps calculated, time = " << overlap_time - bb_calc_time << "\n";
 #  endif
-  for (int t : tm_clean->face_index_range()) {
-    if (tri_ov.first_overlap_index(t) != -1) {
-      tm_clean->face(t)->populate_plane(true);
+  Array<IMesh> tri_subdivided(tm_clean->face_size(), NoInitialization());
+  threading::parallel_for(tm_clean->face_index_range(), 1024, [&](IndexRange range) {
+    for (int t : range) {
+      if (tri_ov.first_overlap_index(t) != -1) {
+        tm_clean->face(t)->populate_plane(true);
+      }
+      new (static_cast<void *>(&tri_subdivided[t])) IMesh;
     }
-  }
+  });
 #  ifdef PERFDEBUG
   double plane_populate = PIL_check_seconds_timer();
   std::cout << "planes populated, time = " << plane_populate - overlap_time << "\n";
@@ -2621,11 +3089,11 @@ IMesh trimesh_nary_intersect(const IMesh &tm_in,
   doperfmax(1, clinfo.tot_cluster());
   doperfmax(2, tri_ov.overlap().size());
 #  endif
-  Array<IMesh> tri_subdivided(tm_clean->face_size());
-  calc_subdivided_tris(tri_subdivided, *tm_clean, itt_map, clinfo, tri_ov, arena);
+  calc_subdivided_non_cluster_tris(tri_subdivided, *tm_clean, itt_map, clinfo, tri_ov, arena);
 #  ifdef PERFDEBUG
   double subdivided_tris_time = PIL_check_seconds_timer();
-  std::cout << "subdivided tris found, time = " << subdivided_tris_time - itt_time << "\n";
+  std::cout << "subdivided non-cluster tris found, time = " << subdivided_tris_time - itt_time
+            << "\n";
 #  endif
   Array<CDT_data> cluster_subdivided(clinfo.tot_cluster());
   for (int c : clinfo.index_range()) {
@@ -2636,19 +3104,11 @@ IMesh trimesh_nary_intersect(const IMesh &tm_in,
   std::cout << "subdivided clusters found, time = "
             << cluster_subdivide_time - subdivided_tris_time << "\n";
 #  endif
-  for (int t : tm_clean->face_index_range()) {
-    int c = clinfo.tri_cluster(t);
-    if (c != NO_INDEX) {
-      BLI_assert(tri_subdivided[t].face_size() == 0);
-      tri_subdivided[t] = extract_subdivided_tri(cluster_subdivided[c], *tm_clean, t, arena);
-    }
-    else if (tri_subdivided[t].face_size() == 0) {
-      tri_subdivided[t] = extract_single_tri(*tm_clean, t);
-    }
-  }
+  calc_cluster_tris(tri_subdivided, *tm_clean, clinfo, cluster_subdivided, arena);
 #  ifdef PERFDEBUG
   double extract_time = PIL_check_seconds_timer();
-  std::cout << "triangles extracted, time = " << extract_time - cluster_subdivide_time << "\n";
+  std::cout << "subdivided cluster tris found, time = " << extract_time - cluster_subdivide_time
+            << "\n";
 #  endif
   IMesh combined = union_tri_subdivides(tri_subdivided);
   if (dbg_level > 1) {

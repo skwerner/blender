@@ -57,20 +57,26 @@
 /** \name Copy/Paste `.blend`, partial saves.
  * \{ */
 
-void BKE_copybuffer_begin(Main *bmain_src)
+/** Initialize a copy operation. */
+void BKE_copybuffer_copy_begin(Main *bmain_src)
 {
   BKE_blendfile_write_partial_begin(bmain_src);
 }
 
-void BKE_copybuffer_tag_ID(ID *id)
+/** Mark an ID to be copied. Should only be called after a call to #BKE_copybuffer_copy_begin. */
+void BKE_copybuffer_copy_tag_ID(ID *id)
 {
   BKE_blendfile_write_partial_tag_ID(id, true);
 }
 
 /**
- * \return Success.
+ * Finalize a copy operation into given .blend file 'buffer'.
+ *
+ * \param filename: Full path to the .blend file used as copy/paste buffer.
+ *
+ * \return true on success, false otherwise.
  */
-bool BKE_copybuffer_save(Main *bmain_src, const char *filename, ReportList *reports)
+bool BKE_copybuffer_copy_end(Main *bmain_src, const char *filename, ReportList *reports)
 {
   const int write_flags = 0;
   const eBLO_WritePathRemap remap_mode = BLO_WRITE_PATH_REMAP_RELATIVE;
@@ -82,12 +88,23 @@ bool BKE_copybuffer_save(Main *bmain_src, const char *filename, ReportList *repo
   return retval;
 }
 
+/**
+ * Paste datablocks from the given .blend file 'buffer' (i.e. append them).
+ *
+ * Unlike #BKE_copybuffer_paste, it does not perform any instantiation of collections/objects/etc.
+ *
+ * \param libname: Full path to the .blend file used as copy/paste buffer.
+ * \param id_types_mask: Only directly link IDs of those types from the given .blend file buffer.
+ *
+ * \return true on success, false otherwise.
+ */
 bool BKE_copybuffer_read(Main *bmain_dst,
                          const char *libname,
                          ReportList *reports,
                          const uint64_t id_types_mask)
 {
-  BlendHandle *bh = BLO_blendhandle_from_file(libname, reports);
+  BlendFileReadReport bf_reports = {.reports = reports};
+  BlendHandle *bh = BLO_blendhandle_from_file(libname, &bf_reports);
   if (bh == NULL) {
     /* Error reports will have been made by BLO_blendhandle_from_file(). */
     return false;
@@ -106,7 +123,7 @@ bool BKE_copybuffer_read(Main *bmain_dst,
   /* Append, rather than linking. */
   Library *lib = BLI_findstring(&bmain_dst->libraries, libname, offsetof(Library, filepath_abs));
   BKE_library_make_local(bmain_dst, lib, NULL, true, false);
-  /* Important we unset, otherwise these object wont
+  /* Important we unset, otherwise these object won't
    * link into other scenes from this blend file.
    */
   BKE_main_id_tag_all(bmain_dst, LIB_TAG_PRE_EXISTING, false);
@@ -115,12 +132,22 @@ bool BKE_copybuffer_read(Main *bmain_dst,
 }
 
 /**
- * \return Number of IDs directly pasted from the buffer
- * (does not includes indirectly pulled out ones).
+ * Paste datablocks from the given .blend file 'buffer'  (i.e. append them).
+ *
+ * Similar to #BKE_copybuffer_read, but also handles instantiation of collections/objects/etc.
+ *
+ * \param libname: Full path to the .blend file used as copy/paste buffer.
+ * \param flag: A combination of #eBLOLibLinkFlags and ##eFileSel_Params_Flag to control
+ *              link/append behavior.
+ *              \note: Ignores #FILE_LINK flag, since it always appends IDs.
+ * \param id_types_mask: Only directly link IDs of those types from the given .blend file buffer.
+ *
+ * \return Number of IDs directly pasted from the buffer (does not includes indirectly linked
+ * ones).
  */
 int BKE_copybuffer_paste(bContext *C,
                          const char *libname,
-                         const short flag,
+                         const int flag,
                          ReportList *reports,
                          const uint64_t id_types_mask)
 {
@@ -133,7 +160,8 @@ int BKE_copybuffer_paste(bContext *C,
   BlendHandle *bh;
   const int id_tag_extra = 0;
 
-  bh = BLO_blendhandle_from_file(libname, reports);
+  BlendFileReadReport bf_reports = {.reports = reports};
+  bh = BLO_blendhandle_from_file(libname, &bf_reports);
 
   if (bh == NULL) {
     /* error reports will have been made by BLO_blendhandle_from_file() */
@@ -166,7 +194,7 @@ int BKE_copybuffer_paste(bContext *C,
   lib = BLI_findstring(&bmain->libraries, libname, offsetof(Library, filepath_abs));
   BKE_library_make_local(bmain, lib, NULL, true, false);
 
-  /* important we unset, otherwise these object wont
+  /* important we unset, otherwise these object won't
    * link into other scenes from this blend file */
   BKE_main_id_tag_all(bmain, LIB_TAG_PRE_EXISTING, false);
 

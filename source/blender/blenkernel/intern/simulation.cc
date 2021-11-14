@@ -49,13 +49,9 @@
 #include "BKE_simulation.h"
 
 #include "NOD_geometry.h"
-#include "NOD_node_tree_multi_function.hh"
 
 #include "BLI_map.hh"
 #include "BLT_translation.h"
-
-#include "FN_multi_function_network_evaluation.hh"
-#include "FN_multi_function_network_optimization.hh"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_query.h"
@@ -107,26 +103,26 @@ static void simulation_foreach_id(ID *id, LibraryForeachIDData *data)
   Simulation *simulation = (Simulation *)id;
   if (simulation->nodetree) {
     /* nodetree **are owned by IDs**, treat them as mere sub-data and not real ID! */
-    BKE_library_foreach_ID_embedded(data, (ID **)&simulation->nodetree);
+    BKE_LIB_FOREACHID_PROCESS_FUNCTION_CALL(
+        data, BKE_library_foreach_ID_embedded(data, (ID **)&simulation->nodetree));
   }
 }
 
 static void simulation_blend_write(BlendWriter *writer, ID *id, const void *id_address)
 {
   Simulation *simulation = (Simulation *)id;
-  if (simulation->id.us > 0 || BLO_write_is_undo(writer)) {
-    BLO_write_id_struct(writer, Simulation, id_address, &simulation->id);
-    BKE_id_blend_write(writer, &simulation->id);
 
-    if (simulation->adt) {
-      BKE_animdata_blend_write(writer, simulation->adt);
-    }
+  BLO_write_id_struct(writer, Simulation, id_address, &simulation->id);
+  BKE_id_blend_write(writer, &simulation->id);
 
-    /* nodetree is integral part of simulation, no libdata */
-    if (simulation->nodetree) {
-      BLO_write_struct(writer, bNodeTree, simulation->nodetree);
-      ntreeBlendWrite(writer, simulation->nodetree);
-    }
+  if (simulation->adt) {
+    BKE_animdata_blend_write(writer, simulation->adt);
+  }
+
+  /* nodetree is integral part of simulation, no libdata */
+  if (simulation->nodetree) {
+    BLO_write_struct(writer, bNodeTree, simulation->nodetree);
+    ntreeBlendWrite(writer, simulation->nodetree);
   }
 }
 
@@ -157,7 +153,7 @@ IDTypeInfo IDType_ID_SIM = {
     /* name */ "Simulation",
     /* name_plural */ "simulations",
     /* translation_context */ BLT_I18NCONTEXT_ID_SIMULATION,
-    /* flags */ 0,
+    /* flags */ IDTYPE_FLAGS_APPEND_IS_REUSABLE,
 
     /* init_data */ simulation_init_data,
     /* copy_data */ simulation_copy_data,

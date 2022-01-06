@@ -36,12 +36,15 @@
 #include "COM_ViewerOperation.h"
 #include "COM_WriteBufferOperation.h"
 
+#include "COM_ConstantFolder.h"
 #include "COM_NodeOperationBuilder.h" /* own include */
 
 namespace blender::compositor {
 
-NodeOperationBuilder::NodeOperationBuilder(const CompositorContext *context, bNodeTree *b_nodetree)
-    : m_context(context), m_current_node(nullptr), m_active_viewer(nullptr)
+NodeOperationBuilder::NodeOperationBuilder(const CompositorContext *context,
+                                           bNodeTree *b_nodetree,
+                                           ExecutionSystem *system)
+    : m_context(context), exec_system_(system), m_current_node(nullptr), m_active_viewer(nullptr)
 {
   m_graph.from_bNodeTree(*context, b_nodetree);
 }
@@ -79,7 +82,7 @@ void NodeOperationBuilder::convertToOperations(ExecutionSystem *system)
     if (!op_from || op_to_list.is_empty()) {
       /* XXX allow this? error/debug message? */
       // BLI_assert(false);
-      /* XXX note: this can happen with certain nodes (e.g. OutputFile)
+      /* XXX NOTE: this can happen with certain nodes (e.g. OutputFile)
        * which only generate operations in certain circumstances (rendering)
        * just let this pass silently for now ...
        */
@@ -97,10 +100,21 @@ void NodeOperationBuilder::convertToOperations(ExecutionSystem *system)
 
   add_datatype_conversions();
 
+  if (m_context->get_execution_model() == eExecutionModel::FullFrame) {
+    save_graphviz("compositor_prior_folding");
+    ConstantFolder folder(*this);
+    folder.fold_operations();
+  }
+
   determineResolutions();
 
-  /* surround complex ops with read/write buffer */
-  add_complex_operation_buffers();
+  save_graphviz("compositor_prior_merging");
+  merge_equal_operations();
+
+  if (m_context->get_execution_model() == eExecutionModel::Tiled) {
+    /* surround complex ops with read/write buffer */
+    add_complex_operation_buffers();
+  }
 
   /* links not available from here on */
   /* XXX make m_links a local variable to avoid confusion! */
@@ -111,8 +125,10 @@ void NodeOperationBuilder::convertToOperations(ExecutionSystem *system)
   /* ensure topological (link-based) order of nodes */
   /*sort_operations();*/ /* not needed yet */
 
-  /* create execution groups */
-  group_operations();
+  if (m_context->get_execution_model() == eExecutionModel::Tiled) {
+    /* create execution groups */
+    group_operations();
+  }
 
   /* transfer resulting operations to the system */
   system->set_operations(m_operations, m_groups);
@@ -125,6 +141,36 @@ void NodeOperationBuilder::addOperation(NodeOperation *operation)
   if (m_current_node) {
     operation->set_name(m_current_node->getbNode()->name);
   }
+  operation->set_execution_model(m_context->get_execution_model());
+  operation->set_execution_system(exec_system_);
+}
+
+void NodeOperationBuilder::replace_operation_with_constant(NodeOperation *operation,
+                                                           ConstantOperation *constant_operation)
+{
+  BLI_assert(constant_operation->getNumberOfInputSockets() == 0);
+  unlink_inputs_and_relink_outputs(operation, constant_operation);
+  addOperation(constant_operation);
+}
+
+void NodeOperationBuilder::unlink_inputs_and_relink_outputs(NodeOperation *unlinked_op,
+                                                            NodeOperation *linked_op)
+{
+  int i = 0;
+  while (i < m_links.size()) {
+    Link &link = m_links[i];
+    if (&link.to()->getOperation() == unlinked_op) {
+      link.to()->setLink(nullptr);
+      m_links.remove(i);
+      continue;
+    }
+
+    if (&link.from()->getOperation() == unlinked_op) {
+      link.to()->setLink(linked_op->getOutputSocket());
+      m_links[i] = Link(linked_op->getOutputSocket(), link.to());
+    }
+    i++;
+  }
 }
 
 void NodeOperationBuilder::mapInputSocket(NodeInput *node_socket,
@@ -133,7 +179,7 @@ void NodeOperationBuilder::mapInputSocket(NodeInput *node_socket,
   BLI_assert(m_current_node);
   BLI_assert(node_socket->getNode() == m_current_node);
 
-  /* note: this maps operation sockets to node sockets.
+  /* NOTE: this maps operation sockets to node sockets.
    * for resolving links the map will be inverted first in convertToOperations,
    * to get a list of links for each node input socket.
    */
@@ -279,7 +325,7 @@ void NodeOperationBuilder::add_datatype_conversions()
 
 void NodeOperationBuilder::add_operation_input_constants()
 {
-  /* Note: unconnected inputs cached first to avoid modifying
+  /* NOTE: unconnected inputs cached first to avoid modifying
    *       m_operations while iterating over it
    */
   Vector<NodeOperationInput *> pending_inputs;
@@ -416,6 +462,50 @@ void NodeOperationBuilder::determineResolutions()
   }
 }
 
+static Vector<NodeOperationHash> generate_hashes(Span<NodeOperation *> operations)
+{
+  Vector<NodeOperationHash> hashes;
+  for (NodeOperation *op : operations) {
+    std::optional<NodeOperationHash> hash = op->generate_hash();
+    if (hash) {
+      hashes.append(std::move(*hash));
+    }
+  }
+  return hashes;
+}
+
+/** Merge operations with same type, inputs and parameters that produce the same result. */
+void NodeOperationBuilder::merge_equal_operations()
+{
+  bool check_for_next_merge = true;
+  while (check_for_next_merge) {
+    /* Re-generate hashes with any change. */
+    Vector<NodeOperationHash> hashes = generate_hashes(m_operations);
+
+    /* Make hashes be consecutive when they are equal. */
+    std::sort(hashes.begin(), hashes.end());
+
+    bool any_merged = false;
+    const NodeOperationHash *prev_hash = nullptr;
+    for (const NodeOperationHash &hash : hashes) {
+      if (prev_hash && *prev_hash == hash) {
+        merge_equal_operations(prev_hash->get_operation(), hash.get_operation());
+        any_merged = true;
+      }
+      prev_hash = &hash;
+    }
+
+    check_for_next_merge = any_merged;
+  }
+}
+
+void NodeOperationBuilder::merge_equal_operations(NodeOperation *from, NodeOperation *into)
+{
+  unlink_inputs_and_relink_outputs(from, into);
+  m_operations.remove_first_occurrence_and_reorder(from);
+  delete from;
+}
+
 Vector<NodeOperationInput *> NodeOperationBuilder::cache_output_links(
     NodeOperationOutput *output) const
 {
@@ -532,7 +622,7 @@ void NodeOperationBuilder::add_output_buffers(NodeOperation *operation,
 
 void NodeOperationBuilder::add_complex_operation_buffers()
 {
-  /* note: complex ops and get cached here first, since adding operations
+  /* NOTE: complex ops and get cached here first, since adding operations
    * will invalidate iterators over the main m_operations
    */
   Vector<NodeOperation *> complex_ops;
@@ -685,6 +775,14 @@ void NodeOperationBuilder::group_operations()
         memproxy->setExecutor(group);
       }
     }
+  }
+}
+
+void NodeOperationBuilder::save_graphviz(StringRefNull name)
+{
+  if (COM_EXPORT_GRAPHVIZ) {
+    exec_system_->set_operations(m_operations, m_groups);
+    DebugInfo::graphviz(exec_system_, name);
   }
 }
 

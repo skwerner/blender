@@ -25,6 +25,7 @@
 #include "BLI_utildefines.h"
 
 #include "idprop_py_api.h"
+#include "idprop_py_ui_api.h"
 
 #include "BKE_idprop.h"
 
@@ -91,7 +92,7 @@ static PyObject *idprop_py_from_idp_double(const IDProperty *prop)
 static PyObject *idprop_py_from_idp_group(ID *id, IDProperty *prop, IDProperty *parent)
 {
   BPy_IDProperty *group = PyObject_New(BPy_IDProperty, &BPy_IDGroup_Type);
-  group->id = id;
+  group->owner_id = id;
   group->prop = prop;
   group->parent = parent; /* can be NULL */
   return (PyObject *)group;
@@ -105,7 +106,7 @@ static PyObject *idprop_py_from_idp_id(IDProperty *prop)
 static PyObject *idprop_py_from_idp_array(ID *id, IDProperty *prop)
 {
   BPy_IDProperty *array = PyObject_New(BPy_IDProperty, &BPy_IDArray_Type);
-  array->id = id;
+  array->owner_id = id;
   array->prop = prop;
   return (PyObject *)array;
 }
@@ -152,7 +153,7 @@ static Py_hash_t BPy_IDGroup_hash(BPy_IDProperty *self)
 static PyObject *BPy_IDGroup_repr(BPy_IDProperty *self)
 {
   return PyUnicode_FromFormat("<bpy id prop: owner=\"%s\", name=\"%s\", address=%p>",
-                              self->id ? self->id->name : "<NONE>",
+                              self->owner_id ? self->owner_id->name : "<NONE>",
                               self->prop->name,
                               self->prop);
 }
@@ -326,7 +327,7 @@ static PyObject *BPy_IDGroup_Map_GetItem(BPy_IDProperty *self, PyObject *item)
     return NULL;
   }
 
-  return BPy_IDGroup_WrapData(self->id, idprop, self->prop);
+  return BPy_IDGroup_WrapData(self->owner_id, idprop, self->prop);
 }
 
 /* returns NULL on success, error string on failure */
@@ -611,8 +612,8 @@ static IDProperty *idp_from_PyMapping(const char *name, PyObject *ob)
   keys = PyMapping_Keys(ob);
   vals = PyMapping_Values(ob);
 
-  /* we allocate the group first; if we hit any invalid data,
-   * we can delete it easily enough.*/
+  /* We allocate the group first; if we hit any invalid data,
+   * we can delete it easily enough. */
   prop = IDP_New(IDP_GROUP, &val, name);
   len = PyMapping_Length(ob);
   for (i = 0; i < len; i++) {
@@ -713,8 +714,12 @@ bool BPy_IDProperty_Map_ValidateAndCreate(PyObject *name_obj, IDProperty *group,
       prop->next = prop_exist->next;
       prop->flag = prop_exist->flag;
 
+      /* Don't free and reset the existing property's UI data, since this only assigns a value. */
+      IDPropertyUIData *ui_data = prop_exist->ui_data;
+      prop_exist->ui_data = NULL;
       IDP_FreePropertyContent(prop_exist);
       *prop_exist = *prop;
+      prop_exist->ui_data = ui_data;
       MEM_freeN(prop);
     }
     else {
@@ -946,7 +951,7 @@ static PyObject *BPy_Group_IterValues_next(BPy_IDGroup_Iter *self)
     }
     IDProperty *cur = self->cur;
     self->cur = self->reversed ? self->cur->prev : self->cur->next;
-    return BPy_IDGroup_WrapData(self->group->id, cur, self->group->prop);
+    return BPy_IDGroup_WrapData(self->group->owner_id, cur, self->group->prop);
   }
   PyErr_SetNone(PyExc_StopIteration);
   return NULL;
@@ -964,7 +969,7 @@ static PyObject *BPy_Group_IterItems_next(BPy_IDGroup_Iter *self)
     PyObject *ret = PyTuple_New(2);
     PyTuple_SET_ITEMS(ret,
                       PyUnicode_FromString(cur->name),
-                      BPy_IDGroup_WrapData(self->group->id, cur, self->group->prop));
+                      BPy_IDGroup_WrapData(self->group->owner_id, cur, self->group->prop));
     return ret;
   }
   PyErr_SetNone(PyExc_StopIteration);
@@ -1051,7 +1056,7 @@ static PyObject *BPy_IDGroup_IterItems_CreatePyObject(BPy_IDProperty *group, con
 /** \name ID-Property Group View Types (Keys/Values/Items)
  *
  * This view types is a thin wrapper on keys/values/items, this matches Python's `dict_view` type.
- * The is returned by `property.keys()` and is separate from the iterator that loops over keys.
+ * This is returned by `property.keys()` and is separate from the iterator that loops over keys.
  *
  * There are some less common features this type could support (matching Python's `dict_view`)
  *
@@ -1284,8 +1289,8 @@ static PyObject *BPy_IDGroup_pop(BPy_IDProperty *self, PyObject *args)
   pyform = BPy_IDGroup_MapDataToPy(idprop);
   if (pyform == NULL) {
     /* ok something bad happened with the #PyObject,
-     * so don't remove the prop from the group.  if pyform is
-     * NULL, then it already should have raised an exception.*/
+     * so don't remove the prop from the group.  if `pyform is
+     * NULL, then it already should have raised an exception. */
     return NULL;
   }
 
@@ -1305,7 +1310,7 @@ static void BPy_IDGroup_CorrectListLen(IDProperty *prop, PyObject *seq, int len,
     PyList_SET_ITEM(seq, j, Py_INCREF_RET(Py_None));
   }
 
-  /*set correct group length*/
+  /* Set correct group length. */
   prop->len = len;
 }
 
@@ -1326,8 +1331,8 @@ PyObject *BPy_Wrap_GetKeys(IDProperty *prop)
 
   if (i != prop->len) { /* if the loop didn't finish, we know the length is wrong */
     BPy_IDGroup_CorrectListLen(prop, list, i, __func__);
-    Py_DECREF(list); /*free the list*/
-    /*call self again*/
+    Py_DECREF(list); /* Free the list. */
+    /* Call self again. */
     return BPy_Wrap_GetKeys(prop);
   }
 
@@ -1346,8 +1351,8 @@ PyObject *BPy_Wrap_GetValues(ID *id, IDProperty *prop)
 
   if (i != prop->len) {
     BPy_IDGroup_CorrectListLen(prop, list, i, __func__);
-    Py_DECREF(list); /*free the list*/
-    /*call self again*/
+    Py_DECREF(list); /* Free the list. */
+    /* Call self again. */
     return BPy_Wrap_GetValues(id, prop);
   }
 
@@ -1369,8 +1374,8 @@ PyObject *BPy_Wrap_GetItems(ID *id, IDProperty *prop)
 
   if (i != prop->len) {
     BPy_IDGroup_CorrectListLen(prop, seq, i, __func__);
-    Py_DECREF(seq); /*free the list*/
-    /*call self again*/
+    Py_DECREF(seq); /* Free the list. */
+    /* Call self again. */
     return BPy_Wrap_GetItems(id, prop);
   }
 
@@ -1514,7 +1519,7 @@ static PyObject *BPy_IDGroup_get(BPy_IDProperty *self, PyObject *args)
 
   idprop = IDP_GetPropertyFromGroup(self->prop, key);
   if (idprop) {
-    PyObject *pyobj = BPy_IDGroup_WrapData(self->id, idprop, self->prop);
+    PyObject *pyobj = BPy_IDGroup_WrapData(self->owner_id, idprop, self->prop);
     if (pyobj) {
       return pyobj;
     }
@@ -1547,7 +1552,7 @@ static PySequenceMethods BPy_IDGroup_Seq = {
     NULL,                         /* binaryfunc sq_concat */
     NULL,                         /* ssizeargfunc sq_repeat */
     NULL,
-    /* ssizeargfunc sq_item */ /* TODO - setting this will allow PySequence_Check to return True */
+    /* ssizeargfunc sq_item */ /* TODO: setting this will allow PySequence_Check to return True. */
     NULL,                      /* intintargfunc ***was_sq_slice*** */
     NULL,                      /* intobjargproc sq_ass_item */
     NULL,                      /* ssizeobjargproc ***was_sq_ass_slice*** */
@@ -1557,9 +1562,9 @@ static PySequenceMethods BPy_IDGroup_Seq = {
 };
 
 static PyMappingMethods BPy_IDGroup_Mapping = {
-    (lenfunc)BPy_IDGroup_Map_Len,           /*inquiry mp_length */
-    (binaryfunc)BPy_IDGroup_Map_GetItem,    /*binaryfunc mp_subscript */
-    (objobjargproc)BPy_IDGroup_Map_SetItem, /*objobjargproc mp_ass_subscript */
+    (lenfunc)BPy_IDGroup_Map_Len,           /* inquiry mp_length */
+    (binaryfunc)BPy_IDGroup_Map_GetItem,    /* binaryfunc mp_subscript */
+    (objobjargproc)BPy_IDGroup_Map_SetItem, /* objobjargproc mp_ass_subscript */
 };
 
 PyTypeObject BPy_IDGroup_Type = {
@@ -1836,7 +1841,7 @@ static int BPy_IDArray_ass_slice(BPy_IDArray *self, int begin, int end, PyObject
   /* NOTE: we count on int/float being the same size here */
   vec = MEM_mallocN(alloc_len, "array assignment");
 
-  if (PyC_AsArray(vec, seq, size, py_type, is_double, "slice assignment: ") == -1) {
+  if (PyC_AsArray(vec, elem_size, seq, size, py_type, "slice assignment: ") == -1) {
     MEM_freeN(vec);
     return -1;
   }
@@ -2040,12 +2045,12 @@ PyTypeObject BPy_IDArray_Type = {
     NULL,                  /* allocfunc tp_alloc; */
     NULL,                  /* newfunc tp_new; */
     /*  Low-level free-memory routine */
-    NULL, /* freefunc tp_free;  */
+    NULL, /* freefunc tp_free; */
     /* For PyObject_IS_GC */
-    NULL, /* inquiry tp_is_gc;  */
+    NULL, /* inquiry tp_is_gc; */
     NULL, /* PyObject *tp_bases; */
     /* method resolution order */
-    NULL, /* PyObject *tp_mro;  */
+    NULL, /* PyObject *tp_mro; */
     NULL, /* PyObject *tp_cache; */
     NULL, /* PyObject *tp_subclasses; */
     NULL, /* PyObject *tp_weaklist; */
@@ -2135,6 +2140,7 @@ static PyObject *BPyInit_idprop_types(void)
   submodule = PyModule_Create(&IDProp_types_module_def);
 
   IDProp_Init_Types();
+  IDPropertyUIData_Init_Types();
 
   /* bmesh_py_types.c */
   PyModule_AddType(submodule, &BPy_IDGroup_Type);

@@ -158,7 +158,7 @@ static int bake_modal(bContext *C, wmOperator *UNUSED(op), const wmEvent *event)
 
 /**
  * for exec() when there is no render job
- * note: this wont check for the escape key being pressed, but doing so isn't thread-safe.
+ * NOTE: this won't check for the escape key being pressed, but doing so isn't thread-safe.
  */
 static int bake_break(void *UNUSED(rjv))
 {
@@ -412,11 +412,11 @@ static bool is_noncolor_pass(eScenePassType pass_type)
 {
   return ELEM(pass_type,
               SCE_PASS_Z,
+              SCE_PASS_POSITION,
               SCE_PASS_NORMAL,
               SCE_PASS_VECTOR,
               SCE_PASS_INDEXOB,
               SCE_PASS_UV,
-              SCE_PASS_RAYHITS,
               SCE_PASS_INDEXMA);
 }
 
@@ -555,19 +555,10 @@ static bool bake_pass_filter_check(eScenePassType pass_type,
           return true;
         }
 
-        if ((pass_filter & R_BAKE_PASS_FILTER_AO) != 0) {
-          BKE_report(
-              reports,
-              RPT_ERROR,
-              "Combined bake pass Ambient Occlusion contribution requires an enabled light pass "
-              "(bake the Ambient Occlusion pass type instead)");
-        }
-        else {
-          BKE_report(reports,
-                     RPT_ERROR,
-                     "Combined bake pass requires Emit, or a light pass with "
-                     "Direct or Indirect contributions enabled");
-        }
+        BKE_report(reports,
+                   RPT_ERROR,
+                   "Combined bake pass requires Emit, or a light pass with "
+                   "Direct or Indirect contributions enabled");
 
         return false;
       }
@@ -1312,7 +1303,7 @@ static int bake(const BakeAPIRender *bkr,
       }
       else {
         ob_cage_eval = DEG_get_evaluated_object(depsgraph, ob_cage);
-        ob_cage_eval->restrictflag |= OB_RESTRICT_RENDER;
+        ob_cage_eval->visibility_flag |= OB_HIDE_RENDER;
         ob_cage_eval->base_flag &= ~(BASE_VISIBLE_DEPSGRAPH | BASE_ENABLED_RENDER);
       }
     }
@@ -1374,7 +1365,7 @@ static int bake(const BakeAPIRender *bkr,
          * the cage is supposed to have interpolated normals
          * between the faces unless the geometry is physically
          * split. So we create a copy of the low poly mesh without
-         * the eventual edge split.*/
+         * the eventual edge split. */
 
         if (md->type == eModifierType_EdgeSplit) {
           BLI_remlink(&ob_low_eval->modifiers, md);
@@ -1412,7 +1403,7 @@ static int bake(const BakeAPIRender *bkr,
       /* initialize highpoly_data */
       highpoly[i].ob = ob_iter;
       highpoly[i].ob_eval = DEG_get_evaluated_object(depsgraph, ob_iter);
-      highpoly[i].ob_eval->restrictflag &= ~OB_RESTRICT_RENDER;
+      highpoly[i].ob_eval->visibility_flag &= ~OB_HIDE_RENDER;
       highpoly[i].ob_eval->base_flag |= (BASE_VISIBLE_DEPSGRAPH | BASE_ENABLED_RENDER);
       highpoly[i].me = BKE_mesh_new_from_object(NULL, highpoly[i].ob_eval, false, false);
 
@@ -1428,10 +1419,10 @@ static int bake(const BakeAPIRender *bkr,
     BLI_assert(i == tot_highpoly);
 
     if (ob_cage != NULL) {
-      ob_cage_eval->restrictflag |= OB_RESTRICT_RENDER;
+      ob_cage_eval->visibility_flag |= OB_HIDE_RENDER;
       ob_cage_eval->base_flag &= ~(BASE_VISIBLE_DEPSGRAPH | BASE_ENABLED_RENDER);
     }
-    ob_low_eval->restrictflag |= OB_RESTRICT_RENDER;
+    ob_low_eval->visibility_flag |= OB_HIDE_RENDER;
     ob_low_eval->base_flag &= ~(BASE_VISIBLE_DEPSGRAPH | BASE_ENABLED_RENDER);
 
     /* populate the pixel arrays with the corresponding face data for each high poly object */
@@ -1474,7 +1465,7 @@ static int bake(const BakeAPIRender *bkr,
   }
   else {
     /* If low poly is not renderable it should have failed long ago. */
-    BLI_assert((ob_low_eval->restrictflag & OB_RESTRICT_RENDER) == 0);
+    BLI_assert((ob_low_eval->visibility_flag & OB_HIDE_RENDER) == 0);
 
     if (RE_bake_has_engine(re)) {
       ok = RE_bake_engine(re,
@@ -1939,7 +1930,7 @@ static int bake_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(event)
                        WM_JOB_EXCL_RENDER | WM_JOB_PRIORITY | WM_JOB_PROGRESS,
                        WM_JOB_TYPE_OBJECT_BAKE);
   WM_jobs_customdata_set(wm_job, bkr, bake_freejob);
-  /* TODO - only draw bake image, can we enforce this */
+  /* TODO: only draw bake image, can we enforce this. */
   WM_jobs_timer(
       wm_job, 0.5, (bkr->target == R_BAKE_TARGET_VERTEX_COLORS) ? NC_GEOM | ND_DATA : NC_IMAGE, 0);
   WM_jobs_callbacks(wm_job, bake_startjob, NULL, NULL, NULL);

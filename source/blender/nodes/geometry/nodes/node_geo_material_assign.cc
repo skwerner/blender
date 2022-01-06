@@ -24,19 +24,15 @@
 
 #include "BKE_material.h"
 
-static bNodeSocketTemplate geo_node_material_assign_in[] = {
-    {SOCK_GEOMETRY, N_("Geometry")},
-    {SOCK_MATERIAL, N_("Material")},
-    {SOCK_STRING, N_("Selection")},
-    {-1, ""},
-};
-
-static bNodeSocketTemplate geo_node_material_assign_out[] = {
-    {SOCK_GEOMETRY, N_("Geometry")},
-    {-1, ""},
-};
-
 namespace blender::nodes {
+
+static void geo_node_material_assign_declare(NodeDeclarationBuilder &b)
+{
+  b.add_input<decl::Geometry>("Geometry");
+  b.add_input<decl::Material>("Material").hide_label(true);
+  b.add_input<decl::String>("Selection");
+  b.add_output<decl::Geometry>("Geometry");
+}
 
 static void assign_material_to_faces(Mesh &mesh, const VArray<bool> &face_mask, Material *material)
 {
@@ -91,8 +87,9 @@ void register_node_type_geo_material_assign()
 {
   static bNodeType ntype;
 
-  geo_node_type_base(&ntype, GEO_NODE_MATERIAL_ASSIGN, "Material Assign", NODE_CLASS_GEOMETRY, 0);
-  node_type_socket_templates(&ntype, geo_node_material_assign_in, geo_node_material_assign_out);
+  geo_node_type_base(
+      &ntype, GEO_NODE_LEGACY_MATERIAL_ASSIGN, "Material Assign", NODE_CLASS_GEOMETRY, 0);
+  ntype.declare = blender::nodes::geo_node_material_assign_declare;
   ntype.geometry_node_execute = blender::nodes::geo_node_material_assign_exec;
   nodeRegisterType(&ntype);
 }

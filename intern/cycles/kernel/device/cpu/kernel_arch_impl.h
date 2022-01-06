@@ -34,9 +34,11 @@
 #    include "kernel/integrator/integrator_state_util.h"
 
 #    include "kernel/integrator/integrator_init_from_camera.h"
+#    include "kernel/integrator/integrator_init_from_bake.h"
 #    include "kernel/integrator/integrator_intersect_closest.h"
 #    include "kernel/integrator/integrator_intersect_shadow.h"
 #    include "kernel/integrator/integrator_intersect_subsurface.h"
+#    include "kernel/integrator/integrator_intersect_volume_stack.h"
 #    include "kernel/integrator/integrator_shade_background.h"
 #    include "kernel/integrator/integrator_shade_light.h"
 #    include "kernel/integrator/integrator_shade_shadow.h"
@@ -47,13 +49,8 @@
 #    include "kernel/kernel_film.h"
 #    include "kernel/kernel_adaptive_sampling.h"
 #    include "kernel/kernel_bake.h"
+# include "kernel/kernel_id_passes.h"
 
-#if 0
-#    include "kernel/kernel_color.h"
-#    include "kernel/kernel_path.h"
-#    include "kernel/kernel_path_branched.h"
-#    include "kernel/kernel_bake.h"
-#endif
 #else
 #  define STUB_ASSERT(arch, name) \
     assert(!(#name " kernel stub for architecture " #arch " was called!"))
@@ -62,7 +59,9 @@
 
 CCL_NAMESPACE_BEGIN
 
-/* Integrator. */
+/* --------------------------------------------------------------------
+ * Integrator.
+ */
 
 #ifdef KERNEL_STUB
 #  define KERNEL_INVOKE(name, ...) (STUB_ASSERT(KERNEL_ARCH, name), 0)
@@ -72,14 +71,14 @@ CCL_NAMESPACE_BEGIN
 
 #define DEFINE_INTEGRATOR_KERNEL(name) \
   void KERNEL_FUNCTION_FULL_NAME(integrator_##name)(const KernelGlobals *kg, \
-                                                    IntegratorState *state) \
+                                                    IntegratorStateCPU *state) \
   { \
     KERNEL_INVOKE(name, kg, state); \
   }
 
 #define DEFINE_INTEGRATOR_SHADE_KERNEL(name) \
   void KERNEL_FUNCTION_FULL_NAME(integrator_##name)( \
-      const KernelGlobals *kg, IntegratorState *state, ccl_global float *render_buffer) \
+      const KernelGlobals *kg, IntegratorStateCPU *state, ccl_global float *render_buffer) \
   { \
     KERNEL_INVOKE(name, kg, state, render_buffer); \
   }
@@ -88,7 +87,7 @@ CCL_NAMESPACE_BEGIN
  * that it does not contain unused fields. */
 #define DEFINE_INTEGRATOR_INIT_KERNEL(name) \
   bool KERNEL_FUNCTION_FULL_NAME(integrator_##name)(const KernelGlobals *kg, \
-                                                    IntegratorState *state, \
+                                                    IntegratorStateCPU *state, \
                                                     KernelWorkTile *tile, \
                                                     ccl_global float *render_buffer) \
   { \
@@ -97,9 +96,11 @@ CCL_NAMESPACE_BEGIN
   }
 
 DEFINE_INTEGRATOR_INIT_KERNEL(init_from_camera)
+DEFINE_INTEGRATOR_INIT_KERNEL(init_from_bake)
 DEFINE_INTEGRATOR_KERNEL(intersect_closest)
 DEFINE_INTEGRATOR_KERNEL(intersect_shadow)
 DEFINE_INTEGRATOR_KERNEL(intersect_subsurface)
+DEFINE_INTEGRATOR_KERNEL(intersect_volume_stack)
 DEFINE_INTEGRATOR_SHADE_KERNEL(shade_background)
 DEFINE_INTEGRATOR_SHADE_KERNEL(shade_light)
 DEFINE_INTEGRATOR_SHADE_KERNEL(shade_shadow)
@@ -107,25 +108,9 @@ DEFINE_INTEGRATOR_SHADE_KERNEL(shade_surface)
 DEFINE_INTEGRATOR_SHADE_KERNEL(shade_volume)
 DEFINE_INTEGRATOR_SHADE_KERNEL(megakernel)
 
-/* Film. */
-
-void KERNEL_FUNCTION_FULL_NAME(convert_to_half_float)(const KernelGlobals *kg,
-                                                      uchar4 *rgba,
-                                                      float *render_buffer,
-                                                      float sample_scale,
-                                                      int x,
-                                                      int y,
-                                                      int offset,
-                                                      int stride)
-{
-#ifdef KERNEL_STUB
-  STUB_ASSERT(KERNEL_ARCH, convert_to_half_float);
-#else
-  kernel_film_convert_to_half_float(kg, rgba, render_buffer, sample_scale, x, y, offset, stride);
-#endif /* KERNEL_STUB */
-}
-
-/* Shader evaluation. */
+/* --------------------------------------------------------------------
+ * Shader evaluation.
+ */
 
 void KERNEL_FUNCTION_FULL_NAME(shader_eval_displace)(const KernelGlobals *kg,
                                                      const KernelShaderEvalInput *input,
@@ -151,7 +136,9 @@ void KERNEL_FUNCTION_FULL_NAME(shader_eval_background)(const KernelGlobals *kg,
 #endif
 }
 
-/* Adaptive sampling. */
+/* --------------------------------------------------------------------
+ * Adaptive sampling.
+ */
 
 bool KERNEL_FUNCTION_FULL_NAME(adaptive_sampling_convergence_check)(
     const KernelGlobals *kg,
@@ -202,8 +189,25 @@ void KERNEL_FUNCTION_FULL_NAME(adaptive_sampling_filter_y)(const KernelGlobals *
 #endif
 }
 
-/* Bake. */
-/* TODO(sergey): Needs to be re-implemented. */
+/* --------------------------------------------------------------------
+ * Cryptomatte.
+ */
+
+void KERNEL_FUNCTION_FULL_NAME(cryptomatte_postprocess)(const KernelGlobals *kg,
+                                                        ccl_global float *render_buffer,
+                                                        int pixel_index)
+{
+#ifdef KERNEL_STUB
+  STUB_ASSERT(KERNEL_ARCH, cryptomatte_postprocess);
+#else
+  kernel_cryptomatte_post(kg, render_buffer, pixel_index);
+#endif
+}
+
+/* --------------------------------------------------------------------
+ * Bake.
+ */
+/* TODO(sergey): Needs to be re-implemented. Or not? Brecht did it already :) */
 
 void KERNEL_FUNCTION_FULL_NAME(bake)(
     const KernelGlobals *kg, float *buffer, int sample, int x, int y, int offset, int stride)

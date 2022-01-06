@@ -27,6 +27,11 @@ CCL_NAMESPACE_BEGIN
 class Device;
 class Progress;
 
+enum ShaderEvalType {
+  SHADER_EVAL_DISPLACE,
+  SHADER_EVAL_BACKGROUND,
+};
+
 /* ShaderEval class performs shader evaluation for background light and displacement. */
 class ShaderEval {
  public:

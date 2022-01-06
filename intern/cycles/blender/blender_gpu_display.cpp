@@ -21,36 +21,22 @@
 #include "util/util_opengl.h"
 
 extern "C" {
+struct RenderEngine;
+
+bool RE_engine_has_render_context(struct RenderEngine *engine);
+void RE_engine_render_context_enable(struct RenderEngine *engine);
+void RE_engine_render_context_disable(struct RenderEngine *engine);
+
 bool DRW_opengl_context_release();
 void DRW_opengl_context_activate(bool drw_state);
 
 void *WM_opengl_context_create();
 void WM_opengl_context_activate(void *gl_context);
 void WM_opengl_context_dispose(void *gl_context);
+void WM_opengl_context_release(void *context);
 }
 
 CCL_NAMESPACE_BEGIN
-
-namespace {
-
-/* --------------------------------------------------------------------
- * Context helpers.
- */
-
-class GLContextScope {
- public:
-  explicit GLContextScope(void *gl_context)
-  {
-    WM_opengl_context_activate(gl_context);
-  }
-
-  ~GLContextScope()
-  {
-    WM_opengl_context_activate(nullptr);
-  }
-};
-
-} /* namespace */
 
 /* --------------------------------------------------------------------
  * BlenderDisplayShader.
@@ -291,7 +277,7 @@ uint BlenderDisplaySpaceShader::get_shader_program()
  */
 
 BlenderGPUDisplay::BlenderGPUDisplay(BL::RenderEngine &b_engine, BL::Scene &b_scene)
-    : display_shader_(BlenderDisplayShader::create(b_engine, b_scene))
+    : b_engine_(b_engine), display_shader_(BlenderDisplayShader::create(b_engine, b_scene))
 {
   /* Create context while on the main thread. */
   gl_context_create();
@@ -306,18 +292,27 @@ BlenderGPUDisplay::~BlenderGPUDisplay()
  * Update procedure.
  */
 
-bool BlenderGPUDisplay::do_update_begin(int texture_width, int texture_height)
+bool BlenderGPUDisplay::do_update_begin(const GPUDisplayParams &params,
+                                        int texture_width,
+                                        int texture_height)
 {
-  if (!gl_context_) {
+  /* Note that it's the responsibility of BlenderGPUDisplay to ensure updating and drawing
+   * the texture does not happen at the same time. This is achieved indirectly.
+   *
+   * When enabling the OpenGL context, it uses an internal mutex lock DST.gl_context_lock.
+   * This same lock is also held when do_draw() is called, which together ensure mutual
+   * exclusion.
+   *
+   * This locking is not performed at the GPU display level, because that would cause lock
+   * inversion. */
+  if (!gl_context_enable()) {
     return false;
   }
-
-  WM_opengl_context_activate(gl_context_);
 
   glWaitSync((GLsync)gl_render_sync_, 0, GL_TIMEOUT_IGNORED);
 
   if (!gl_texture_resources_ensure()) {
-    WM_opengl_context_activate(nullptr);
+    gl_context_disable();
     return false;
   }
 
@@ -341,8 +336,8 @@ bool BlenderGPUDisplay::do_update_begin(int texture_width, int texture_height)
    * too much data to GPU when resolution divider is not 1. */
   /* TODO(sergey): Investigate whether keeping the PBO exact size of the texute makes non-interop
    * mode faster. */
-  const int buffer_width = params_.size.x;
-  const int buffer_height = params_.size.y;
+  const int buffer_width = params.full_size.x;
+  const int buffer_height = params.full_size.y;
   if (texture_.buffer_width != buffer_width || texture_.buffer_height != buffer_height) {
     const size_t size_in_bytes = sizeof(half4) * buffer_width * buffer_height;
     glBindBuffer(GL_PIXEL_UNPACK_BUFFER, texture_.gl_pbo_id_);
@@ -365,29 +360,42 @@ void BlenderGPUDisplay::do_update_end()
   gl_upload_sync_ = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
   glFlush();
 
-  WM_opengl_context_activate(nullptr);
+  gl_context_disable();
 }
 
 /* --------------------------------------------------------------------
  * Texture update from CPU buffer.
  */
 
-void BlenderGPUDisplay::do_copy_pixels_to_texture(const half4 *rgba_pixels)
+void BlenderGPUDisplay::do_copy_pixels_to_texture(
+    const half4 *rgba_pixels, int texture_x, int texture_y, int pixels_width, int pixels_height)
 {
   /* This call copies pixels to a Pixel Buffer Object (PBO) which is much cheaper from CPU time
    * point of view than to copy data directly to the OpenGL texture.
    *
    * The possible downside of this approach is that it might require a higher peak memory when
    * doing partial updates of the texture (although, in practice even partial updates might peak
-   * with a full-frame buffer stored on the CPU if the GPU is currently occupied), */
+   * with a full-frame buffer stored on the CPU if the GPU is currently occupied). */
 
   half4 *mapped_rgba_pixels = map_texture_buffer();
   if (!mapped_rgba_pixels) {
     return;
   }
 
-  const size_t size_in_bytes = sizeof(half4) * texture_.width * texture_.height;
-  memcpy(mapped_rgba_pixels, rgba_pixels, size_in_bytes);
+  if (texture_x == 0 && texture_y == 0 && pixels_width == texture_.width &&
+      pixels_height == texture_.height) {
+    const size_t size_in_bytes = sizeof(half4) * texture_.width * texture_.height;
+    memcpy(mapped_rgba_pixels, rgba_pixels, size_in_bytes);
+  }
+  else {
+    const half4 *rgba_row = rgba_pixels;
+    half4 *mapped_rgba_row = mapped_rgba_pixels + texture_y * texture_.width + texture_x;
+    for (int y = 0; y < pixels_height;
+         ++y, rgba_row += pixels_width, mapped_rgba_row += texture_.width) {
+      memcpy(mapped_rgba_row, rgba_row, sizeof(half4) * pixels_width);
+    }
+  }
+
   unmap_texture_buffer();
 }
 
@@ -413,8 +421,6 @@ void BlenderGPUDisplay::do_unmap_texture_buffer()
   glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER);
 
   glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
-
-  WM_opengl_context_activate(nullptr);
 }
 
 /* --------------------------------------------------------------------
@@ -432,12 +438,23 @@ DeviceGraphicsInteropDestination BlenderGPUDisplay::do_graphics_interop_get()
   return interop_dst;
 }
 
+void BlenderGPUDisplay::graphics_interop_activate()
+{
+  gl_context_enable();
+}
+
+void BlenderGPUDisplay::graphics_interop_deactivate()
+{
+  gl_context_disable();
+}
+
 /* --------------------------------------------------------------------
  * Drawing.
  */
 
-void BlenderGPUDisplay::do_draw()
+void BlenderGPUDisplay::do_draw(const GPUDisplayParams &params)
 {
+  /* See do_update_begin() for why no locking is required here. */
   const bool transparent = true;  // TODO(sergey): Derive this from Film.
 
   if (!gl_draw_resources_ensure()) {
@@ -451,7 +468,7 @@ void BlenderGPUDisplay::do_draw()
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
   }
 
-  display_shader_->bind(params_.full_size.x, params_.full_size.y);
+  display_shader_->bind(params.full_size.x, params.full_size.y);
 
   glActiveTexture(GL_TEXTURE0);
   glBindTexture(GL_TEXTURE_2D, texture_.gl_id_);
@@ -459,7 +476,7 @@ void BlenderGPUDisplay::do_draw()
   glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer_);
 
   texture_update_if_needed();
-  vertex_buffer_update();
+  vertex_buffer_update(params);
 
   /* TODO(sergey): Does it make sense/possible to cache/reuse the VAO? */
   GLuint vertex_array_object;
@@ -500,14 +517,69 @@ void BlenderGPUDisplay::do_draw()
 
 void BlenderGPUDisplay::gl_context_create()
 {
-  const bool drw_state = DRW_opengl_context_release();
+  /* When rendering in viewport there is no render context available via engine.
+   * Check whether own context is to be created here.
+   *
+   * NOTE: If the `b_engine_`'s context is not available, we are expected to be on a main thread
+   * here. */
+  use_gl_context_ = !RE_engine_has_render_context(
+      reinterpret_cast<RenderEngine *>(b_engine_.ptr.data));
 
-  gl_context_ = WM_opengl_context_create();
-  if (!gl_context_) {
-    LOG(ERROR) << "Error creating OpenGL context.";
+  if (use_gl_context_) {
+    const bool drw_state = DRW_opengl_context_release();
+    gl_context_ = WM_opengl_context_create();
+    if (gl_context_) {
+      /* On Windows an old context is restored after creation, and subsequent release of context
+       * generates a Win32 error. Harmless for users, but annoying to have possible misleading
+       * error prints in the console. */
+#ifndef _WIN32
+      WM_opengl_context_release(gl_context_);
+#endif
+    }
+    else {
+      LOG(ERROR) << "Error creating OpenGL context.";
+    }
+
+    DRW_opengl_context_activate(drw_state);
+  }
+}
+
+bool BlenderGPUDisplay::gl_context_enable()
+{
+  if (use_gl_context_) {
+    if (!gl_context_) {
+      return false;
+    }
+    WM_opengl_context_activate(gl_context_);
+    return true;
   }
 
-  DRW_opengl_context_activate(drw_state);
+  RE_engine_render_context_enable(reinterpret_cast<RenderEngine *>(b_engine_.ptr.data));
+  return true;
+}
+
+void BlenderGPUDisplay::gl_context_disable()
+{
+  if (use_gl_context_) {
+    if (gl_context_) {
+      WM_opengl_context_release(gl_context_);
+    }
+    return;
+  }
+
+  RE_engine_render_context_disable(reinterpret_cast<RenderEngine *>(b_engine_.ptr.data));
+}
+
+void BlenderGPUDisplay::gl_context_dispose()
+{
+  if (gl_context_) {
+    const bool drw_state = DRW_opengl_context_release();
+
+    WM_opengl_context_activate(gl_context_);
+    WM_opengl_context_dispose(gl_context_);
+
+    DRW_opengl_context_activate(drw_state);
+  }
 }
 
 bool BlenderGPUDisplay::gl_draw_resources_ensure()
@@ -539,29 +611,25 @@ bool BlenderGPUDisplay::gl_draw_resources_ensure()
 
 void BlenderGPUDisplay::gl_resources_destroy()
 {
+  gl_context_enable();
+
   if (vertex_buffer_ != 0) {
     glDeleteBuffers(1, &vertex_buffer_);
   }
 
-  if (gl_context_) {
-    const bool drw_state = DRW_opengl_context_release();
-
-    GLContextScope scope(gl_context_);
-
-    if (texture_.gl_pbo_id_) {
-      glDeleteBuffers(1, &texture_.gl_pbo_id_);
-      texture_.gl_pbo_id_ = 0;
-    }
-
-    if (texture_.gl_id_) {
-      glDeleteTextures(1, &texture_.gl_id_);
-      texture_.gl_id_ = 0;
-    }
-
-    WM_opengl_context_dispose(gl_context_);
-
-    DRW_opengl_context_activate(drw_state);
+  if (texture_.gl_pbo_id_) {
+    glDeleteBuffers(1, &texture_.gl_pbo_id_);
+    texture_.gl_pbo_id_ = 0;
   }
+
+  if (texture_.gl_id_) {
+    glDeleteTextures(1, &texture_.gl_id_);
+    texture_.gl_id_ = 0;
+  }
+
+  gl_context_disable();
+
+  gl_context_dispose();
 }
 
 bool BlenderGPUDisplay::gl_texture_resources_ensure()
@@ -615,7 +683,7 @@ void BlenderGPUDisplay::texture_update_if_needed()
   texture_.need_update = false;
 }
 
-void BlenderGPUDisplay::vertex_buffer_update()
+void BlenderGPUDisplay::vertex_buffer_update(const GPUDisplayParams &params)
 {
   /* Invalidate old contents - avoids stalling if the buffer is still waiting in queue to be
    * rendered. */
@@ -628,28 +696,23 @@ void BlenderGPUDisplay::vertex_buffer_update()
 
   vpointer[0] = 0.0f;
   vpointer[1] = 0.0f;
-  vpointer[2] = params_.offset.x;
-  vpointer[3] = params_.offset.y;
+  vpointer[2] = params.offset.x;
+  vpointer[3] = params.offset.y;
 
-  // vpointer[4] = (float)texture_.width / (float)params_.size.x;
   vpointer[4] = 1.0f;
   vpointer[5] = 0.0f;
-  vpointer[6] = (float)params_.size.x + params_.offset.x;
-  vpointer[7] = params_.offset.y;
+  vpointer[6] = (float)params.size.x + params.offset.x;
+  vpointer[7] = params.offset.y;
 
-  // vpointer[8] = (float)texture_.width / (float)params_.size.x;
-  // vpointer[9] = (float)texture_.height / (float)params_.size.y;
   vpointer[8] = 1.0f;
   vpointer[9] = 1.0f;
-  vpointer[10] = (float)params_.size.x + params_.offset.x;
-  vpointer[11] = (float)params_.size.y + params_.offset.y;
+  vpointer[10] = (float)params.size.x + params.offset.x;
+  vpointer[11] = (float)params.size.y + params.offset.y;
 
-  // vpointer[12] = 0.0f;
-  // vpointer[13] = (float)texture_.height / (float)params_.size.y;
   vpointer[12] = 0.0f;
   vpointer[13] = 1.0f;
-  vpointer[14] = params_.offset.x;
-  vpointer[15] = (float)params_.size.y + params_.offset.y;
+  vpointer[14] = params.offset.x;
+  vpointer[15] = (float)params.size.y + params.offset.y;
 
   glUnmapBuffer(GL_ARRAY_BUFFER);
 }

@@ -22,6 +22,8 @@
 #include <sstream>
 #include <string>
 
+#include "BLI_ghash.h"
+#include "BLI_hash.hh"
 #include "BLI_math_color.h"
 #include "BLI_math_vector.h"
 #include "BLI_threads.h"
@@ -39,6 +41,7 @@ namespace blender::compositor {
 class OpenCLDevice;
 class ReadBufferOperation;
 class WriteBufferOperation;
+class ExecutionSystem;
 
 class NodeOperation;
 typedef NodeOperation SocketReader;
@@ -72,12 +75,6 @@ enum class ResizeMode {
   /** \brief Fit the width and the height of the input image to the width and height of the working
    * area of the node, image will be equally larger than the working area */
   Stretch = NS_CR_STRETCH,
-};
-
-enum class PixelSampler {
-  Nearest = 0,
-  Bilinear = 1,
-  Bicubic = 2,
 };
 
 class NodeOperationInput {
@@ -190,6 +187,10 @@ struct NodeOperationFlags {
    */
   bool open_cl : 1;
 
+  /**
+   * TODO: Remove this flag and #SingleThreadedOperation if tiled implementation is removed.
+   * Full-frame implementation doesn't need it.
+   */
   bool single_threaded : 1;
 
   /**
@@ -216,6 +217,7 @@ struct NodeOperationFlags {
 
   /**
    * Is this a set operation (value, color, vector).
+   * TODO: To be replaced by is_constant_operation flag once tiled implementation is removed.
    */
   bool is_set_operation : 1;
   bool is_write_buffer_operation : 1;
@@ -232,6 +234,22 @@ struct NodeOperationFlags {
    */
   bool use_datatype_conversion : 1;
 
+  /**
+   * Has this operation fullframe implementation.
+   */
+  bool is_fullframe_operation : 1;
+
+  /**
+   * Whether operation is a primitive constant operation (Color/Vector/Value).
+   */
+  bool is_constant_operation : 1;
+
+  /**
+   * Whether operation have constant elements/pixels values when all its inputs are constant
+   * operations.
+   */
+  bool can_be_constant : 1;
+
   NodeOperationFlags()
   {
     complex = false;
@@ -247,6 +265,45 @@ struct NodeOperationFlags {
     is_viewer_operation = false;
     is_preview_operation = false;
     use_datatype_conversion = true;
+    is_fullframe_operation = false;
+    is_constant_operation = false;
+    can_be_constant = false;
+  }
+};
+
+/** Hash that identifies an operation output result in the current execution. */
+struct NodeOperationHash {
+ private:
+  NodeOperation *operation_;
+  size_t type_hash_;
+  size_t parents_hash_;
+  size_t params_hash_;
+
+  friend class NodeOperation;
+
+ public:
+  NodeOperation *get_operation() const
+  {
+    return operation_;
+  }
+
+  bool operator==(const NodeOperationHash &other) const
+  {
+    return type_hash_ == other.type_hash_ && parents_hash_ == other.parents_hash_ &&
+           params_hash_ == other.params_hash_;
+  }
+
+  bool operator!=(const NodeOperationHash &other) const
+  {
+    return !(*this == other);
+  }
+
+  bool operator<(const NodeOperationHash &other) const
+  {
+    return type_hash_ < other.type_hash_ ||
+           (type_hash_ == other.type_hash_ && parents_hash_ < other.parents_hash_) ||
+           (type_hash_ == other.type_hash_ && parents_hash_ == other.parents_hash_ &&
+            params_hash_ < other.params_hash_);
   }
 };
 
@@ -263,10 +320,15 @@ class NodeOperation {
   Vector<NodeOperationInput> m_inputs;
   Vector<NodeOperationOutput> m_outputs;
 
+  size_t params_hash_;
+  bool is_hash_output_params_implemented_;
+
   /**
    * \brief the index of the input socket that will be used to determine the resolution
    */
   unsigned int m_resolutionInputSocketIndex;
+
+  std::function<void(unsigned int resolution[2])> modify_determined_resolution_fn_;
 
   /**
    * \brief mutex reference for very special node initializations
@@ -286,6 +348,11 @@ class NodeOperation {
 
  protected:
   /**
+   * Compositor execution model.
+   */
+  eExecutionModel execution_model_;
+
+  /**
    * Width of the output of this operation.
    */
   unsigned int m_width;
@@ -300,9 +367,16 @@ class NodeOperation {
    */
   NodeOperationFlags flags;
 
+  ExecutionSystem *exec_system_;
+
  public:
   virtual ~NodeOperation()
   {
+  }
+
+  void set_execution_model(const eExecutionModel model)
+  {
+    execution_model_ = model;
   }
 
   void set_name(const std::string name)
@@ -330,6 +404,8 @@ class NodeOperation {
     return flags;
   }
 
+  std::optional<NodeOperationHash> generate_hash();
+
   unsigned int getNumberOfInputSockets() const
   {
     return m_inputs.size();
@@ -340,6 +416,13 @@ class NodeOperation {
   }
   NodeOperationOutput *getOutputSocket(unsigned int index = 0);
   NodeOperationInput *getInputSocket(unsigned int index);
+
+  NodeOperation *get_input_operation(int index)
+  {
+    /* TODO: Rename protected getInputOperation to get_input_operation and make it public replacing
+     * this method. */
+    return getInputOperation(index);
+  }
 
   /**
    * \brief determine the resolution of this node
@@ -374,6 +457,18 @@ class NodeOperation {
   {
     this->m_btree = tree;
   }
+
+  void set_execution_system(ExecutionSystem *system)
+  {
+    exec_system_ = system;
+  }
+
+  /**
+   * Initializes operation data needed after operations are linked and resolutions determined. For
+   * rendering heap memory data use initExecution().
+   */
+  virtual void init_data();
+
   virtual void initExecution();
 
   /**
@@ -468,6 +563,15 @@ class NodeOperation {
   void setResolutionInputSocketIndex(unsigned int index);
 
   /**
+   * Set a custom function to modify determined resolution from main input just before setting it
+   * as preferred resolution for the other inputs.
+   */
+  void set_determined_resolution_modifier(std::function<void(unsigned int resolution[2])> fn)
+  {
+    modify_determined_resolution_fn_ = fn;
+  }
+
+  /**
    * \brief get the render priority of this node.
    * \note only applicable for output operations like ViewerOperation
    * \return eCompositorPriority
@@ -537,8 +641,58 @@ class NodeOperation {
     return std::unique_ptr<MetaData>();
   }
 
+  /* -------------------------------------------------------------------- */
+  /** \name Full Frame Methods
+   * \{ */
+
+  void render(MemoryBuffer *output_buf, Span<rcti> areas, Span<MemoryBuffer *> inputs_bufs);
+
+  /**
+   * Executes operation updating output memory buffer. Single-threaded calls.
+   */
+  virtual void update_memory_buffer(MemoryBuffer *UNUSED(output),
+                                    const rcti &UNUSED(area),
+                                    Span<MemoryBuffer *> UNUSED(inputs))
+  {
+  }
+
+  /**
+   * Get input operation area being read by this operation on rendering given output area.
+   */
+  virtual void get_area_of_interest(int input_idx, const rcti &output_area, rcti &r_input_area);
+  void get_area_of_interest(NodeOperation *input_op, const rcti &output_area, rcti &r_input_area);
+
+  /** \} */
+
  protected:
   NodeOperation();
+
+  /* Overridden by subclasses to allow merging equal operations on compiling. Implementations must
+   * hash any subclass parameter that affects the output result using `hash_params` methods. */
+  virtual void hash_output_params()
+  {
+    is_hash_output_params_implemented_ = false;
+  }
+
+  static void combine_hashes(size_t &combined, size_t other)
+  {
+    combined = BLI_ghashutil_combine_hash(combined, other);
+  }
+
+  template<typename T> void hash_param(T param)
+  {
+    combine_hashes(params_hash_, get_default_hash(param));
+  }
+
+  template<typename T1, typename T2> void hash_params(T1 param1, T2 param2)
+  {
+    combine_hashes(params_hash_, get_default_hash_2(param1, param2));
+  }
+
+  template<typename T1, typename T2, typename T3> void hash_params(T1 param1, T2 param2, T3 param3)
+  {
+    combine_hashes(params_hash_, get_default_hash_3(param1, param2, param3));
+  }
 
   void addInputSocket(DataType datatype, ResizeMode resize_mode = ResizeMode::Center);
   void addOutputSocket(DataType datatype);
@@ -615,6 +769,25 @@ class NodeOperation {
       float /*output*/[4], float /*x*/, float /*y*/, float /*dx*/[2], float /*dy*/[2])
   {
   }
+
+ private:
+  /* -------------------------------------------------------------------- */
+  /** \name Full Frame Methods
+   * \{ */
+
+  void render_full_frame(MemoryBuffer *output_buf,
+                         Span<rcti> areas,
+                         Span<MemoryBuffer *> inputs_bufs);
+
+  void render_full_frame_fallback(MemoryBuffer *output_buf,
+                                  Span<rcti> areas,
+                                  Span<MemoryBuffer *> inputs);
+  void render_tile(MemoryBuffer *output_buf, rcti *tile_rect);
+  Vector<NodeOperationOutput *> replace_inputs_with_buffers(Span<MemoryBuffer *> inputs_bufs);
+  void remove_buffers_and_restore_original_inputs(
+      Span<NodeOperationOutput *> original_inputs_links);
+
+  /** \} */
 
   /* allow the DebugInfo class to look at internals */
   friend class DebugInfo;

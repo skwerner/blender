@@ -53,6 +53,7 @@
 #include "BKE_screen.h"
 #include "BKE_workspace.h"
 
+#include "ED_object.h"
 #include "ED_render.h"
 #include "ED_screen.h"
 #include "ED_space_api.h"
@@ -187,7 +188,7 @@ bool ED_view3d_area_user_region(const ScrArea *area, const View3D *v3d, ARegion 
  * view3d_project_short_clip and view3d_project_short_noclip in cases where
  * these functions are not used during draw_object
  */
-void ED_view3d_init_mats_rv3d(struct Object *ob, struct RegionView3D *rv3d)
+void ED_view3d_init_mats_rv3d(const struct Object *ob, struct RegionView3D *rv3d)
 {
   /* local viewmat and persmat, to calculate projections */
   mul_m4_m4m4(rv3d->viewmatob, rv3d->viewmat, ob->obmat);
@@ -197,7 +198,7 @@ void ED_view3d_init_mats_rv3d(struct Object *ob, struct RegionView3D *rv3d)
   ED_view3d_clipping_local(rv3d, ob->obmat);
 }
 
-void ED_view3d_init_mats_rv3d_gl(struct Object *ob, struct RegionView3D *rv3d)
+void ED_view3d_init_mats_rv3d_gl(const struct Object *ob, struct RegionView3D *rv3d)
 {
   ED_view3d_init_mats_rv3d(ob, rv3d);
 
@@ -331,6 +332,8 @@ static void view3d_free(SpaceLink *sl)
     MEM_freeN(vd->localvd);
   }
 
+  MEM_SAFE_FREE(vd->runtime.local_stats);
+
   if (vd->runtime.properties_storage) {
     MEM_freeN(vd->runtime.properties_storage);
   }
@@ -346,19 +349,25 @@ static void view3d_init(wmWindowManager *UNUSED(wm), ScrArea *UNUSED(area))
 {
 }
 
+static void view3d_exit(wmWindowManager *UNUSED(wm), ScrArea *area)
+{
+  BLI_assert(area->spacetype == SPACE_VIEW3D);
+  View3D *v3d = area->spacedata.first;
+  MEM_SAFE_FREE(v3d->runtime.local_stats);
+}
+
 static SpaceLink *view3d_duplicate(SpaceLink *sl)
 {
   View3D *v3do = (View3D *)sl;
   View3D *v3dn = MEM_dupallocN(sl);
 
+  memset(&v3dn->runtime, 0x0, sizeof(v3dn->runtime));
+
   /* clear or remove stuff from old */
 
   if (v3dn->localvd) {
     v3dn->localvd = NULL;
-    v3dn->runtime.properties_storage = NULL;
   }
-  /* Only one View3D is allowed to have this flag! */
-  v3dn->runtime.flag &= ~V3D_RUNTIME_XR_SESSION_ROOT;
 
   v3dn->local_collections_uuid = 0;
   v3dn->flag &= ~(V3D_LOCAL_COLLECTIONS | V3D_XR_SESSION_MIRROR);
@@ -372,8 +381,6 @@ static SpaceLink *view3d_duplicate(SpaceLink *sl)
   }
 
   /* copy or clear inside new stuff */
-
-  v3dn->runtime.properties_storage = NULL;
 
   return (SpaceLink *)v3dn;
 }
@@ -507,49 +514,49 @@ static bool view3d_drop_id_in_main_region_poll(bContext *C,
   return WM_drag_is_ID_type(drag, id_type);
 }
 
-static bool view3d_ob_drop_poll(bContext *C,
-                                wmDrag *drag,
-                                const wmEvent *event,
-                                const char **UNUSED(r_tooltip))
+static bool view3d_ob_drop_poll(bContext *C, wmDrag *drag, const wmEvent *event)
 {
   return view3d_drop_id_in_main_region_poll(C, drag, event, ID_OB);
 }
 
-static bool view3d_collection_drop_poll(bContext *C,
-                                        wmDrag *drag,
-                                        const wmEvent *event,
-                                        const char **UNUSED(r_tooltip))
+static bool view3d_collection_drop_poll(bContext *C, wmDrag *drag, const wmEvent *event)
 {
   return view3d_drop_id_in_main_region_poll(C, drag, event, ID_GR);
 }
 
-static bool view3d_mat_drop_poll(bContext *C,
-                                 wmDrag *drag,
-                                 const wmEvent *event,
-                                 const char **UNUSED(r_tooltip))
+static bool view3d_mat_drop_poll(bContext *C, wmDrag *drag, const wmEvent *event)
 {
   return view3d_drop_id_in_main_region_poll(C, drag, event, ID_MA);
 }
 
-static bool view3d_object_data_drop_poll(bContext *C,
-                                         wmDrag *drag,
-                                         const wmEvent *event,
-                                         const char **r_tooltip)
+static char *view3d_mat_drop_tooltip(bContext *C,
+                                     wmDrag *drag,
+                                     const wmEvent *event,
+                                     struct wmDropBox *drop)
+{
+  const char *name = WM_drag_get_item_name(drag);
+  RNA_string_set(drop->ptr, "name", name);
+  return ED_object_ot_drop_named_material_tooltip(C, drop->ptr, event);
+}
+
+static bool view3d_object_data_drop_poll(bContext *C, wmDrag *drag, const wmEvent *event)
 {
   ID_Type id_type = view3d_drop_id_in_main_region_poll_get_id_type(C, drag, event);
-  if (id_type) {
-    if (OB_DATA_SUPPORT_ID(id_type)) {
-      *r_tooltip = TIP_("Create object instance from object-data");
-      return true;
-    }
+  if (id_type && OB_DATA_SUPPORT_ID(id_type)) {
+    return true;
   }
   return false;
 }
 
-static bool view3d_ima_drop_poll(bContext *C,
-                                 wmDrag *drag,
-                                 const wmEvent *event,
-                                 const char **UNUSED(r_tooltip))
+static char *view3d_object_data_drop_tooltip(bContext *UNUSED(C),
+                                             wmDrag *UNUSED(drag),
+                                             const wmEvent *UNUSED(event),
+                                             wmDropBox *UNUSED(drop))
+{
+  return BLI_strdup(TIP_("Create object instance from object-data"));
+}
+
+static bool view3d_ima_drop_poll(bContext *C, wmDrag *drag, const wmEvent *event)
 {
   if (ED_region_overlap_isect_any_xy(CTX_wm_area(C), &event->x)) {
     return false;
@@ -574,12 +581,9 @@ static bool view3d_ima_bg_is_camera_view(bContext *C)
   return false;
 }
 
-static bool view3d_ima_bg_drop_poll(bContext *C,
-                                    wmDrag *drag,
-                                    const wmEvent *event,
-                                    const char **r_tooltip)
+static bool view3d_ima_bg_drop_poll(bContext *C, wmDrag *drag, const wmEvent *event)
 {
-  if (!view3d_ima_drop_poll(C, drag, event, r_tooltip)) {
+  if (!view3d_ima_drop_poll(C, drag, event)) {
     return false;
   }
 
@@ -590,12 +594,9 @@ static bool view3d_ima_bg_drop_poll(bContext *C,
   return view3d_ima_bg_is_camera_view(C);
 }
 
-static bool view3d_ima_empty_drop_poll(bContext *C,
-                                       wmDrag *drag,
-                                       const wmEvent *event,
-                                       const char **r_tooltip)
+static bool view3d_ima_empty_drop_poll(bContext *C, wmDrag *drag, const wmEvent *event)
 {
-  if (!view3d_ima_drop_poll(C, drag, event, r_tooltip)) {
+  if (!view3d_ima_drop_poll(C, drag, event)) {
     return false;
   }
 
@@ -614,8 +615,7 @@ static bool view3d_ima_empty_drop_poll(bContext *C,
 
 static bool view3d_volume_drop_poll(bContext *UNUSED(C),
                                     wmDrag *drag,
-                                    const wmEvent *UNUSED(event),
-                                    const char **UNUSED(r_tooltip))
+                                    const wmEvent *UNUSED(event))
 {
   return (drag->type == WM_DRAG_PATH) && (drag->icon == ICON_FILE_VOLUME);
 }
@@ -625,6 +625,7 @@ static void view3d_ob_drop_copy(wmDrag *drag, wmDropBox *drop)
   ID *id = WM_drag_get_local_ID_or_import_from_asset(drag, ID_OB);
 
   RNA_string_set(drop->ptr, "name", id->name + 2);
+  RNA_boolean_set(drop->ptr, "duplicate", false);
 }
 
 static void view3d_collection_drop_copy(wmDrag *drag, wmDropBox *drop)
@@ -693,37 +694,44 @@ static void view3d_dropboxes(void)
                  "OBJECT_OT_add_named",
                  view3d_ob_drop_poll,
                  view3d_ob_drop_copy,
-                 WM_drag_free_imported_drag_ID);
+                 WM_drag_free_imported_drag_ID,
+                 NULL);
   WM_dropbox_add(lb,
                  "OBJECT_OT_drop_named_material",
                  view3d_mat_drop_poll,
                  view3d_id_drop_copy,
-                 WM_drag_free_imported_drag_ID);
+                 WM_drag_free_imported_drag_ID,
+                 view3d_mat_drop_tooltip);
   WM_dropbox_add(lb,
                  "VIEW3D_OT_background_image_add",
                  view3d_ima_bg_drop_poll,
                  view3d_id_path_drop_copy,
-                 WM_drag_free_imported_drag_ID);
+                 WM_drag_free_imported_drag_ID,
+                 NULL);
   WM_dropbox_add(lb,
                  "OBJECT_OT_drop_named_image",
                  view3d_ima_empty_drop_poll,
                  view3d_id_path_drop_copy,
-                 WM_drag_free_imported_drag_ID);
+                 WM_drag_free_imported_drag_ID,
+                 NULL);
   WM_dropbox_add(lb,
                  "OBJECT_OT_volume_import",
                  view3d_volume_drop_poll,
                  view3d_id_path_drop_copy,
-                 WM_drag_free_imported_drag_ID);
+                 WM_drag_free_imported_drag_ID,
+                 NULL);
   WM_dropbox_add(lb,
                  "OBJECT_OT_collection_instance_add",
                  view3d_collection_drop_poll,
                  view3d_collection_drop_copy,
-                 WM_drag_free_imported_drag_ID);
+                 WM_drag_free_imported_drag_ID,
+                 NULL);
   WM_dropbox_add(lb,
                  "OBJECT_OT_data_instance_add",
                  view3d_object_data_drop_poll,
                  view3d_id_drop_copy_with_type,
-                 WM_drag_free_imported_drag_ID);
+                 WM_drag_free_imported_drag_ID,
+                 view3d_object_data_drop_tooltip);
 }
 
 static void view3d_widgets(void)
@@ -779,12 +787,6 @@ static void view3d_main_region_free(ARegion *region)
       RE_engine_free(rv3d->render_engine);
     }
 
-    if (rv3d->depths) {
-      if (rv3d->depths->depths) {
-        MEM_freeN(rv3d->depths->depths);
-      }
-      MEM_freeN(rv3d->depths);
-    }
     if (rv3d->sms) {
       MEM_freeN(rv3d->sms);
     }
@@ -808,7 +810,6 @@ static void *view3d_main_region_duplicate(void *poin)
       new->clipbb = MEM_dupallocN(rv3d->clipbb);
     }
 
-    new->depths = NULL;
     new->render_engine = NULL;
     new->sms = NULL;
     new->smooth_timer = NULL;
@@ -1096,7 +1097,7 @@ static void view3d_main_region_message_subscribe(const wmRegionMessageSubscribeP
   ScrArea *area = params->area;
   ARegion *region = params->region;
 
-  /* Developer note: there are many properties that impact 3D view drawing,
+  /* Developer NOTE: there are many properties that impact 3D view drawing,
    * so instead of subscribing to individual properties, just subscribe to types
    * accepting some redundant redraws.
    *
@@ -1583,7 +1584,7 @@ static void space_view3d_listener(const wmSpaceTypeListenerParams *params)
   }
 }
 
-static void space_view3d_refresh(const bContext *C, ScrArea *UNUSED(area))
+static void space_view3d_refresh(const bContext *C, ScrArea *area)
 {
   Scene *scene = CTX_data_scene(C);
   LightCache *lcache = scene->eevee.light_cache_data;
@@ -1592,6 +1593,9 @@ static void space_view3d_refresh(const bContext *C, ScrArea *UNUSED(area))
     lcache->flag &= ~LIGHTCACHE_UPDATE_AUTO;
     view3d_lightcache_update((bContext *)C);
   }
+
+  View3D *v3d = (View3D *)area->spacedata.first;
+  MEM_SAFE_FREE(v3d->runtime.local_stats);
 }
 
 const char *view3d_context_dir[] = {
@@ -1614,7 +1618,7 @@ static int view3d_context(const bContext *C, const char *member, bContextDataRes
      * This is ignored in the case the object is in any mode (besides object-mode),
      * since the object's mode impacts the current tool, cursor, gizmos etc.
      * If we didn't have this exception, changing visibility would need to perform
-     * many of the the same updates as changing the objects mode.
+     * many of the same updates as changing the objects mode.
      *
      * Further, there are multiple ways to hide objects - by collection, by object type, etc.
      * it's simplest if all these methods behave consistently - respecting the object-mode
@@ -1699,6 +1703,7 @@ void ED_spacetype_view3d(void)
   st->create = view3d_create;
   st->free = view3d_free;
   st->init = view3d_init;
+  st->exit = view3d_exit;
   st->listener = space_view3d_listener;
   st->refresh = space_view3d_refresh;
   st->duplicate = view3d_duplicate;

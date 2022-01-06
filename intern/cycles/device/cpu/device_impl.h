@@ -96,7 +96,7 @@ class CPUDevice : public Device {
   virtual void *get_cpu_oiio_memory() override;
 
  protected:
-  virtual bool load_kernels(const DeviceRequestedFeatures & /*requested_features*/) override;
+  virtual bool load_kernels(uint /*kernel_features*/) override;
 };
 
 CCL_NAMESPACE_END

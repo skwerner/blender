@@ -17,7 +17,9 @@
 #ifdef WITH_CUDA
 
 #  include "device/cuda/queue.h"
+
 #  include "device/cuda/device_impl.h"
+#  include "device/cuda/graphics_interop.h"
 #  include "device/cuda/kernel.h"
 
 CCL_NAMESPACE_BEGIN
@@ -37,11 +39,23 @@ CUDADeviceQueue::~CUDADeviceQueue()
   cuStreamDestroy(cuda_stream_);
 }
 
-int CUDADeviceQueue::num_concurrent_states(const size_t) const
+int CUDADeviceQueue::num_concurrent_states(const size_t /*state_size*/) const
 {
   /* TODO: compute automatically. */
   /* TODO: must have at least num_threads_per_block. */
   return 1048576;
+}
+
+int CUDADeviceQueue::num_concurrent_busy_states()
+{
+  const int max_num_threads = cuda_device_->get_num_multiprocessors() *
+                              cuda_device_->get_max_num_threads_per_multiprocessor();
+
+  if (max_num_threads == 0) {
+    return 65536;
+  }
+
+  return 4 * max_num_threads;
 }
 
 void CUDADeviceQueue::init_execution()
@@ -82,30 +96,12 @@ bool CUDADeviceQueue::enqueue(DeviceKernel kernel, const int work_size, void *ar
     case DEVICE_KERNEL_INTEGRATOR_ACTIVE_PATHS_ARRAY:
     case DEVICE_KERNEL_INTEGRATOR_TERMINATED_PATHS_ARRAY:
     case DEVICE_KERNEL_INTEGRATOR_SORTED_PATHS_ARRAY:
+    case DEVICE_KERNEL_INTEGRATOR_COMPACT_PATHS_ARRAY:
       /* See parall_active_index.h for why this amount of shared memory is needed. */
       shared_mem_bytes = (num_threads_per_block + 1) * sizeof(int);
       break;
-    case DEVICE_KERNEL_INTEGRATOR_INIT_FROM_CAMERA:
-    case DEVICE_KERNEL_INTEGRATOR_INTERSECT_CLOSEST:
-    case DEVICE_KERNEL_INTEGRATOR_INTERSECT_SHADOW:
-    case DEVICE_KERNEL_INTEGRATOR_INTERSECT_SUBSURFACE:
-    case DEVICE_KERNEL_INTEGRATOR_SHADE_BACKGROUND:
-    case DEVICE_KERNEL_INTEGRATOR_SHADE_LIGHT:
-    case DEVICE_KERNEL_INTEGRATOR_SHADE_SHADOW:
-    case DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE:
-    case DEVICE_KERNEL_INTEGRATOR_SHADE_VOLUME:
-    case DEVICE_KERNEL_INTEGRATOR_MEGAKERNEL:
-    case DEVICE_KERNEL_INTEGRATOR_RESET:
-    case DEVICE_KERNEL_SHADER_EVAL_DISPLACE:
-    case DEVICE_KERNEL_SHADER_EVAL_BACKGROUND:
-    case DEVICE_KERNEL_CONVERT_TO_HALF_FLOAT:
-    case DEVICE_KERNEL_ADAPTIVE_SAMPLING_CONVERGENCE_CHECK:
-    case DEVICE_KERNEL_ADAPTIVE_SAMPLING_CONVERGENCE_FILTER_X:
-    case DEVICE_KERNEL_ADAPTIVE_SAMPLING_CONVERGENCE_FILTER_Y:
-    case DEVICE_KERNEL_FILTER_CONVERT_TO_RGB:
-    case DEVICE_KERNEL_FILTER_CONVERT_FROM_RGB:
-    case DEVICE_KERNEL_PREFIX_SUM:
-    case DEVICE_KERNEL_NUM:
+
+    default:
       break;
   }
 
@@ -202,6 +198,11 @@ void CUDADeviceQueue::copy_from_device(device_memory &mem)
       cuda_device_,
       cuMemcpyDtoHAsync(
           mem.host_pointer, (CUdeviceptr)mem.device_pointer, mem.memory_size(), cuda_stream_));
+}
+
+unique_ptr<DeviceGraphicsInterop> CUDADeviceQueue::graphics_interop_create()
+{
+  return make_unique<CUDADeviceGraphicsInterop>(this);
 }
 
 CCL_NAMESPACE_END

@@ -60,6 +60,7 @@
 #include "UI_view2d.h"
 
 #include "transform.h"
+#include "transform_convert.h"
 #include "transform_mode.h"
 #include "transform_orientations.h"
 #include "transform_snap.h"
@@ -152,8 +153,7 @@ void initTransInfo(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
 
   t->flag = 0;
 
-  if (obact && !(t->options & (CTX_CURSOR | CTX_TEXTURE_SPACE)) &&
-      ELEM(object_mode, OB_MODE_EDIT, OB_MODE_EDIT_GPENCIL)) {
+  if (obact && ELEM(object_mode, OB_MODE_EDIT, OB_MODE_EDIT_GPENCIL)) {
     t->obedit_type = obact->type;
   }
   else {
@@ -343,9 +343,9 @@ void initTransInfo(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
   }
   else {
     if (region) {
-      /* XXX for now, get View2D  from the active region */
+      /* XXX: For now, get View2D from the active region. */
       t->view = &region->v2d;
-      /* XXX for now, the center point is the midpoint of the data */
+      /* XXX: For now, the center point is the midpoint of the data. */
     }
     else {
       t->view = NULL;
@@ -353,13 +353,11 @@ void initTransInfo(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
     t->around = V3D_AROUND_CENTER_BOUNDS;
   }
 
-  BLI_assert(is_zero_v4(t->values_modal_offset));
-
   bool t_values_set_is_array = false;
 
   if (op && (prop = RNA_struct_find_property(op->ptr, "value")) &&
       RNA_property_is_set(op->ptr, prop)) {
-    float values[4] = {0}; /* in case value isn't length 4, avoid uninitialized memory  */
+    float values[4] = {0}; /* in case value isn't length 4, avoid uninitialized memory. */
     if (RNA_property_array_check(prop)) {
       RNA_float_get_array(op->ptr, "value", values);
       t_values_set_is_array = true;
@@ -368,7 +366,6 @@ void initTransInfo(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
       values[0] = RNA_float_get(op->ptr, "value");
     }
 
-    copy_v4_v4(t->values, values);
     if (t->flag & T_MODAL) {
       /* Run before init functions so 'values_modal_offset' can be applied on mouse input. */
       copy_v4_v4(t->values_modal_offset, values);
@@ -628,6 +625,11 @@ void initTransInfo(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
   }
 #endif
 
+  /* Disable cursor wrap when edge panning is enabled. */
+  if (t->options & CTX_VIEW2D_EDGE_PAN) {
+    t->flag |= T_NO_CURSOR_WRAP;
+  }
+
   setTransformViewAspect(t, t->aspect);
 
   if (op && (prop = RNA_struct_find_property(op->ptr, "center_override")) &&
@@ -789,7 +791,7 @@ static void restoreElement(TransData *td)
 {
   transdata_restore_basic((TransDataBasic *)td);
 
-  if (td->val) {
+  if (td->val && td->val != td->loc) {
     *td->val = td->ival;
   }
 
@@ -859,8 +861,8 @@ void calculateCenter2D(TransInfo *t)
 
 void calculateCenterLocal(TransInfo *t, const float center_global[3])
 {
-  /* setting constraint center */
-  /* note, init functions may over-ride t->center */
+  /* Setting constraint center. */
+  /* NOTE: init functions may over-ride `t->center`. */
   FOREACH_TRANS_DATA_CONTAINER (t, tc) {
     if (tc->use_local_mat) {
       mul_v3_m4v3(tc->center_local, tc->imat, center_global);
@@ -913,7 +915,7 @@ void calculateCenterCursor2D(TransInfo *t, float r_center[2])
         BKE_mask_coord_from_movieclip(space_clip->clip, &space_clip->user, co, cursor);
       }
       else {
-        BLI_assert(!"Shall not happen");
+        BLI_assert_msg(0, "Shall not happen");
       }
 
       r_center[0] = co[0] * t->aspect[0];

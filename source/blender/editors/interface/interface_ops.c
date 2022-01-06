@@ -75,6 +75,32 @@
 #include "ED_text.h"
 
 /* -------------------------------------------------------------------- */
+/** \name Immediate redraw helper
+ *
+ * Generally handlers shouldn't do any redrawing, that includes the layout/button definitions. That
+ * violates the Model-View-Controller pattern.
+ *
+ * But there are some operators which really need to re-run the layout definitions for various
+ * reasons. For example, "Edit Source" does it to find out which exact Python code added a button.
+ * Other operators may need to access buttons that aren't currently visible. In Blender's UI code
+ * design that typically means just not adding the button in the first place, for a particular
+ * redraw. So the operator needs to change context and re-create the layout, so the button becomes
+ * available to act on.
+ *
+ * \{ */
+
+static void ui_region_redraw_immediately(bContext *C, ARegion *region)
+{
+  ED_region_do_layout(C, region);
+  WM_draw_region_viewport_bind(region);
+  ED_region_do_draw(C, region);
+  WM_draw_region_viewport_unbind(region);
+  region->do_draw = false;
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
 /** \name Copy Data Path Operator
  * \{ */
 
@@ -649,7 +675,7 @@ static int override_remove_button_exec(bContext *C, wmOperator *op)
     PropertyRNA *src_prop;
     RNA_id_pointer_create(id->override_library->reference, &id_refptr);
     if (!RNA_path_resolve_property(&id_refptr, oprop->rna_path, &src, &src_prop)) {
-      BLI_assert(0 && "Failed to create matching source (linked data) RNA pointer");
+      BLI_assert_msg(0, "Failed to create matching source (linked data) RNA pointer");
     }
   }
 
@@ -803,7 +829,7 @@ bool UI_context_copy_to_selected_list(bContext *C,
   }
   else if (RNA_struct_is_a(ptr->type, &RNA_Sequence)) {
     /* Special case when we do this for 'Sequence.lock'.
-     * (if the sequence is locked, it wont be in "selected_editable_sequences"). */
+     * (if the sequence is locked, it won't be in "selected_editable_sequences"). */
     const char *prop_id = RNA_property_identifier(prop);
     if (STREQ(prop_id, "lock")) {
       *r_lb = CTX_data_collection_get(C, "selected_sequences");
@@ -921,7 +947,7 @@ bool UI_context_copy_to_selected_list(bContext *C,
        * to handle situations like T41062... */
       if ((*r_path = RNA_path_resolve_from_type_to_property(ptr, prop, &RNA_Sequence)) != NULL) {
         /* Special case when we do this for 'Sequence.lock'.
-         * (if the sequence is locked, it wont be in "selected_editable_sequences"). */
+         * (if the sequence is locked, it won't be in "selected_editable_sequences"). */
         const char *prop_id = RNA_property_identifier(prop);
         if (STREQ(prop_id, "lock")) {
           *r_lb = CTX_data_collection_get(C, "selected_sequences");
@@ -972,54 +998,68 @@ static bool copy_to_selected_button(bContext *C, bool all, bool poll)
   UI_context_active_but_prop_get(C, &ptr, &prop, &index);
 
   /* if there is a valid property that is editable... */
-  if (ptr.data && prop) {
-    char *path = NULL;
-    bool use_path_from_id;
-    ListBase lb = {NULL};
-
-    if (UI_context_copy_to_selected_list(C, &ptr, prop, &lb, &use_path_from_id, &path) &&
-        !BLI_listbase_is_empty(&lb)) {
-      LISTBASE_FOREACH (CollectionPointerLink *, link, &lb) {
-        if (link->ptr.data != ptr.data) {
-          if (use_path_from_id) {
-            /* Path relative to ID. */
-            lprop = NULL;
-            RNA_id_pointer_create(link->ptr.owner_id, &idptr);
-            RNA_path_resolve_property(&idptr, path, &lptr, &lprop);
-          }
-          else if (path) {
-            /* Path relative to elements from list. */
-            lprop = NULL;
-            RNA_path_resolve_property(&link->ptr, path, &lptr, &lprop);
-          }
-          else {
-            lptr = link->ptr;
-            lprop = prop;
-          }
-
-          if (lptr.data == ptr.data) {
-            /* lptr might not be the same as link->ptr! */
-            continue;
-          }
-
-          if (lprop == prop) {
-            if (RNA_property_editable(&lptr, lprop)) {
-              if (poll) {
-                success = true;
-                break;
-              }
-              if (RNA_property_copy(bmain, &lptr, &ptr, prop, (all) ? -1 : index)) {
-                RNA_property_update(C, &lptr, prop);
-                success = true;
-              }
-            }
-          }
-        }
-      }
-    }
-    MEM_SAFE_FREE(path);
-    BLI_freelistN(&lb);
+  if (ptr.data == NULL || prop == NULL) {
+    return false;
   }
+
+  char *path = NULL;
+  bool use_path_from_id;
+  ListBase lb = {NULL};
+
+  if (!UI_context_copy_to_selected_list(C, &ptr, prop, &lb, &use_path_from_id, &path)) {
+    return false;
+  }
+  if (BLI_listbase_is_empty(&lb)) {
+    MEM_SAFE_FREE(path);
+    return false;
+  }
+
+  LISTBASE_FOREACH (CollectionPointerLink *, link, &lb) {
+    if (link->ptr.data == ptr.data) {
+      continue;
+    }
+
+    if (use_path_from_id) {
+      /* Path relative to ID. */
+      lprop = NULL;
+      RNA_id_pointer_create(link->ptr.owner_id, &idptr);
+      RNA_path_resolve_property(&idptr, path, &lptr, &lprop);
+    }
+    else if (path) {
+      /* Path relative to elements from list. */
+      lprop = NULL;
+      RNA_path_resolve_property(&link->ptr, path, &lptr, &lprop);
+    }
+    else {
+      lptr = link->ptr;
+      lprop = prop;
+    }
+
+    if (lptr.data == ptr.data) {
+      /* lptr might not be the same as link->ptr! */
+      continue;
+    }
+
+    if (lprop != prop) {
+      continue;
+    }
+
+    if (!RNA_property_editable(&lptr, lprop)) {
+      continue;
+    }
+
+    if (poll) {
+      success = true;
+      break;
+    }
+    if (RNA_property_copy(bmain, &lptr, &ptr, prop, (all) ? -1 : index)) {
+      RNA_property_update(C, &lptr, prop);
+      success = true;
+    }
+  }
+
+  MEM_SAFE_FREE(path);
+  BLI_freelistN(&lb);
 
   return success;
 }
@@ -1215,7 +1255,7 @@ static void UI_OT_jump_to_target_button(wmOperatorType *ot)
 
 /* ------------------------------------------------------------------------- */
 /* EditSource Utility funcs and operator,
- * note, this includes utility functions and button matching checks */
+ * NOTE: this includes utility functions and button matching checks. */
 
 typedef struct uiEditSourceStore {
   uiBut but_orig;
@@ -1340,7 +1380,7 @@ static int editsource_text_edit(bContext *C,
   txt_move_toline(text, line - 1, false);
 
   /* naughty!, find text area to set, not good behavior
-   * but since this is a dev tool lets allow it - campbell */
+   * but since this is a developer tool lets allow it - campbell */
   ScrArea *area = BKE_screen_find_big_area(CTX_wm_screen(C), SPACE_TEXT, 0);
   if (area) {
     SpaceText *st = area->spacedata.first;
@@ -1379,11 +1419,7 @@ static int editsource_exec(bContext *C, wmOperator *op)
     ui_editsource_active_but_set(but);
 
     /* redraw and get active button python info */
-    ED_region_do_layout(C, region);
-    WM_draw_region_viewport_bind(region);
-    ED_region_do_draw(C, region);
-    WM_draw_region_viewport_unbind(region);
-    region->do_draw = false;
+    ui_region_redraw_immediately(C, region);
 
     for (BLI_ghashIterator_init(&ghi, ui_editsource_info->hash);
          BLI_ghashIterator_done(&ghi) == false;
@@ -1535,7 +1571,7 @@ static int edittranslation_exec(bContext *C, wmOperator *op)
   }
   /* Try to find a valid po file for current language... */
   edittranslation_find_po_file(root, uilng, popath, FILE_MAX);
-  /* printf("po path: %s\n", popath); */
+  // printf("po path: %s\n", popath);
   if (popath[0] == '\0') {
     BKE_reportf(
         op->reports, RPT_ERROR, "No valid po found for language '%s' under %s", uilng, root);
@@ -1737,10 +1773,7 @@ static void UI_OT_button_string_clear(wmOperatorType *ot)
 /** \name Drop Color Operator
  * \{ */
 
-bool UI_drop_color_poll(struct bContext *C,
-                        wmDrag *drag,
-                        const wmEvent *UNUSED(event),
-                        const char **UNUSED(r_tooltip))
+bool UI_drop_color_poll(struct bContext *C, wmDrag *drag, const wmEvent *UNUSED(event))
 {
   /* should only return true for regions that include buttons, for now
    * return true always */
@@ -1836,6 +1869,64 @@ static void UI_OT_drop_color(wmOperatorType *ot)
 /** \} */
 
 /* -------------------------------------------------------------------- */
+/** \name UI List Search Operator
+ * \{ */
+
+static bool ui_list_focused_poll(bContext *C)
+{
+  const ARegion *region = CTX_wm_region(C);
+  const wmWindow *win = CTX_wm_window(C);
+  const uiList *list = UI_list_find_mouse_over(region, win->eventstate);
+
+  return list != NULL;
+}
+
+/**
+ * Ensure the filter options are set to be visible in the UI list.
+ * \return if the visibility changed, requiring a redraw.
+ */
+static bool ui_list_unhide_filter_options(uiList *list)
+{
+  if (list->filter_flag & UILST_FLT_SHOW) {
+    /* Nothing to be done. */
+    return false;
+  }
+
+  list->filter_flag |= UILST_FLT_SHOW;
+  return true;
+}
+
+static int ui_list_start_filter_invoke(bContext *C, wmOperator *UNUSED(op), const wmEvent *event)
+{
+  ARegion *region = CTX_wm_region(C);
+  uiList *list = UI_list_find_mouse_over(region, event);
+  /* Poll should check. */
+  BLI_assert(list != NULL);
+
+  if (ui_list_unhide_filter_options(list)) {
+    ui_region_redraw_immediately(C, region);
+  }
+
+  if (!UI_textbutton_activate_rna(C, region, list, "filter_name")) {
+    return OPERATOR_CANCELLED;
+  }
+
+  return OPERATOR_FINISHED;
+}
+
+static void UI_OT_list_start_filter(wmOperatorType *ot)
+{
+  ot->name = "List Filter";
+  ot->idname = "UI_OT_list_start_filter";
+  ot->description = "Start entering filter text for the list in focus";
+
+  ot->invoke = ui_list_start_filter_invoke;
+  ot->poll = ui_list_focused_poll;
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
 /** \name Operator & Keymap Registration
  * \{ */
 
@@ -1859,6 +1950,8 @@ void ED_operatortypes_ui(void)
   WM_operatortype_append(UI_OT_reloadtranslation);
   WM_operatortype_append(UI_OT_button_execute);
   WM_operatortype_append(UI_OT_button_string_clear);
+
+  WM_operatortype_append(UI_OT_list_start_filter);
 
   /* external */
   WM_operatortype_append(UI_OT_eyedropper_color);

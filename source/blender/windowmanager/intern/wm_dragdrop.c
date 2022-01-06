@@ -26,6 +26,7 @@
 #include <string.h>
 
 #include "DNA_screen_types.h"
+#include "DNA_space_types.h"
 #include "DNA_windowmanager_types.h"
 
 #include "MEM_guardedalloc.h"
@@ -95,14 +96,16 @@ ListBase *WM_dropboxmap_find(const char *idname, int spaceid, int regionid)
 
 wmDropBox *WM_dropbox_add(ListBase *lb,
                           const char *idname,
-                          bool (*poll)(bContext *, wmDrag *, const wmEvent *, const char **),
+                          bool (*poll)(bContext *, wmDrag *, const wmEvent *),
                           void (*copy)(wmDrag *, wmDropBox *),
-                          void (*cancel)(struct Main *, wmDrag *, wmDropBox *))
+                          void (*cancel)(struct Main *, wmDrag *, wmDropBox *),
+                          WMDropboxTooltipFunc tooltip)
 {
   wmDropBox *drop = MEM_callocN(sizeof(wmDropBox), "wmDropBox");
   drop->poll = poll;
   drop->copy = copy;
   drop->cancel = cancel;
+  drop->tooltip = tooltip;
   drop->ot = WM_operatortype_find(idname, 0);
   drop->opcontext = WM_OP_INVOKE_DEFAULT;
 
@@ -143,7 +146,7 @@ wmDrag *WM_event_start_drag(
   wmWindowManager *wm = CTX_wm_manager(C);
   wmDrag *drag = MEM_callocN(sizeof(struct wmDrag), "new drag");
 
-  /* keep track of future multitouch drag too, add a mousepointer id or so */
+  /* Keep track of future multi-touch drag too, add a mouse-pointer id or so. */
   /* if multiple drags are added, they're drawn as list */
 
   BLI_addtail(&wm->drags, drag);
@@ -153,7 +156,7 @@ wmDrag *WM_event_start_drag(
   switch (type) {
     case WM_DRAG_PATH:
       BLI_strncpy(drag->path, poin, FILE_MAX);
-      /* As the path is being copied, free it immediately as `drag` wont "own" the data. */
+      /* As the path is being copied, free it immediately as `drag` won't "own" the data. */
       if (flags & WM_DRAG_FREE_DATA) {
         MEM_freeN(poin);
       }
@@ -217,22 +220,33 @@ void WM_drag_free_list(struct ListBase *lb)
   }
 }
 
-static const char *dropbox_active(bContext *C,
-                                  ListBase *handlers,
-                                  wmDrag *drag,
-                                  const wmEvent *event)
+static char *dropbox_tooltip(bContext *C, wmDrag *drag, const wmEvent *event, wmDropBox *drop)
+{
+  char *tooltip = NULL;
+  if (drop->tooltip) {
+    tooltip = drop->tooltip(C, drag, event, drop);
+  }
+  if (!tooltip) {
+    tooltip = BLI_strdup(WM_operatortype_name(drop->ot, drop->ptr));
+  }
+  /* XXX Doing translation here might not be ideal, but later we have no more
+   *     access to ot (and hence op context)... */
+  return tooltip;
+}
+
+static wmDropBox *dropbox_active(bContext *C,
+                                 ListBase *handlers,
+                                 wmDrag *drag,
+                                 const wmEvent *event)
 {
   LISTBASE_FOREACH (wmEventHandler *, handler_base, handlers) {
     if (handler_base->type == WM_HANDLER_TYPE_DROPBOX) {
       wmEventHandler_Dropbox *handler = (wmEventHandler_Dropbox *)handler_base;
       if (handler->dropboxes) {
         LISTBASE_FOREACH (wmDropBox *, drop, handler->dropboxes) {
-          const char *tooltip = NULL;
-          if (drop->poll(C, drag, event, &tooltip) &&
+          if (drop->poll(C, drag, event) &&
               WM_operator_poll_context(C, drop->ot, drop->opcontext)) {
-            /* XXX Doing translation here might not be ideal, but later we have no more
-             *     access to ot (and hence op context)... */
-            return (tooltip) ? tooltip : WM_operatortype_name(drop->ot, drop->ptr);
+            return drop;
           }
         }
       }
@@ -241,29 +255,22 @@ static const char *dropbox_active(bContext *C,
   return NULL;
 }
 
-/* return active operator name when mouse is in box */
-static const char *wm_dropbox_active(bContext *C, wmDrag *drag, const wmEvent *event)
+/* return active operator tooltip/name when mouse is in box */
+static char *wm_dropbox_active(bContext *C, wmDrag *drag, const wmEvent *event)
 {
   wmWindow *win = CTX_wm_window(C);
-  ScrArea *area = CTX_wm_area(C);
-  ARegion *region = CTX_wm_region(C);
-  const char *name;
-
-  name = dropbox_active(C, &win->handlers, drag, event);
-  if (name) {
-    return name;
+  wmDropBox *drop = dropbox_active(C, &win->handlers, drag, event);
+  if (!drop) {
+    ScrArea *area = CTX_wm_area(C);
+    drop = dropbox_active(C, &area->handlers, drag, event);
   }
-
-  name = dropbox_active(C, &area->handlers, drag, event);
-  if (name) {
-    return name;
+  if (!drop) {
+    ARegion *region = CTX_wm_region(C);
+    drop = dropbox_active(C, &region->handlers, drag, event);
   }
-
-  name = dropbox_active(C, &region->handlers, drag, event);
-  if (name) {
-    return name;
+  if (drop) {
+    return dropbox_tooltip(C, drag, event, drop);
   }
-
   return NULL;
 }
 
@@ -278,17 +285,18 @@ static void wm_drop_operator_options(bContext *C, wmDrag *drag, const wmEvent *e
     return;
   }
 
-  drag->opname[0] = 0;
+  drag->tooltip[0] = 0;
 
   /* check buttons (XXX todo rna and value) */
   if (UI_but_active_drop_name(C)) {
-    BLI_strncpy(drag->opname, IFACE_("Paste name"), sizeof(drag->opname));
+    BLI_strncpy(drag->tooltip, IFACE_("Paste name"), sizeof(drag->tooltip));
   }
   else {
-    const char *opname = wm_dropbox_active(C, drag, event);
+    char *tooltip = wm_dropbox_active(C, drag, event);
 
-    if (opname) {
-      BLI_strncpy(drag->opname, opname, sizeof(drag->opname));
+    if (tooltip) {
+      BLI_strncpy(drag->tooltip, tooltip, sizeof(drag->tooltip));
+      MEM_freeN(tooltip);
       // WM_cursor_modal_set(win, WM_CURSOR_COPY);
     }
     // else
@@ -320,7 +328,7 @@ void WM_drag_add_local_ID(wmDrag *drag, ID *id, ID *from_parent)
       return;
     }
     if (GS(drag_id->id->name) != GS(id->name)) {
-      BLI_assert(!"All dragged IDs must have the same type");
+      BLI_assert_msg(0, "All dragged IDs must have the same type");
       return;
     }
   }
@@ -377,9 +385,18 @@ wmDragAsset *WM_drag_get_asset_data(const wmDrag *drag, int idcode)
 
 static ID *wm_drag_asset_id_import(wmDragAsset *asset_drag)
 {
-  /* Append only for now, wmDragAsset could have a `link` bool. */
-  return WM_file_append_datablock(
-      G_MAIN, NULL, NULL, NULL, asset_drag->path, asset_drag->id_type, asset_drag->name);
+  const char *name = asset_drag->name;
+  ID_Type idtype = asset_drag->id_type;
+
+  switch ((eFileAssetImportType)asset_drag->import_type) {
+    case FILE_ASSET_IMPORT_LINK:
+      return WM_file_link_datablock(G_MAIN, NULL, NULL, NULL, asset_drag->path, idtype, name);
+    case FILE_ASSET_IMPORT_APPEND:
+      return WM_file_append_datablock(G_MAIN, NULL, NULL, NULL, asset_drag->path, idtype, name);
+  }
+
+  BLI_assert_unreachable();
+  return NULL;
 }
 
 /**
@@ -452,7 +469,7 @@ static void wm_drop_operator_draw(const char *name, int x, int y)
   UI_fontstyle_draw_simple_backdrop(fstyle, x, y, name, col_fg, col_bg);
 }
 
-static const char *wm_drag_name(wmDrag *drag)
+const char *WM_drag_get_item_name(wmDrag *drag)
 {
   switch (drag->type) {
     case WM_DRAG_ID: {
@@ -509,7 +526,7 @@ void wm_drags_draw(bContext *C, wmWindow *win, rcti *rect)
     rect->ymin = rect->ymax = cursory;
   }
 
-  /* Should we support multi-line drag draws? Maybe not, more types mixed wont work well. */
+  /* Should we support multi-line drag draws? Maybe not, more types mixed won't work well. */
   GPU_blend(GPU_BLEND_ALPHA);
   LISTBASE_FOREACH (wmDrag *, drag, &wm->drags) {
     const uchar text_col[] = {255, 255, 255, 255};
@@ -566,15 +583,15 @@ void wm_drags_draw(bContext *C, wmWindow *win, rcti *rect)
     }
 
     if (rect) {
-      int w = UI_fontstyle_string_width(fstyle, wm_drag_name(drag));
+      int w = UI_fontstyle_string_width(fstyle, WM_drag_get_item_name(drag));
       drag_rect_minmax(rect, x, y, x + w, y + iconsize);
     }
     else {
-      UI_fontstyle_draw_simple(fstyle, x, y, wm_drag_name(drag), text_col);
+      UI_fontstyle_draw_simple(fstyle, x, y, WM_drag_get_item_name(drag), text_col);
     }
 
     /* operator name with roundbox */
-    if (drag->opname[0]) {
+    if (drag->tooltip[0]) {
       if (drag->imb) {
         x = cursorx - drag->sx / 2;
 
@@ -597,11 +614,11 @@ void wm_drags_draw(bContext *C, wmWindow *win, rcti *rect)
       }
 
       if (rect) {
-        int w = UI_fontstyle_string_width(fstyle, wm_drag_name(drag));
+        int w = UI_fontstyle_string_width(fstyle, WM_drag_get_item_name(drag));
         drag_rect_minmax(rect, x, y, x + w, y + iconsize);
       }
       else {
-        wm_drop_operator_draw(drag->opname, x, y);
+        wm_drop_operator_draw(drag->tooltip, x, y);
       }
     }
   }

@@ -17,6 +17,7 @@
 #pragma once
 
 #include "device/device_memory.h"
+#include "render/buffers.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -34,44 +35,48 @@ const char *denoiserTypeToHumanReadable(DenoiserType type);
 
 typedef int DenoiserTypeMask;
 
+enum DenoiserPrefilter {
+  /* Best quality of the result without extra processing time, but requires guiding passes to be
+   * noise-free. */
+  DENOISER_PREFILTER_NONE = 1,
+
+  /* Denoise color and guiding passes together.
+   * Improves quality when guiding passes are noisy using least amount of extra processing time. */
+  DENOISER_PREFILTER_FAST = 2,
+
+  /* Prefilter noisy guiding passes before denoising color.
+   * Improves quality when guiding passes are noisy using extra processing time. */
+  DENOISER_PREFILTER_ACCURATE = 3,
+
+  DENOISER_PREFILTER_NUM,
+};
+
 class DenoiseParams {
  public:
   /* Apply denoiser to image. */
-  bool use;
-
-  /* Output denoising data passes (possibly without applying the denoiser). */
-  bool store_passes;
+  bool use = false;
 
   /* Denoiser type. */
-  DenoiserType type;
+  DenoiserType type = DENOISER_OPENIMAGEDENOISE;
 
   /* Viewport start sample. */
-  int start_sample;
+  int start_sample = 0;
 
-  /* Extra passes which are used by the denoiser (the color pass is always used). */
-  bool use_pass_albedo;
-  bool use_pass_normal;
+  /* Extra passes which are used by the denoiser (the color pass is always used).
+   * Default to color + albedo only, since normal input does not always have the desired effect
+   * when denoising with OptiX. */
+  bool use_pass_albedo = true;
+  bool use_pass_normal = false;
 
-  DenoiseParams()
-  {
-    use = false;
-    store_passes = false;
+  DenoiserPrefilter prefilter = DENOISER_PREFILTER_FAST;
 
-    type = DENOISER_OPENIMAGEDENOISE;
-
-    /* Default to color + albedo only, since normal input does not always have the desired effect
-     * when denoising with OptiX. */
-    use_pass_albedo = true;
-    use_pass_normal = false;
-
-    start_sample = 0;
-  }
+  DenoiseParams() = default;
 
   bool modified(const DenoiseParams &other) const
   {
-    return !(use == other.use && store_passes == other.store_passes && type == other.type &&
-             start_sample == other.start_sample && use_pass_albedo == other.use_pass_albedo &&
-             use_pass_normal == other.use_pass_normal);
+    return !(use == other.use && type == other.type && start_sample == other.start_sample &&
+             use_pass_albedo == other.use_pass_albedo &&
+             use_pass_normal == other.use_pass_normal && prefilter == other.prefilter);
   }
 };
 
@@ -82,23 +87,17 @@ class DenoiseParams {
  * when these parameters do change. */
 class DeviceDenoiseTask {
  public:
-  int x, y;
-  int width, height;
-
-  int offset, stride;
-
-  int pass_stride;
-
-  device_ptr buffer;
+  DenoiseParams params;
 
   int num_samples;
 
-  int pass_sample_count;
-  int pass_denoising_color;
-  int pass_denoising_normal;
-  int pass_denoising_albedo;
+  RenderBuffers *render_buffers;
+  BufferParams buffer_params;
 
-  DenoiseParams params;
+  /* Allow to do in-place modification of the input passes (scaling them down i.e.). This will
+   * lower the memory footprint of the denoiser but will make input passes "invalid" (from path
+   * tracer) point of view. */
+  bool allow_inplace_modification;
 };
 
 CCL_NAMESPACE_END

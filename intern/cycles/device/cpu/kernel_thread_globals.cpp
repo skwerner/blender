@@ -19,34 +19,34 @@
 // clang-format off
 #include "kernel/osl/osl_shader.h"
 #include "kernel/osl/osl_globals.h"
+#include "kernel/kernel_oiio_globals.h"
 // clang-format on
+
+#include "util/util_profiling.h"
 
 CCL_NAMESPACE_BEGIN
 
-CPUKernelThreadGlobals::CPUKernelThreadGlobals()
-{
-  reset_runtime_memory();
-}
-
 CPUKernelThreadGlobals::CPUKernelThreadGlobals(const KernelGlobals &kernel_globals,
-                                               void *osl_globals_memory)
-    : KernelGlobals(kernel_globals)
+                                               void *osl_globals_memory,
+                                               void *oiio_globals_memory,
+                                               Profiler &cpu_profiler)
+    : KernelGlobals(kernel_globals), cpu_profiler_(cpu_profiler)
 {
   reset_runtime_memory();
-
-  coverage_asset = nullptr;
-  coverage_object = nullptr;
-  coverage_material = nullptr;
 
 #ifdef WITH_OSL
   OSLShader::thread_init(this, reinterpret_cast<OSLGlobals *>(osl_globals_memory));
 #else
   (void)osl_globals_memory;
 #endif
+  if (oiio_globals_memory) {
+    oiio = reinterpret_cast<OIIOGlobals *>(oiio_globals_memory);
+    oiio_tdata = oiio->tex_sys ? oiio->tex_sys->create_thread_info() : nullptr;
+  }
 }
 
 CPUKernelThreadGlobals::CPUKernelThreadGlobals(CPUKernelThreadGlobals &&other) noexcept
-    : KernelGlobals(std::move(other))
+    : KernelGlobals(std::move(other)), cpu_profiler_(other.cpu_profiler_)
 {
   other.reset_runtime_memory();
 }
@@ -56,6 +56,10 @@ CPUKernelThreadGlobals::~CPUKernelThreadGlobals()
 #ifdef WITH_OSL
   OSLShader::thread_free(this);
 #endif
+  
+  if(oiio && oiio->tex_sys && oiio_tdata) {
+    oiio->tex_sys->destroy_thread_info(reinterpret_cast<OIIO::TextureSystem::Perthread *>(oiio_tdata));
+  }
 }
 
 CPUKernelThreadGlobals &CPUKernelThreadGlobals::operator=(CPUKernelThreadGlobals &&other)
@@ -76,6 +80,19 @@ void CPUKernelThreadGlobals::reset_runtime_memory()
 #ifdef WITH_OSL
   osl = nullptr;
 #endif
+  
+  oiio = nullptr;
+  oiio_tdata = nullptr;
+}
+
+void CPUKernelThreadGlobals::start_profiling()
+{
+  cpu_profiler_.add_state(&profiler);
+}
+
+void CPUKernelThreadGlobals::stop_profiling()
+{
+  cpu_profiler_.remove_state(&profiler);
 }
 
 CCL_NAMESPACE_END

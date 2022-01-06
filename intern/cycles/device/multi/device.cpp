@@ -142,10 +142,10 @@ class MultiDevice : public Device {
     return bvh_layout_mask;
   }
 
-  bool load_kernels(const DeviceRequestedFeatures &requested_features) override
+  bool load_kernels(const uint kernel_features) override
   {
     foreach (SubDevice &sub, devices)
-      if (!sub.device->load_kernels(requested_features))
+      if (!sub.device->load_kernels(kernel_features))
         return false;
 
     return true;

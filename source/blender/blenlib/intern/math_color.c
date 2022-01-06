@@ -153,7 +153,7 @@ void rgb_to_ycc(float r, float g, float b, float *r_y, float *r_cb, float *r_cr,
       cr = (0.5f * sr) - (0.41869f * sg) - (0.08131f * sb) + 128.0f;
       break;
     default:
-      BLI_assert(!"invalid colorspace");
+      BLI_assert_msg(0, "invalid colorspace");
       break;
   }
 
@@ -478,7 +478,7 @@ void minmax_rgb(short c[3])
  * accessible from the given triple of primaries.  Desaturate
  * it by adding white, equal quantities of R, G, and B, enough
  * to make RGB all positive.  The function returns 1 if the
- * components were modified, zero otherwise.*/
+ * components were modified, zero otherwise. */
 int constrain_rgb(float *r, float *g, float *b)
 {
   /* Amount of white needed */
@@ -685,10 +685,12 @@ static void blackbody_temperature_to_rgb(float rgb[3], float t)
     rgb[2] = 0.0f;
   }
   else {
-    int i = (t >= 6365.0f) ?
-                5 :
-                (t >= 3315.0f) ? 4 :
-                                 (t >= 1902.0f) ? 3 : (t >= 1449.0f) ? 2 : (t >= 1167.0f) ? 1 : 0;
+    int i = (t >= 6365.0f) ? 5 :
+            (t >= 3315.0f) ? 4 :
+            (t >= 1902.0f) ? 3 :
+            (t >= 1449.0f) ? 2 :
+            (t >= 1167.0f) ? 1 :
+                             0;
 
     const float *r = blackbody_table_r[i];
     const float *g = blackbody_table_g[i];
@@ -717,13 +719,17 @@ void blackbody_temperature_to_rgb_table(float *r_table, int width, float min, fl
 /* ****************************** wavelength ******************************** */
 /* Wavelength to RGB. */
 
-/* CIE colour matching functions xBar, yBar, and zBar for
- *   wavelengths from 380 through 780 nanometers, every 5
- *   nanometers.
+/**
+ * CIE color matching functions `xBar`, `yBar`, and `zBar` for
+ * wavelengths from 380 through 780 nanometers, every 5 nanometers.
+ *
  * For a wavelength lambda in this range:
- *   cie_colour_match[(lambda - 380) / 5][0] = xBar
- *   cie_colour_match[(lambda - 380) / 5][1] = yBar
- *   cie_colour_match[(lambda - 380) / 5][2] = zBar */
+ * \code{.txt}
+ * cie_color_match[(lambda - 380) / 5][0] = xBar
+ * cie_color_match[(lambda - 380) / 5][1] = yBar
+ * cie_color_match[(lambda - 380) / 5][2] = zBar
+ * \endcode
+ */
 
 static float cie_colour_match[81][3] = {
     {0.0014f, 0.0000f, 0.0065f}, {0.0022f, 0.0001f, 0.0105f}, {0.0042f, 0.0001f, 0.0201f},

@@ -18,39 +18,6 @@
 from __future__ import annotations
 
 
-def _is_using_buggy_driver():
-    import gpu
-    # We need to be conservative here because in multi-GPU systems display card
-    # might be quite old, but others one might be just good.
-    #
-    # So We shouldn't disable possible good dedicated cards just because display
-    # card seems weak. And instead we only blacklist configurations which are
-    # proven to cause problems.
-    if gpu.platform.vendor_get() == "ATI Technologies Inc.":
-        import re
-        version = gpu.platform.version_get()
-        if version.endswith("Compatibility Profile Context"):
-            # Old HD 4xxx and 5xxx series drivers did not have driver version
-            # in the version string, but those cards do not quite work and
-            # causing crashes.
-            return True
-        regex = re.compile(".*Compatibility Profile Context ([0-9]+(\\.[0-9]+)+)$")
-        if not regex.match(version):
-            # Skip cards like FireGL
-            return False
-        version = regex.sub("\\1", version).split('.')
-        return int(version[0]) == 8
-    return False
-
-
-def _workaround_buggy_drivers():
-    if _is_using_buggy_driver():
-        import _cycles
-        if hasattr(_cycles, "opencl_disable"):
-            print("Cycles: OpenGL driver known to be buggy, disabling OpenCL platform.")
-            _cycles.opencl_disable()
-
-
 def _configure_argument_parser():
     import argparse
     # No help because it conflicts with general Python scripts argument parsing
@@ -73,7 +40,7 @@ def _configure_argument_parser():
                         action='store_true')
     parser.add_argument("--cycles-device",
                         help="Set the device to use for Cycles, overriding user preferences and the scene setting."
-                             "Valid options are 'CPU', 'CUDA', 'OPTIX' or 'OPENCL'."
+                             "Valid options are 'CPU', 'CUDA' or 'OPTIX'."
                              "Additionally, you can append '+CPU' to any GPU type for hybrid rendering.",
                         default=None)
     return parser
@@ -118,23 +85,11 @@ def init():
     import _cycles
     import os.path
 
-    # Workaround possibly buggy legacy drivers which crashes on the OpenCL
-    # device enumeration.
-    #
-    # This checks are not really correct because they might still fail
-    # in the case of multiple GPUs. However, currently buggy drivers
-    # are really old and likely to be used in single GPU systems only
-    # anyway.
-    #
-    # Can't do it in the background mode, so we hope OpenCL is no enabled
-    # in the user preferences.
-    if not bpy.app.background:
-        _workaround_buggy_drivers()
-
     path = os.path.dirname(__file__)
-    user_path = os.path.dirname(os.path.abspath(bpy.utils.user_resource('CONFIG', '')))
+    user_path = os.path.dirname(os.path.abspath(bpy.utils.user_resource('CONFIG', path='')))
+    temp_path = bpy.app.tempdir
 
-    _cycles.init(path, user_path, bpy.app.background)
+    _cycles.init(path, user_path, temp_path, bpy.app.background)
     _parse_command_line()
 
 
@@ -177,6 +132,18 @@ def render(engine, depsgraph):
         _cycles.render(engine.session, depsgraph.as_pointer())
 
 
+def draw(engine, depsgraph, space_image):
+    if not engine.session:
+        return
+
+    depsgraph_ptr = depsgraph.as_pointer()
+    space_image_ptr = space_image.as_pointer()
+    screen_ptr = space_image.id_data.as_pointer()
+
+    import _cycles
+    _cycles.draw(engine.session, depsgraph_ptr, screen_ptr, space_image_ptr)
+
+
 def bake(engine, depsgraph, obj, pass_type, pass_filter, width, height):
     import _cycles
     session = getattr(engine, "session", None)
@@ -204,14 +171,14 @@ def sync(engine, depsgraph, data):
     _cycles.sync(engine.session, depsgraph.as_pointer())
 
 
-def draw(engine, depsgraph, region, v3d, rv3d):
+def view_draw(engine, depsgraph, region, v3d, rv3d):
     import _cycles
     depsgraph = depsgraph.as_pointer()
     v3d = v3d.as_pointer()
     rv3d = rv3d.as_pointer()
 
     # draw render image
-    _cycles.draw(engine.session, depsgraph, v3d, rv3d)
+    _cycles.view_draw(engine.session, depsgraph, v3d, rv3d)
 
 
 def available_devices():
@@ -230,18 +197,22 @@ def system_info():
 
 
 def list_render_passes(scene, srl):
-    # Builtin Blender passes.
+    crl = srl.cycles
+
+    # Combined pass.
     yield ("Combined", "RGBA", 'COLOR')
 
+    # Data passes.
     if srl.use_pass_z:                     yield ("Depth",         "Z",    'VALUE')
     if srl.use_pass_mist:                  yield ("Mist",          "Z",    'VALUE')
+    if srl.use_pass_position:              yield ("Position",      "XYZ",  'VECTOR')
     if srl.use_pass_normal:                yield ("Normal",        "XYZ",  'VECTOR')
     if srl.use_pass_vector:                yield ("Vector",        "XYZW", 'VECTOR')
     if srl.use_pass_uv:                    yield ("UV",            "UVA",  'VECTOR')
     if srl.use_pass_object_index:          yield ("IndexOB",       "X",    'VALUE')
     if srl.use_pass_material_index:        yield ("IndexMA",       "X",    'VALUE')
-    if srl.use_pass_shadow:                yield ("Shadow",        "RGB",  'COLOR')
-    if srl.use_pass_ambient_occlusion:     yield ("AO",            "RGB",  'COLOR')
+
+    # Light passes.
     if srl.use_pass_diffuse_direct:        yield ("DiffDir",       "RGB",  'COLOR')
     if srl.use_pass_diffuse_indirect:      yield ("DiffInd",       "RGB",  'COLOR')
     if srl.use_pass_diffuse_color:         yield ("DiffCol",       "RGB",  'COLOR')
@@ -251,20 +222,17 @@ def list_render_passes(scene, srl):
     if srl.use_pass_transmission_direct:   yield ("TransDir",      "RGB",  'COLOR')
     if srl.use_pass_transmission_indirect: yield ("TransInd",      "RGB",  'COLOR')
     if srl.use_pass_transmission_color:    yield ("TransCol",      "RGB",  'COLOR')
+    if crl.use_pass_volume_direct:         yield ("VolumeDir",     "RGB",  'COLOR')
+    if crl.use_pass_volume_indirect:       yield ("VolumeInd",     "RGB",  'COLOR')
     if srl.use_pass_emit:                  yield ("Emit",          "RGB",  'COLOR')
     if srl.use_pass_environment:           yield ("Env",           "RGB",  'COLOR')
+    if srl.use_pass_shadow:                yield ("Shadow",        "RGB",  'COLOR')
+    if srl.use_pass_ambient_occlusion:     yield ("AO",            "RGB",  'COLOR')
+    if crl.use_pass_shadow_catcher:        yield ("Shadow Catcher",      "RGB",  'COLOR')
 
-    # Cycles specific passes.
-    crl = srl.cycles
+    # Debug passes.
     if crl.pass_debug_render_time:             yield ("Debug Render Time",             "X",   'VALUE')
-    if crl.pass_debug_bvh_traversed_nodes:     yield ("Debug BVH Traversed Nodes",     "X",   'VALUE')
-    if crl.pass_debug_bvh_traversed_instances: yield ("Debug BVH Traversed Instances", "X",   'VALUE')
-    if crl.pass_debug_bvh_intersections:       yield ("Debug BVH Intersections",       "X",   'VALUE')
-    if crl.pass_debug_ray_bounces:             yield ("Debug Ray Bounces",             "X",   'VALUE')
     if crl.pass_debug_sample_count:            yield ("Debug Sample Count",            "X",   'VALUE')
-    if crl.use_pass_volume_direct:             yield ("VolumeDir",                     "RGB", 'COLOR')
-    if crl.use_pass_volume_indirect:           yield ("VolumeInd",                     "RGB", 'COLOR')
-    if crl.use_pass_shadow_catcher:            yield ("Shadow Catcher",                "RGBA", 'COLOR')
 
     # Cryptomatte passes.
     crypto_depth = (srl.pass_cryptomatte_depth + 1) // 2
@@ -279,19 +247,20 @@ def list_render_passes(scene, srl):
             yield ("CryptoAsset" + '{:02d}'.format(i), "RGBA", 'COLOR')
 
     # Denoising passes.
-    if (scene.cycles.use_denoising and crl.use_denoising) or crl.denoising_store_passes:
+    if scene.cycles.use_denoising and crl.use_denoising:
         yield ("Noisy Image", "RGBA", 'COLOR')
-        if crl.denoising_store_passes:
-            yield ("Denoising Normal",          "XYZ", 'VECTOR')
-            yield ("Denoising Albedo",          "RGB", 'COLOR')
-            yield ("Denoising Depth",           "Z",   'VALUE')
+        if crl.use_pass_shadow_catcher:
+            yield ("Noisy Shadow Catcher", "RGBA", 'COLOR')
+    if crl.denoising_store_passes:
+        yield ("Denoising Normal",          "XYZ", 'VECTOR')
+        yield ("Denoising Albedo",          "RGB", 'COLOR')
 
     # Custom AOV passes.
     for aov in srl.aovs:
         if aov.type == 'VALUE':
             yield (aov.name, "X", 'VALUE')
         else:
-            yield (aov.name, "RGBA", 'COLOR')
+            yield (aov.name, "RGB", 'COLOR')
 
 
 def register_passes(engine, scene, view_layer):

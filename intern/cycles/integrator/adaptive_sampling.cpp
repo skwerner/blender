@@ -43,7 +43,7 @@ int AdaptiveSampling::align_samples(int start_sample, int num_samples) const
   /* 0-based sample index at which first filtering will happen. */
   const int first_filter_sample = (min_samples + 1) | (adaptive_step - 1);
 
-  /* Allow as many sampels as possible until the first filter sample. */
+  /* Allow as many samples as possible until the first filter sample. */
   if (start_sample + num_samples <= first_filter_sample) {
     return num_samples;
   }

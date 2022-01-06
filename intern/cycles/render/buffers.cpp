@@ -28,6 +28,24 @@
 
 CCL_NAMESPACE_BEGIN
 
+/* Convert part information to an index of `BufferParams::pass_offset_`. */
+
+static int pass_type_mode_to_index(PassType pass_type, PassMode mode)
+{
+  int index = static_cast<int>(pass_type) * 2;
+
+  if (mode == PassMode::DENOISED) {
+    ++index;
+  }
+
+  return index;
+}
+
+static int pass_to_index(const Pass *pass)
+{
+  return pass_type_mode_to_index(pass->get_type(), pass->get_mode());
+}
+
 /* Buffer Params */
 
 BufferParams::BufferParams()
@@ -39,42 +57,44 @@ BufferParams::BufferParams()
   full_y = 0;
   full_width = 0;
   full_height = 0;
+
+  reset_pass_offset();
 }
 
-void BufferParams::update_passes(vector<Pass> &passes)
+void BufferParams::update_passes(const vector<Pass *> &passes)
 {
   update_offset_stride();
-
-  pass_sample_count = PASS_UNUSED;
-  pass_denoising_color = PASS_UNUSED;
-  pass_denoising_normal = PASS_UNUSED;
-  pass_denoising_albedo = PASS_UNUSED;
+  reset_pass_offset();
 
   pass_stride = 0;
-  for (const Pass &pass : passes) {
-    switch (pass.type) {
-      case PASS_SAMPLE_COUNT:
-        pass_sample_count = pass_stride;
-        break;
+  for (const Pass *pass : passes) {
+    const int index = pass_to_index(pass);
 
-      case PASS_DENOISING_COLOR:
-        pass_denoising_color = pass_stride;
-        break;
-      case PASS_DENOISING_NORMAL:
-        pass_denoising_normal = pass_stride;
-        break;
-      case PASS_DENOISING_ALBEDO:
-        pass_denoising_albedo = pass_stride;
-        break;
+    if (pass->is_written()) {
+      if (pass_offset_[index] == PASS_UNUSED) {
+        pass_offset_[index] = pass_stride;
+      }
 
-      default:
-        break;
+      pass_stride += pass->get_info().num_components;
     }
+  }
+}
 
-    pass_stride += pass.components;
+void BufferParams::reset_pass_offset()
+{
+  for (int i = 0; i < kNumPassOffsets; ++i) {
+    pass_offset_[i] = PASS_UNUSED;
+  }
+}
+
+int BufferParams::get_pass_offset(PassType pass_type, PassMode mode) const
+{
+  if (pass_type == PASS_NONE || pass_type == PASS_UNUSED) {
+    return PASS_UNUSED;
   }
 
-  pass_stride = align_up(pass_stride, 4);
+  const int index = pass_type_mode_to_index(pass_type, mode);
+  return pass_offset_[index];
 }
 
 void BufferParams::update_offset_stride()
@@ -83,38 +103,16 @@ void BufferParams::update_offset_stride()
   stride = width;
 }
 
-bool BufferParams::modified(const BufferParams &params) const
+bool BufferParams::modified(const BufferParams &other) const
 {
-  return !(width == params.width && height == params.height && full_x == params.full_x &&
-           full_y == params.full_y && full_width == params.full_width &&
-           full_height == params.full_height && offset == params.offset &&
-           stride == params.stride && pass_stride == params.pass_stride &&
-           pass_denoising_color == params.pass_denoising_color &&
-           pass_denoising_normal == params.pass_denoising_normal &&
-           pass_denoising_albedo == params.pass_denoising_albedo);
-}
+  if (!(width == other.width && height == other.height && full_x == other.full_x &&
+        full_y == other.full_y && full_width == other.full_width &&
+        full_height == other.full_height && offset == other.offset && stride == other.stride &&
+        pass_stride == other.pass_stride)) {
+    return true;
+  }
 
-/* Render Buffer Task */
-
-RenderTile::RenderTile()
-{
-  x = 0;
-  y = 0;
-  w = 0;
-  h = 0;
-
-  sample = 0;
-  start_sample = 0;
-  num_samples = 0;
-  resolution = 0;
-
-  offset = 0;
-  stride = 0;
-
-  buffer = 0;
-
-  buffers = NULL;
-  stealing_state = NO_STEALING;
+  return memcmp(pass_offset_, other.pass_offset_, sizeof(pass_offset_)) != 0;
 }
 
 /* Render Buffers */
@@ -136,7 +134,6 @@ void RenderBuffers::reset(const BufferParams &params_)
 
   /* re-allocate buffer */
   buffer.alloc(params.width * params.pass_stride, params.height);
-  buffer.zero_to_device();
 }
 
 void RenderBuffers::zero()
@@ -154,6 +151,78 @@ bool RenderBuffers::copy_from_device()
   buffer.copy_from_device(0, params.width * params.pass_stride, params.height);
 
   return true;
+}
+
+void RenderBuffers::copy_to_device()
+{
+  buffer.copy_to_device();
+}
+
+void render_buffers_host_copy_denoised(RenderBuffers *dst,
+                                       const BufferParams &dst_params,
+                                       const RenderBuffers *src,
+                                       const BufferParams &src_params,
+                                       const size_t src_offset)
+{
+  DCHECK_EQ(dst_params.width, src_params.width);
+  /* TODO(sergey): More sanity checks to avoid buffer overrun. */
+
+  /* Create a map of pass ofsets to be copied.
+   * Assume offsets are different to allow copying passes between buffers with different set of
+   * passes. */
+
+  struct {
+    int dst_offset;
+    int src_offset;
+  } pass_offsets[PASS_NUM];
+
+  int num_passes = 0;
+
+  for (int i = 0; i < PASS_NUM; ++i) {
+    const PassType pass_type = static_cast<PassType>(i);
+
+    const int dst_pass_offset = dst_params.get_pass_offset(pass_type, PassMode::DENOISED);
+    if (dst_pass_offset == PASS_UNUSED) {
+      continue;
+    }
+
+    const int src_pass_offset = src_params.get_pass_offset(pass_type, PassMode::DENOISED);
+    if (src_pass_offset == PASS_UNUSED) {
+      continue;
+    }
+
+    pass_offsets[num_passes].dst_offset = dst_pass_offset;
+    pass_offsets[num_passes].src_offset = src_pass_offset;
+    ++num_passes;
+  }
+
+  /* Copy passes. */
+  /* TODO(sergey): Make it more reusable, allowing implement copy of noisy passes. */
+
+  const int64_t dst_width = dst_params.width;
+  const int64_t dst_height = dst_params.height;
+  const int64_t dst_pass_stride = dst_params.pass_stride;
+  const int64_t dst_num_pixels = dst_width * dst_height;
+
+  const int64_t src_pass_stride = src_params.pass_stride;
+  const int64_t src_offset_in_floats = src_offset * src_pass_stride;
+
+  const float *src_pixel = src->buffer.data() + src_offset_in_floats;
+  float *dst_pixel = dst->buffer.data();
+
+  for (int i = 0; i < dst_num_pixels;
+       ++i, src_pixel += src_pass_stride, dst_pixel += dst_pass_stride) {
+    for (int pass_offset_idx = 0; pass_offset_idx < num_passes; ++pass_offset_idx) {
+      const int dst_pass_offset = pass_offsets[pass_offset_idx].dst_offset;
+      const int src_pass_offset = pass_offsets[pass_offset_idx].src_offset;
+
+      /* TODO(sergey): Support non-RGBA passes. */
+      dst_pixel[dst_pass_offset + 0] = src_pixel[src_pass_offset + 0];
+      dst_pixel[dst_pass_offset + 1] = src_pixel[src_pass_offset + 1];
+      dst_pixel[dst_pass_offset + 2] = src_pixel[src_pass_offset + 2];
+      dst_pixel[dst_pass_offset + 3] = src_pixel[src_pass_offset + 3];
+    }
+  }
 }
 
 CCL_NAMESPACE_END

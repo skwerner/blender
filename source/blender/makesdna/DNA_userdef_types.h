@@ -71,14 +71,13 @@ typedef struct uiFontStyle {
   short uifont_id;
   /** Actual size depends on 'global' dpi. */
   short points;
-  /** Unfitted or default kerning value. */
-  short kerning;
   /** Style hint. */
   short italic, bold;
   /** Value is amount of pixels blur. */
   short shadow;
   /** Shadow offset in pixels. */
   short shadx, shady;
+  char _pad0[2];
   /** Total alpha. */
   float shadowalpha;
   /** 1 value, typically white or black anyway. */
@@ -261,7 +260,7 @@ typedef struct ThemeSpace {
   /** Region background. */
   unsigned char execution_buts[4];
 
-  /* note, cannot use name 'panel' because of DNA mapping old files */
+  /* NOTE: cannot use name 'panel' because of DNA mapping old files. */
   uiPanelColors panelcolors;
 
   unsigned char shade1[4];
@@ -496,7 +495,7 @@ typedef struct bTheme {
 
   /* 20 sets of bone colors for this theme */
   ThemeWireColor tarm[20];
-  /*ThemeWireColor tobj[20];*/
+  // ThemeWireColor tobj[20];
 
   /* See COLLECTION_COLOR_TOT for the number of collection colors. */
   ThemeCollectionColor collection_color[8];
@@ -513,7 +512,7 @@ typedef struct bTheme {
 typedef struct bAddon {
   struct bAddon *next, *prev;
   char module[64];
-  /** User-Defined Properties on this  Addon (for storing preferences). */
+  /** User-Defined Properties on this add-on (for storing preferences). */
   IDProperty *prop;
 } bAddon;
 
@@ -642,11 +641,13 @@ typedef struct UserDef_Experimental {
    * when the release cycle is not alpha. */
   char use_new_hair_type;
   char use_new_point_cloud_type;
+  char use_full_frame_compositor;
   char use_sculpt_vertex_colors;
   char use_sculpt_tools_tilt;
-  char use_asset_browser;
+  char use_extended_asset_browser;
   char use_override_templates;
-  char _pad[6];
+  char use_geometry_nodes_fields;
+  char _pad[4];
   /** `makesdna` does not allow empty structs. */
 } UserDef_Experimental;
 
@@ -799,7 +800,7 @@ typedef struct UserDef {
   short rvisize;
   /** Rotating view icon brightness. */
   short rvibright;
-  /** Maximum number of recently used files to remember . */
+  /** Maximum number of recently used files to remember. */
   short recent_files;
   /** Milliseconds to spend spinning the view. */
   short smooth_viewtx;
@@ -924,9 +925,10 @@ typedef struct UserDef {
   short sequencer_proxy_setup; /* eUserpref_SeqProxySetup */
 
   float collection_instance_empty_size;
-  char _pad10[3];
+  char _pad10[2];
 
-  char statusbar_flag; /* eUserpref_StatusBar_Flag */
+  char file_preview_type; /* eUserpref_File_Preview_Type */
+  char statusbar_flag;    /* eUserpref_StatusBar_Flag */
 
   struct WalkNavigation walk_navigation;
 
@@ -996,7 +998,7 @@ typedef enum eUserPref_Flag {
   USER_NONUMPAD = (1 << 13),
   USER_ADD_CURSORALIGNED = (1 << 14),
   USER_FILECOMPRESS = (1 << 15),
-  USER_SAVE_PREVIEWS = (1 << 16),
+  USER_FLAG_UNUSED_5 = (1 << 16), /* dirty */
   USER_CUSTOM_RANGE = (1 << 17),
   USER_ADD_EDITMODE = (1 << 18),
   USER_ADD_VIEWALIGNED = (1 << 19),
@@ -1009,6 +1011,13 @@ typedef enum eUserPref_Flag {
   USER_TOOLTIPS_PYTHON = (1 << 26),
   USER_FLAG_UNUSED_27 = (1 << 27), /* dirty */
 } eUserPref_Flag;
+
+/** #UserDef.file_preview_type */
+typedef enum eUserpref_File_Preview_Type {
+  USER_FILE_PREVIEW_NONE = 0,
+  USER_FILE_PREVIEW_SCREENSHOT,
+  USER_FILE_PREVIEW_CAMERA,
+} eUserpref_File_Preview_Type;
 
 typedef enum eUserPref_PrefFlag {
   USER_PREF_FLAG_SAVE = (1 << 0),
@@ -1145,8 +1154,10 @@ typedef enum eAutokey_Mode {
   /* AUTOKEY_ON is a bitflag */
   AUTOKEY_ON = 1,
 
-  /** AUTOKEY_ON + 2**n...  (i.e. AUTOKEY_MODE_NORMAL = AUTOKEY_ON + 2)
-   * to preserve setting, even when autokey turned off  */
+  /**
+   * AUTOKEY_ON + 2**n...  (i.e. AUTOKEY_MODE_NORMAL = AUTOKEY_ON + 2)
+   * to preserve setting, even when auto-key turned off.
+   */
   AUTOKEY_MODE_NORMAL = 3,
   AUTOKEY_MODE_EDITKEYS = 5,
 } eAutokey_Mode;
@@ -1288,7 +1299,7 @@ typedef enum eTimecodeStyles {
   USER_TIMECODE_SECONDS_ONLY = 4,
   /**
    * Private (not exposed as generic choices) options.
-   * milliseconds for sub-frames , SubRip format- HH:MM:SS,sss.
+   * milliseconds for sub-frames, SubRip format- HH:MM:SS,sss.
    */
   USER_TIMECODE_SUBRIP = 100,
 } eTimecodeStyles;

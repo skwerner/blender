@@ -26,14 +26,6 @@
 #  pragma GCC diagnostic ignored "-Wuninitialized"
 #endif
 
-/* Selective nodes compilation. */
-#ifndef __NODES_MAX_GROUP__
-#  define __NODES_MAX_GROUP__ NODE_GROUP_LEVEL_MAX
-#endif
-#ifndef __NODES_FEATURES__
-#  define __NODES_FEATURES__ NODE_FEATURE_ALL
-#endif
-
 #include "util/util_half.h"
 #include "util/util_math.h"
 #include "util/util_simd.h"
@@ -41,15 +33,6 @@
 #include "util/util_types.h"
 
 #define ccl_addr_space
-
-#define ccl_local_id(d) 0
-#define ccl_global_id(d) (kg->global_id[d])
-
-#define ccl_local_size(d) 1
-#define ccl_global_size(d) (kg->global_size[d])
-
-#define ccl_group_id(d) ccl_global_id(d)
-#define ccl_num_groups(d) ccl_global_size(d)
 
 /* On x86_64, versions of glibc < 2.16 have an issue where expf is
  * much slower than the double version.  This was fixed in glibc 2.16.
@@ -76,32 +59,6 @@ template<typename T> struct texture {
     kernel_assert(index >= 0 && index < width);
     return data[index];
   }
-#if defined(__KERNEL_AVX__) || defined(__KERNEL_AVX2__)
-  /* Reads 256 bytes but indexes in blocks of 128 bytes to maintain
-   * compatibility with existing indices and data structures.
-   */
-  ccl_always_inline avxf fetch_avxf(const int index) const
-  {
-    kernel_assert(index >= 0 && (index + 1) < width);
-    ssef *ssef_data = (ssef *)data;
-    ssef *ssef_node_data = &ssef_data[index];
-    return _mm256_loadu_ps((float *)ssef_node_data);
-  }
-#endif
-
-#ifdef __KERNEL_SSE2__
-  ccl_always_inline ssef fetch_ssef(int index) const
-  {
-    kernel_assert(index >= 0 && index < width);
-    return ((ssef *)data)[index];
-  }
-
-  ccl_always_inline ssei fetch_ssei(int index) const
-  {
-    kernel_assert(index >= 0 && index < width);
-    return ((ssei *)data)[index];
-  }
-#endif
 
   T *data;
   int width;

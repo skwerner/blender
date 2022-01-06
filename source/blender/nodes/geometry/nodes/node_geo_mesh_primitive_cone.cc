@@ -17,6 +17,7 @@
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 
+#include "BKE_material.h"
 #include "BKE_mesh.h"
 
 #include "UI_interface.h"
@@ -24,18 +25,16 @@
 
 #include "node_geometry_util.hh"
 
-static bNodeSocketTemplate geo_node_mesh_primitive_cone_in[] = {
-    {SOCK_INT, N_("Vertices"), 32, 0.0f, 0.0f, 0.0f, 3, 4096},
-    {SOCK_FLOAT, N_("Radius Top"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, FLT_MAX, PROP_DISTANCE},
-    {SOCK_FLOAT, N_("Radius Bottom"), 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, FLT_MAX, PROP_DISTANCE},
-    {SOCK_FLOAT, N_("Depth"), 2.0f, 0.0f, 0.0f, 0.0f, 0.0f, FLT_MAX, PROP_DISTANCE},
-    {-1, ""},
-};
+namespace blender::nodes {
 
-static bNodeSocketTemplate geo_node_mesh_primitive_cone_out[] = {
-    {SOCK_GEOMETRY, N_("Geometry")},
-    {-1, ""},
-};
+static void geo_node_mesh_primitive_cone_declare(NodeDeclarationBuilder &b)
+{
+  b.add_input<decl::Int>("Vertices").default_value(32).min(3);
+  b.add_input<decl::Float>("Radius Top").min(0.0f).subtype(PROP_DISTANCE);
+  b.add_input<decl::Float>("Radius Bottom").default_value(1.0f).min(0.0f).subtype(PROP_DISTANCE);
+  b.add_input<decl::Float>("Depth").default_value(2.0f).min(0.0f).subtype(PROP_DISTANCE);
+  b.add_output<decl::Geometry>("Geometry");
+}
 
 static void geo_node_mesh_primitive_cone_layout(uiLayout *layout,
                                                 bContext *UNUSED(C),
@@ -55,8 +54,6 @@ static void geo_node_mesh_primitive_cone_init(bNodeTree *UNUSED(ntree), bNode *n
 
   node->storage = node_storage;
 }
-
-namespace blender::nodes {
 
 static int vert_total(const GeometryNodeMeshCircleFillType fill_type,
                       const int verts_num,
@@ -298,7 +295,7 @@ Mesh *create_cylinder_or_cone_mesh(const float radius_top,
     mesh->medge[0].v1 = 0;
     mesh->medge[0].v2 = 1;
     mesh->medge[0].flag |= ME_LOOSEEDGE;
-    BKE_mesh_calc_normals(mesh);
+    BKE_mesh_normals_tag_dirty(mesh);
     return mesh;
   }
 
@@ -308,6 +305,7 @@ Mesh *create_cylinder_or_cone_mesh(const float radius_top,
       0,
       corner_total(fill_type, verts_num, top_is_point, bottom_is_point),
       face_total(fill_type, verts_num, top_is_point, bottom_is_point));
+  BKE_id_material_eval_ensure_default_slot(&mesh->id);
   MutableSpan<MVert> verts{mesh->mvert, mesh->totvert};
   MutableSpan<MLoop> loops{mesh->mloop, mesh->totloop};
   MutableSpan<MEdge> edges{mesh->medge, mesh->totedge};
@@ -316,9 +314,9 @@ Mesh *create_cylinder_or_cone_mesh(const float radius_top,
   /* Calculate vertex positions. */
   const int top_verts_start = 0;
   const int bottom_verts_start = top_verts_start + (!top_is_point ? verts_num : 1);
-  float angle = 0.0f;
-  const float angle_delta = 2.0f * M_PI / static_cast<float>(verts_num);
+  const float angle_delta = 2.0f * (M_PI / static_cast<float>(verts_num));
   for (const int i : IndexRange(verts_num)) {
+    const float angle = i * angle_delta;
     const float x = std::cos(angle);
     const float y = std::sin(angle);
     if (!top_is_point) {
@@ -328,7 +326,6 @@ Mesh *create_cylinder_or_cone_mesh(const float radius_top,
       copy_v3_v3(verts[bottom_verts_start + i].co,
                  float3(x * radius_bottom, y * radius_bottom, -height));
     }
-    angle += angle_delta;
   }
   if (top_is_point) {
     copy_v3_v3(verts[top_verts_start].co, float3(0.0f, 0.0f, height));
@@ -532,11 +529,9 @@ Mesh *create_cylinder_or_cone_mesh(const float radius_top,
     }
   }
 
-  BKE_mesh_calc_normals(mesh);
+  BKE_mesh_normals_tag_dirty(mesh);
 
   calculate_uvs(mesh, top_is_point, bottom_is_point, verts_num, fill_type);
-
-  BLI_assert(BKE_mesh_is_valid(mesh));
 
   return mesh;
 }
@@ -551,6 +546,7 @@ static void geo_node_mesh_primitive_cone_exec(GeoNodeExecParams params)
 
   const int verts_num = params.extract_input<int>("Vertices");
   if (verts_num < 3) {
+    params.error_message_add(NodeWarningType::Info, TIP_("Vertices must be at least 3"));
     params.set_output("Geometry", GeometrySet());
     return;
   }
@@ -575,12 +571,11 @@ void register_node_type_geo_mesh_primitive_cone()
   static bNodeType ntype;
 
   geo_node_type_base(&ntype, GEO_NODE_MESH_PRIMITIVE_CONE, "Cone", NODE_CLASS_GEOMETRY, 0);
-  node_type_socket_templates(
-      &ntype, geo_node_mesh_primitive_cone_in, geo_node_mesh_primitive_cone_out);
-  node_type_init(&ntype, geo_node_mesh_primitive_cone_init);
+  node_type_init(&ntype, blender::nodes::geo_node_mesh_primitive_cone_init);
   node_type_storage(
       &ntype, "NodeGeometryMeshCone", node_free_standard_storage, node_copy_standard_storage);
   ntype.geometry_node_execute = blender::nodes::geo_node_mesh_primitive_cone_exec;
-  ntype.draw_buttons = geo_node_mesh_primitive_cone_layout;
+  ntype.draw_buttons = blender::nodes::geo_node_mesh_primitive_cone_layout;
+  ntype.declare = blender::nodes::geo_node_mesh_primitive_cone_declare;
   nodeRegisterType(&ntype);
 }

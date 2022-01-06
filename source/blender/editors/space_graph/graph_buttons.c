@@ -364,7 +364,7 @@ static void graph_panel_key_properties(const bContext *C, Panel *panel)
   }
 
   block = uiLayoutGetBlock(layout);
-  /* UI_block_func_handle_set(block, do_graph_region_buttons, NULL); */
+  // UI_block_func_handle_set(block, do_graph_region_buttons, NULL);
   uiLayoutSetPropSep(layout, true);
   uiLayoutSetPropDecorate(layout, false);
 
@@ -1337,8 +1337,8 @@ static void do_graph_region_modifier_buttons(bContext *C, void *UNUSED(arg), int
 {
   switch (event) {
     case B_FMODIFIER_REDRAW: /* XXX this should send depsgraph updates too */
-      WM_event_add_notifier(
-          C, NC_ANIMATION, NULL); /* XXX need a notifier specially for F-Modifiers */
+      /* XXX: need a notifier specially for F-Modifiers */
+      WM_event_add_notifier(C, NC_ANIMATION, NULL);
       break;
   }
 }

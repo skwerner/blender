@@ -54,7 +54,7 @@ class AnnotationDrawingToolsPanel:
         col.label(text="Stroke Placement:")
         row = col.row(align=True)
         row.prop_enum(tool_settings, "annotation_stroke_placement_view2d", 'VIEW')
-        row.prop_enum(tool_settings, "annotation_stroke_placement_view2d", 'CURSOR', text="Cursor")
+        row.prop_enum(tool_settings, "annotation_stroke_placement_view2d", 'IMAGE', text="Image")
 
 
 class GreasePencilSculptOptionsPanel:
@@ -84,9 +84,6 @@ class GreasePencilSculptOptionsPanel:
             layout.prop(gp_settings, "use_edit_position", text="Affect Position")
             layout.prop(gp_settings, "use_edit_strength", text="Affect Strength")
             layout.prop(gp_settings, "use_edit_thickness", text="Affect Thickness")
-
-            if tool == 'SMOOTH':
-                layout.prop(gp_settings, "use_edit_pressure")
 
             layout.prop(gp_settings, "use_edit_uv", text="Affect UV")
 
@@ -178,21 +175,6 @@ class GreasePencilDisplayPanel:
 class GreasePencilBrushFalloff:
     bl_label = "Falloff"
     bl_options = {'DEFAULT_CLOSED'}
-
-    @classmethod
-    def poll(cls, context):
-        ts = context.tool_settings
-        settings = None
-        if context.mode == 'PAINT_GPENCIL':
-            settings = ts.gpencil_paint
-        if context.mode == 'SCULPT_GPENCIL':
-            settings = ts.gpencil_sculpt_paint
-        elif context.mode == 'WEIGHT_GPENCIL':
-            settings = ts.gpencil_weight_paint
-        elif context.mode == 'VERTEX_GPENCIL':
-            settings = ts.gpencil_vertex_paint
-
-        return (settings and settings.brush and settings.brush.curve)
 
     def draw(self, context):
         layout = self.layout
@@ -407,7 +389,7 @@ class AnnotationDataPanel:
     bl_options = {'DEFAULT_CLOSED'}
 
     def draw_header(self, context):
-        if context.space_data.type not in {'VIEW_3D', 'TOPBAR'}:
+        if context.space_data.type not in {'VIEW_3D', 'TOPBAR', 'SEQUENCE_EDITOR'}:
             self.layout.prop(context.space_data, "show_annotation", text="")
 
     def draw(self, context):
@@ -469,7 +451,7 @@ class AnnotationDataPanel:
 
         tool_settings = context.tool_settings
         if gpd and gpl:
-            layout.prop(gpl, "opacity", text="Opacity", slider=True)
+            layout.prop(gpl, "annotation_opacity", text="Opacity", slider=True)
             layout.prop(gpl, "thickness")
         else:
             layout.prop(tool_settings, "annotation_thickness", text="Thickness")
@@ -856,6 +838,11 @@ class GreasePencilLayerRelationsPanel:
 
         col = layout.row(align=True)
         col.prop_search(gpl, "viewlayer_render", scene, "view_layers", text="View Layer")
+
+        col = layout.row(align=True)
+        # Only enable this property when a view layer is selected.
+        col.enabled = bool(gpl.viewlayer_render)
+        col.prop(gpl, "use_viewlayer_masks")
 
 
 class GreasePencilLayerDisplayPanel:

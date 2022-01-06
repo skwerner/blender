@@ -22,33 +22,15 @@ CCL_NAMESPACE_BEGIN
 
 ccl_device void integrator_intersect_subsurface(INTEGRATOR_STATE_ARGS)
 {
+  PROFILING_INIT(kg, PROFILING_INTERSECT_SUBSURFACE);
+
 #ifdef __SUBSURFACE__
-  if (subsurface_random_walk(INTEGRATOR_STATE_PASS)) {
-    INTEGRATOR_PATH_NEXT(INTERSECT_SUBSURFACE, SHADE_SURFACE);
+  if (subsurface_scatter(INTEGRATOR_STATE_PASS)) {
     return;
   }
 #endif
 
-  /* TODO: update volume stack. Instead of a special for_subsurface, we could
-   * just re-init the volume stack completely, sharing the same kernel as for
-   * cameras. */
-#if 0
-#  ifdef __VOLUME__
-  bool need_update_volume_stack = kernel_data.integrator.use_volumes &&
-                                  sd->object_flag & SD_OBJECT_INTERSECTS_VOLUME;
-
-  if (need_update_volume_stack) {
-    Ray volume_ray = *ray;
-    /* Setup ray from previous surface point to the new one. */
-    volume_ray.D = normalize_len(hit_ray->P - volume_ray.P, &volume_ray.t);
-
-    kernel_volume_stack_update_for_subsurface(
-        kg, emission_sd, &volume_ray, hit_state->volume_stack);
-  }
-#  endif /* __VOLUME__ */
-#endif
-
-  INTEGRATOR_PATH_TERMINATE(INTERSECT_SUBSURFACE);
+  INTEGRATOR_PATH_TERMINATE(DEVICE_KERNEL_INTEGRATOR_INTERSECT_SUBSURFACE);
 }
 
 CCL_NAMESPACE_END

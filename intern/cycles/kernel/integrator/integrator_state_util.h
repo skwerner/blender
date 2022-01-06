@@ -97,6 +97,29 @@ ccl_device_forceinline void integrator_state_read_isect(INTEGRATOR_STATE_CONST_A
 #endif
 }
 
+ccl_device_forceinline VolumeStack integrator_state_read_volume_stack(INTEGRATOR_STATE_CONST_ARGS,
+                                                                      int i)
+{
+  VolumeStack entry = {INTEGRATOR_STATE_ARRAY(volume_stack, i, object),
+                       INTEGRATOR_STATE_ARRAY(volume_stack, i, shader)};
+  return entry;
+}
+
+ccl_device_forceinline void integrator_state_write_volume_stack(INTEGRATOR_STATE_ARGS,
+                                                                int i,
+                                                                VolumeStack entry)
+{
+  INTEGRATOR_STATE_ARRAY_WRITE(volume_stack, i, object) = entry.object;
+  INTEGRATOR_STATE_ARRAY_WRITE(volume_stack, i, shader) = entry.shader;
+}
+
+ccl_device_forceinline bool integrator_state_volume_stack_is_empty(INTEGRATOR_STATE_CONST_ARGS)
+{
+  return (kernel_data.kernel_features & KERNEL_FEATURE_VOLUME) ?
+             INTEGRATOR_STATE_ARRAY(volume_stack, 0, shader) == SHADER_NONE :
+             true;
+}
+
 /* Shadow Intersection */
 
 ccl_device_forceinline void integrator_state_write_shadow_isect(
@@ -130,53 +153,120 @@ ccl_device_forceinline void integrator_state_read_shadow_isect(INTEGRATOR_STATE_
 
 ccl_device_forceinline void integrator_state_copy_volume_stack_to_shadow(INTEGRATOR_STATE_ARGS)
 {
-  for (int i = 0; i < INTEGRATOR_VOLUME_STACK_SIZE; i++) {
-    INTEGRATOR_STATE_ARRAY_WRITE(shadow_volume_stack, i, object) = INTEGRATOR_STATE_ARRAY(
-        volume_stack, i, object);
-    INTEGRATOR_STATE_ARRAY_WRITE(shadow_volume_stack, i, shader) = INTEGRATOR_STATE_ARRAY(
-        volume_stack, i, shader);
+  if (kernel_data.kernel_features & KERNEL_FEATURE_VOLUME) {
+    for (int i = 0; i < INTEGRATOR_VOLUME_STACK_SIZE; i++) {
+      INTEGRATOR_STATE_ARRAY_WRITE(shadow_volume_stack, i, object) = INTEGRATOR_STATE_ARRAY(
+          volume_stack, i, object);
+      INTEGRATOR_STATE_ARRAY_WRITE(shadow_volume_stack, i, shader) = INTEGRATOR_STATE_ARRAY(
+          volume_stack, i, shader);
+    }
   }
 }
 
-ccl_device_inline void integrator_state_copy_to_shadow_catcher(INTEGRATOR_STATE_ARGS)
+ccl_device_forceinline VolumeStack
+integrator_state_read_shadow_volume_stack(INTEGRATOR_STATE_CONST_ARGS, int i)
+{
+  VolumeStack entry = {INTEGRATOR_STATE_ARRAY(shadow_volume_stack, i, object),
+                       INTEGRATOR_STATE_ARRAY(shadow_volume_stack, i, shader)};
+  return entry;
+}
+
+ccl_device_forceinline bool integrator_state_shadow_volume_stack_is_empty(
+    INTEGRATOR_STATE_CONST_ARGS)
+{
+  return (kernel_data.kernel_features & KERNEL_FEATURE_VOLUME) ?
+             INTEGRATOR_STATE_ARRAY(shadow_volume_stack, 0, shader) == SHADER_NONE :
+             true;
+}
+
+ccl_device_forceinline void integrator_state_write_shadow_volume_stack(INTEGRATOR_STATE_ARGS,
+                                                                       int i,
+                                                                       VolumeStack entry)
+{
+  INTEGRATOR_STATE_ARRAY_WRITE(shadow_volume_stack, i, object) = entry.object;
+  INTEGRATOR_STATE_ARRAY_WRITE(shadow_volume_stack, i, shader) = entry.shader;
+}
+
+#if defined(__KERNEL_GPU__)
+ccl_device_inline void integrator_state_copy_only(const IntegratorState to_state,
+                                                  const IntegratorState state)
 {
   int index;
 
   /* Rely on the compiler to optimize out unused assignments and `while(false)`'s. */
 
-#define KERNEL_STRUCT_BEGIN(name) \
-  index = 0; \
-  do {
+#  define KERNEL_STRUCT_BEGIN(name) \
+    index = 0; \
+    do {
 
-#define KERNEL_STRUCT_MEMBER(parent_struct, type, name) \
-  INTEGRATOR_SHADOW_CATCHER_STATE_WRITE(parent_struct, name) = INTEGRATOR_STATE(parent_struct, \
-                                                                                name);
+#  define KERNEL_STRUCT_MEMBER(parent_struct, type, name, feature) \
+    if (kernel_integrator_state.parent_struct.name != nullptr) { \
+      kernel_integrator_state.parent_struct.name[to_state] = \
+          kernel_integrator_state.parent_struct.name[state]; \
+    }
 
-#define KERNEL_STRUCT_ARRAY_MEMBER(parent_struct, type, name) \
-  INTEGRATOR_SHADOW_CATCHER_STATE_ARRAY_WRITE( \
-      parent_struct, index, name) = INTEGRATOR_STATE_ARRAY(parent_struct, index, name);
+#  define KERNEL_STRUCT_ARRAY_MEMBER(parent_struct, type, name, feature) \
+    if (kernel_integrator_state.parent_struct[index].name != nullptr) { \
+      kernel_integrator_state.parent_struct[index].name[to_state] = \
+          kernel_integrator_state.parent_struct[index].name[state]; \
+    }
 
-#define KERNEL_STRUCT_END(name) \
-  } \
-  while (false) \
-    ;
+#  define KERNEL_STRUCT_END(name) \
+    } \
+    while (false) \
+      ;
 
-#define KERNEL_STRUCT_END_ARRAY(name, array_size) \
-  ++index; \
-  } \
-  while (index < array_size) \
-    ;
+#  define KERNEL_STRUCT_END_ARRAY(name, array_size) \
+    ++index; \
+    } \
+    while (index < array_size) \
+      ;
 
-#include "kernel/integrator/integrator_state_template.h"
+#  include "kernel/integrator/integrator_state_template.h"
 
-#undef KERNEL_STRUCT_BEGIN
-#undef KERNEL_STRUCT_MEMBER
-#undef KERNEL_STRUCT_ARRAY_MEMBER
-#undef KERNEL_STRUCT_END
-#undef KERNEL_STRUCT_END_ARRAY
+#  undef KERNEL_STRUCT_BEGIN
+#  undef KERNEL_STRUCT_MEMBER
+#  undef KERNEL_STRUCT_ARRAY_MEMBER
+#  undef KERNEL_STRUCT_END
+#  undef KERNEL_STRUCT_END_ARRAY
+}
 
-  /* Make sure the device is aware of an extra kernel queued by the shadow catcher state. */
-  INTEGRATOR_SHADOW_CATCHER_PATH_INIT();
+ccl_device_inline void integrator_state_move(const IntegratorState to_state,
+                                             const IntegratorState state)
+{
+  integrator_state_copy_only(to_state, state);
+
+  INTEGRATOR_STATE_WRITE(path, queued_kernel) = 0;
+  INTEGRATOR_STATE_WRITE(shadow_path, queued_kernel) = 0;
+}
+
+#endif
+
+/* NOTE: Leaves kernel scheduling information untouched. Use INIT semantic for one of the paths
+ * after this function. */
+ccl_device_inline void integrator_state_shadow_catcher_split(INTEGRATOR_STATE_ARGS)
+{
+#if defined(__KERNEL_GPU__)
+  const IntegratorState to_state = atomic_fetch_and_add_uint32(
+      &kernel_integrator_state.next_shadow_catcher_path_index[0], 1);
+
+  integrator_state_copy_only(to_state, state);
+
+  kernel_integrator_state.path.flag[to_state] |= PATH_RAY_SHADOW_CATCHER_PASS;
+
+  /* Sanity check: expect to split in the intersect-closest kernel, where there is no shadow ray
+   * and no sorting yet. */
+  kernel_assert(INTEGRATOR_STATE(shadow_path, queued_kernel) == 0);
+  kernel_assert(kernel_integrator_state.sort_key_counter[INTEGRATOR_STATE(path, queued_kernel)] ==
+                nullptr);
+#else
+
+  IntegratorStateCPU *ccl_restrict split_state = state + 1;
+
+  *split_state = *state;
+
+  split_state->path.flag |= PATH_RAY_SHADOW_CATCHER_PASS;
+#endif
 }
 
 CCL_NAMESPACE_END

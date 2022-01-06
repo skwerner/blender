@@ -29,6 +29,7 @@ ColorMatteOperation::ColorMatteOperation()
 
   this->m_inputImageProgram = nullptr;
   this->m_inputKeyProgram = nullptr;
+  flags.can_be_constant = true;
 }
 
 void ColorMatteOperation::initExecution()
@@ -65,7 +66,7 @@ void ColorMatteOperation::executePixelSampled(float output[4],
    */
 
   if (
-      /* do hue last because it needs to wrap, and does some more checks  */
+      /* Do hue last because it needs to wrap, and does some more checks. */
 
       /* sat */ (fabsf(inColor[1] - inKey[1]) < sat) &&
       /* val */ (fabsf(inColor[2] - inKey[2]) < val) &&
@@ -77,8 +78,44 @@ void ColorMatteOperation::executePixelSampled(float output[4],
     output[0] = 0.0f; /* make transparent */
   }
 
-  else {                    /*pixel is outside key color */
-    output[0] = inColor[3]; /* make pixel just as transparent as it was before */
+  else {                    /* Pixel is outside key color. */
+    output[0] = inColor[3]; /* Make pixel just as transparent as it was before. */
+  }
+}
+
+void ColorMatteOperation::update_memory_buffer_partial(MemoryBuffer *output,
+                                                       const rcti &area,
+                                                       Span<MemoryBuffer *> inputs)
+{
+  const float hue = m_settings->t1;
+  const float sat = m_settings->t2;
+  const float val = m_settings->t3;
+  for (BuffersIterator<float> it = output->iterate_with(inputs, area); !it.is_end(); ++it) {
+    const float *in_color = it.in(0);
+    const float *in_key = it.in(1);
+
+    /* Store matte(alpha) value in [0] to go with
+     * COM_SetAlphaMultiplyOperation and the Value output.
+     */
+
+    float h_wrap;
+    if (
+        /* Do hue last because it needs to wrap, and does some more checks. */
+
+        /* #sat */ (fabsf(in_color[1] - in_key[1]) < sat) &&
+        /* #val */ (fabsf(in_color[2] - in_key[2]) < val) &&
+
+        /* Multiply by 2 because it wraps on both sides of the hue,
+         * otherwise 0.5 would key all hue's. */
+
+        /* #hue */
+        ((h_wrap = 2.0f * fabsf(in_color[0] - in_key[0])) < hue || (2.0f - h_wrap) < hue)) {
+      it.out[0] = 0.0f; /* Make transparent. */
+    }
+
+    else {                     /* Pixel is outside key color. */
+      it.out[0] = in_color[3]; /* Make pixel just as transparent as it was before. */
+    }
   }
 }
 

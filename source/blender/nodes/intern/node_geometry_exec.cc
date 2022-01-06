@@ -16,31 +16,24 @@
 
 #include "DNA_modifier_types.h"
 
-#include "BKE_node_ui_storage.hh"
-
 #include "DEG_depsgraph_query.h"
 
 #include "NOD_geometry_exec.hh"
-#include "NOD_type_callbacks.hh"
 #include "NOD_type_conversions.hh"
 
 #include "node_geometry_util.hh"
+
+using blender::nodes::geometry_nodes_eval_log::LocalGeoLogger;
 
 namespace blender::nodes {
 
 void GeoNodeExecParams::error_message_add(const NodeWarningType type, std::string message) const
 {
-  bNodeTree *btree_cow = provider_->dnode->btree();
-  BLI_assert(btree_cow != nullptr);
-  if (btree_cow == nullptr) {
+  if (provider_->logger == nullptr) {
     return;
   }
-  bNodeTree *btree_original = (bNodeTree *)DEG_get_original_id((ID *)btree_cow);
-
-  const NodeTreeEvaluationContext context(*provider_->self_object, *provider_->modifier);
-
-  BKE_nodetree_error_message_add(
-      *btree_original, context, *provider_->dnode->bnode(), type, std::move(message));
+  LocalGeoLogger &local_logger = provider_->logger->local();
+  local_logger.log_node_warning(provider_->dnode, type, std::move(message));
 }
 
 const bNodeSocket *GeoNodeExecParams::find_available_socket(const StringRef name) const
@@ -97,6 +90,12 @@ GVArrayPtr GeoNodeExecParams::get_input_attribute(const StringRef name,
     conversions.convert_to_uninitialized(CPPType::get<float>(), *cpp_type, &value, buffer);
     return std::make_unique<fn::GVArray_For_SingleValue>(*cpp_type, domain_size, buffer);
   }
+  if (found_socket->type == SOCK_INT) {
+    const int value = this->get_input<int>(found_socket->identifier);
+    BUFFER_FOR_CPP_TYPE_VALUE(*cpp_type, buffer);
+    conversions.convert_to_uninitialized(CPPType::get<int>(), *cpp_type, &value, buffer);
+    return std::make_unique<fn::GVArray_For_SingleValue>(*cpp_type, domain_size, buffer);
+  }
   if (found_socket->type == SOCK_VECTOR) {
     const float3 value = this->get_input<float3>(found_socket->identifier);
     BUFFER_FOR_CPP_TYPE_VALUE(*cpp_type, buffer);
@@ -104,9 +103,10 @@ GVArrayPtr GeoNodeExecParams::get_input_attribute(const StringRef name,
     return std::make_unique<fn::GVArray_For_SingleValue>(*cpp_type, domain_size, buffer);
   }
   if (found_socket->type == SOCK_RGBA) {
-    const Color4f value = this->get_input<Color4f>(found_socket->identifier);
+    const ColorGeometry4f value = this->get_input<ColorGeometry4f>(found_socket->identifier);
     BUFFER_FOR_CPP_TYPE_VALUE(*cpp_type, buffer);
-    conversions.convert_to_uninitialized(CPPType::get<Color4f>(), *cpp_type, &value, buffer);
+    conversions.convert_to_uninitialized(
+        CPPType::get<ColorGeometry4f>(), *cpp_type, &value, buffer);
     return std::make_unique<fn::GVArray_For_SingleValue>(*cpp_type, domain_size, buffer);
   }
   BLI_assert(false);
@@ -217,7 +217,7 @@ void GeoNodeExecParams::check_input_access(StringRef identifier,
     BLI_assert_unreachable();
   }
   else if (requested_type != nullptr) {
-    const CPPType &expected_type = *socket_cpp_type_get(*found_socket->typeinfo);
+    const CPPType &expected_type = *found_socket->typeinfo->get_geometry_nodes_cpp_type();
     if (*requested_type != expected_type) {
       std::cout << "The requested type '" << requested_type->name() << "' is incorrect. Expected '"
                 << expected_type.name() << "'.\n";
@@ -257,7 +257,7 @@ void GeoNodeExecParams::check_output_access(StringRef identifier, const CPPType 
     BLI_assert_unreachable();
   }
   else {
-    const CPPType &expected_type = *socket_cpp_type_get(*found_socket->typeinfo);
+    const CPPType &expected_type = *found_socket->typeinfo->get_geometry_nodes_cpp_type();
     if (value_type != expected_type) {
       std::cout << "The value type '" << value_type.name() << "' is incorrect. Expected '"
                 << expected_type.name() << "'.\n";

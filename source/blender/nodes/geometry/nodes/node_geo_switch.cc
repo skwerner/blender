@@ -19,42 +19,47 @@
 #include "UI_interface.h"
 #include "UI_resources.h"
 
-static bNodeSocketTemplate geo_node_switch_in[] = {
-    {SOCK_BOOLEAN, N_("Switch")},
+namespace blender::nodes {
 
-    {SOCK_FLOAT, N_("A"), 0.0, 0.0, 0.0, 0.0, -FLT_MAX, FLT_MAX},
-    {SOCK_FLOAT, N_("B"), 0.0, 0.0, 0.0, 0.0, -FLT_MAX, FLT_MAX},
-    {SOCK_INT, N_("A"), 0, 0, 0, 0, -100000, 100000},
-    {SOCK_INT, N_("B"), 0, 0, 0, 0, -100000, 100000},
-    {SOCK_BOOLEAN, N_("A")},
-    {SOCK_BOOLEAN, N_("B")},
-    {SOCK_VECTOR, N_("A"), 0.0, 0.0, 0.0, 0.0, -FLT_MAX, FLT_MAX},
-    {SOCK_VECTOR, N_("B"), 0.0, 0.0, 0.0, 0.0, -FLT_MAX, FLT_MAX},
-    {SOCK_RGBA, N_("A"), 0.8, 0.8, 0.8, 1.0},
-    {SOCK_RGBA, N_("B"), 0.8, 0.8, 0.8, 1.0},
-    {SOCK_STRING, N_("A")},
-    {SOCK_STRING, N_("B")},
-    {SOCK_GEOMETRY, N_("A")},
-    {SOCK_GEOMETRY, N_("B")},
-    {SOCK_OBJECT, N_("A")},
-    {SOCK_OBJECT, N_("B")},
-    {SOCK_COLLECTION, N_("A")},
-    {SOCK_COLLECTION, N_("B")},
-    {-1, ""},
-};
+static void geo_node_switch_declare(NodeDeclarationBuilder &b)
+{
+  b.add_input<decl::Bool>("Switch");
 
-static bNodeSocketTemplate geo_node_switch_out[] = {
-    {SOCK_FLOAT, N_("Output")},
-    {SOCK_INT, N_("Output")},
-    {SOCK_BOOLEAN, N_("Output")},
-    {SOCK_VECTOR, N_("Output")},
-    {SOCK_RGBA, N_("Output")},
-    {SOCK_STRING, N_("Output")},
-    {SOCK_GEOMETRY, N_("Output")},
-    {SOCK_OBJECT, N_("Output")},
-    {SOCK_COLLECTION, N_("Output")},
-    {-1, ""},
-};
+  b.add_input<decl::Float>("False");
+  b.add_input<decl::Float>("True");
+  b.add_input<decl::Int>("False", "False_001").min(-100000).max(100000);
+  b.add_input<decl::Int>("True", "True_001").min(-100000).max(100000);
+  b.add_input<decl::Bool>("False", "False_002");
+  b.add_input<decl::Bool>("True", "True_002");
+  b.add_input<decl::Vector>("False", "False_003");
+  b.add_input<decl::Vector>("True", "True_003");
+  b.add_input<decl::Color>("False", "False_004").default_value({0.8f, 0.8f, 0.8f, 1.0f});
+  b.add_input<decl::Color>("True", "True_004").default_value({0.8f, 0.8f, 0.8f, 1.0f});
+  b.add_input<decl::String>("False", "False_005");
+  b.add_input<decl::String>("True", "True_005");
+  b.add_input<decl::Geometry>("False", "False_006");
+  b.add_input<decl::Geometry>("True", "True_006");
+  b.add_input<decl::Object>("False", "False_007");
+  b.add_input<decl::Object>("True", "True_007");
+  b.add_input<decl::Collection>("False", "False_008");
+  b.add_input<decl::Collection>("True", "True_008");
+  b.add_input<decl::Texture>("False", "False_009");
+  b.add_input<decl::Texture>("True", "True_009");
+  b.add_input<decl::Material>("False", "False_010");
+  b.add_input<decl::Material>("True", "True_010");
+
+  b.add_output<decl::Float>("Output");
+  b.add_output<decl::Int>("Output", "Output_001");
+  b.add_output<decl::Bool>("Output", "Output_002");
+  b.add_output<decl::Vector>("Output", "Output_003");
+  b.add_output<decl::Color>("Output", "Output_004");
+  b.add_output<decl::String>("Output", "Output_005");
+  b.add_output<decl::Geometry>("Output", "Output_006");
+  b.add_output<decl::Object>("Output", "Output_007");
+  b.add_output<decl::Collection>("Output", "Output_008");
+  b.add_output<decl::Texture>("Output", "Output_009");
+  b.add_output<decl::Material>("Output", "Output_010");
+}
 
 static void geo_node_switch_layout(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
 {
@@ -64,11 +69,9 @@ static void geo_node_switch_layout(uiLayout *layout, bContext *UNUSED(C), Pointe
 static void geo_node_switch_init(bNodeTree *UNUSED(tree), bNode *node)
 {
   NodeSwitch *data = (NodeSwitch *)MEM_callocN(sizeof(NodeSwitch), __func__);
-  data->input_type = SOCK_FLOAT;
+  data->input_type = SOCK_GEOMETRY;
   node->storage = data;
 }
-
-namespace blender::nodes {
 
 static void geo_node_switch_update(bNodeTree *UNUSED(ntree), bNode *node)
 {
@@ -91,8 +94,8 @@ static void output_input(GeoNodeExecParams &params,
                          const StringRef input_suffix,
                          const StringRef output_identifier)
 {
-  const std::string name_a = "A" + input_suffix;
-  const std::string name_b = "B" + input_suffix;
+  const std::string name_a = "False" + input_suffix;
+  const std::string name_b = "True" + input_suffix;
   if (input) {
     params.set_input_unused(name_a);
     if (params.lazy_require_input(name_b)) {
@@ -134,7 +137,7 @@ static void geo_node_switch_exec(GeoNodeExecParams params)
       break;
     }
     case SOCK_RGBA: {
-      output_input<Color4f>(params, input, "_004", "Output_004");
+      output_input<ColorGeometry4f>(params, input, "_004", "Output_004");
       break;
     }
     case SOCK_STRING: {
@@ -153,6 +156,14 @@ static void geo_node_switch_exec(GeoNodeExecParams params)
       output_input<Collection *>(params, input, "_008", "Output_008");
       break;
     }
+    case SOCK_TEXTURE: {
+      output_input<Tex *>(params, input, "_009", "Output_009");
+      break;
+    }
+    case SOCK_MATERIAL: {
+      output_input<Material *>(params, input, "_010", "Output_010");
+      break;
+    }
     default:
       BLI_assert_unreachable();
       break;
@@ -165,13 +176,13 @@ void register_node_type_geo_switch()
 {
   static bNodeType ntype;
 
-  geo_node_type_base(&ntype, GEO_NODE_SWITCH, "Switch", NODE_CLASS_GEOMETRY, 0);
-  node_type_socket_templates(&ntype, geo_node_switch_in, geo_node_switch_out);
-  node_type_init(&ntype, geo_node_switch_init);
+  geo_node_type_base(&ntype, GEO_NODE_SWITCH, "Switch", NODE_CLASS_CONVERTER, 0);
+  ntype.declare = blender::nodes::geo_node_switch_declare;
+  node_type_init(&ntype, blender::nodes::geo_node_switch_init);
   node_type_update(&ntype, blender::nodes::geo_node_switch_update);
   node_type_storage(&ntype, "NodeSwitch", node_free_standard_storage, node_copy_standard_storage);
   ntype.geometry_node_execute = blender::nodes::geo_node_switch_exec;
-  ntype.geometry_node_execute_supports_lazyness = true;
-  ntype.draw_buttons = geo_node_switch_layout;
+  ntype.geometry_node_execute_supports_laziness = true;
+  ntype.draw_buttons = blender::nodes::geo_node_switch_layout;
   nodeRegisterType(&ntype);
 }

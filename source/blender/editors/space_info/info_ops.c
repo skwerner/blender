@@ -512,7 +512,7 @@ void FILE_OT_report_missing_files(wmOperatorType *ot)
 static int find_missing_files_exec(bContext *C, wmOperator *op)
 {
   Main *bmain = CTX_data_main(C);
-  const char *searchpath = RNA_string_get_alloc(op->ptr, "directory", NULL, 0);
+  const char *searchpath = RNA_string_get_alloc(op->ptr, "directory", NULL, 0, NULL);
   const bool find_all = RNA_boolean_get(op->ptr, "find_all");
 
   BKE_bpath_missing_files_find(bmain, searchpath, op->reports, find_all);
@@ -564,12 +564,11 @@ void FILE_OT_find_missing_files(wmOperatorType *ot)
 /** \name Report Box Operator
  * \{ */
 
-/* Hard to decide whether to keep this as an operator,
- * or turn it into a hardcoded ui control feature,
- * handling TIMER events for all regions in interface_handlers.c
+/* NOTE(matt): Hard to decide whether to keep this as an operator,
+ * or turn it into a hard_coded UI control feature,
+ * handling TIMER events for all regions in `interface_handlers.c`.
  * Not sure how good that is to be accessing UI data from
- * inactive regions, so use this for now. --matt
- */
+ * inactive regions, so use this for now. */
 
 #define INFO_TIMEOUT 5.0f
 #define ERROR_TIMEOUT 10.0f

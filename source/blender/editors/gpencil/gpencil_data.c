@@ -828,7 +828,7 @@ static int gpencil_frame_clean_loose_exec(bContext *C, wmOperator *op)
         }
       }
 
-      /* if not multiedit, exit loop*/
+      /* If not multi-edit, exit loop. */
       if (!is_multiedit) {
         break;
       }
@@ -871,20 +871,20 @@ void GPENCIL_OT_frame_clean_loose(wmOperatorType *ot)
 }
 
 /* ********************* Clean Duplicated Frames ************************** */
-static bool gpencil_frame_is_equal(bGPDframe *gpf_a, bGPDframe *gpf_b)
+static bool gpencil_frame_is_equal(const bGPDframe *gpf_a, const bGPDframe *gpf_b)
 {
   if ((gpf_a == NULL) || (gpf_b == NULL)) {
     return false;
   }
   /* If the number of strokes is different, cannot be equal. */
-  int totstrokes_a = BLI_listbase_count(&gpf_a->strokes);
-  int totstrokes_b = BLI_listbase_count(&gpf_b->strokes);
+  const int totstrokes_a = BLI_listbase_count(&gpf_a->strokes);
+  const int totstrokes_b = BLI_listbase_count(&gpf_b->strokes);
   if ((totstrokes_a == 0) || (totstrokes_b == 0) || (totstrokes_a != totstrokes_b)) {
     return false;
   }
   /* Loop all strokes and check. */
-  bGPDstroke *gps_a = gpf_a->strokes.first;
-  bGPDstroke *gps_b = gpf_b->strokes.first;
+  const bGPDstroke *gps_a = gpf_a->strokes.first;
+  const bGPDstroke *gps_b = gpf_b->strokes.first;
   for (int i = 0; i < totstrokes_a; i++) {
     /* If the number of points is different, cannot be equal. */
     if (gps_a->totpoints != gps_b->totpoints) {
@@ -924,8 +924,8 @@ static bool gpencil_frame_is_equal(bGPDframe *gpf_a, bGPDframe *gpf_b)
 
     /* Loop points and check if equals or not. */
     for (int p = 0; p < gps_a->totpoints; p++) {
-      bGPDspoint *pt_a = &gps_a->points[p];
-      bGPDspoint *pt_b = &gps_b->points[p];
+      const bGPDspoint *pt_a = &gps_a->points[p];
+      const bGPDspoint *pt_b = &gps_b->points[p];
       if (!equals_v3v3(&pt_a->x, &pt_b->x)) {
         return false;
       }
@@ -1347,6 +1347,8 @@ static int gpencil_merge_layer_exec(bContext *C, wmOperator *op)
     bGPDframe *gpf_dst = BLI_ghash_lookup(gh_frames_dst, POINTER_FROM_INT(gpf_src->framenum));
     if (!gpf_dst) {
       gpf_dst = BKE_gpencil_layer_frame_get(gpl_dst, gpf_src->framenum, GP_GETFRAME_ADD_COPY);
+      /* Use same frame type. */
+      gpf_dst->key_type = gpf_src->key_type;
       BLI_ghash_insert(gh_frames_dst, POINTER_FROM_INT(gpf_src->framenum), gpf_dst);
     }
   }
@@ -1355,6 +1357,14 @@ static int gpencil_merge_layer_exec(bContext *C, wmOperator *op)
   LISTBASE_FOREACH (bGPDframe *, gpf_src, &gpl_src->frames) {
     /* Try to find frame in destination layer hash table. */
     bGPDframe *gpf_dst = BLI_ghash_lookup(gh_frames_dst, POINTER_FROM_INT(gpf_src->framenum));
+    /* Apply layer transformation. */
+    LISTBASE_FOREACH (bGPDstroke *, gps_src, &gpf_src->strokes) {
+      for (int p = 0; p < gps_src->totpoints; p++) {
+        bGPDspoint *pt = &gps_src->points[p];
+        mul_v3_m4v3(&pt->x, gpl_src->layer_mat, &pt->x);
+      }
+    }
+
     /* Add to tail all strokes. */
     if (gpf_dst) {
       BLI_movelisttolist(&gpf_dst->strokes, &gpf_src->strokes);
@@ -1572,7 +1582,7 @@ static int gpencil_stroke_arrange_exec(bContext *C, wmOperator *op)
               continue;
             }
             bool gpf_lock = false;
-            /* some stroke is already at front*/
+            /* Some stroke is already at front. */
             if (ELEM(direction, GP_STROKE_MOVE_TOP, GP_STROKE_MOVE_UP)) {
               if (gps == gpf->strokes.last) {
                 gpf_lock = true;
@@ -1664,7 +1674,7 @@ static int gpencil_stroke_arrange_exec(bContext *C, wmOperator *op)
         BLI_freelistN(&selected);
       }
 
-      /* if not multiedit, exit loop*/
+      /* If not multi-edit, exit loop. */
       if (!is_multiedit) {
         break;
       }
@@ -1772,7 +1782,7 @@ static int gpencil_stroke_change_color_exec(bContext *C, wmOperator *op)
           }
         }
       }
-      /* if not multiedit, exit loop*/
+      /* If not multi-edit, exit loop. */
       if (!is_multiedit) {
         break;
       }
@@ -2165,7 +2175,9 @@ static bool gpencil_vertex_group_poll(bContext *C)
   Object *ob = CTX_data_active_object(C);
 
   if ((ob) && (ob->type == OB_GPENCIL)) {
-    if (!ID_IS_LINKED(ob) && !ID_IS_LINKED(ob->data) && ob->defbase.first) {
+    const bGPdata *gpd = (const bGPdata *)ob->data;
+    if (!ID_IS_LINKED(ob) && !ID_IS_LINKED(ob->data) &&
+        !BLI_listbase_is_empty(&gpd->vertex_group_names)) {
       if (ELEM(ob->mode, OB_MODE_EDIT_GPENCIL, OB_MODE_SCULPT_GPENCIL)) {
         return true;
       }
@@ -2180,7 +2192,9 @@ static bool gpencil_vertex_group_weight_poll(bContext *C)
   Object *ob = CTX_data_active_object(C);
 
   if ((ob) && (ob->type == OB_GPENCIL)) {
-    if (!ID_IS_LINKED(ob) && !ID_IS_LINKED(ob->data) && ob->defbase.first) {
+    const bGPdata *gpd = (const bGPdata *)ob->data;
+    if (!ID_IS_LINKED(ob) && !ID_IS_LINKED(ob->data) &&
+        !BLI_listbase_is_empty(&gpd->vertex_group_names)) {
       if (ob->mode == OB_MODE_WEIGHT_GPENCIL) {
         return true;
       }
@@ -2333,6 +2347,7 @@ static int gpencil_vertex_group_invert_exec(bContext *C, wmOperator *op)
 {
   ToolSettings *ts = CTX_data_tool_settings(C);
   Object *ob = CTX_data_active_object(C);
+  bGPdata *gpd = ob->data;
 
   /* sanity checks */
   if (ELEM(NULL, ts, ob, ob->data)) {
@@ -2340,8 +2355,9 @@ static int gpencil_vertex_group_invert_exec(bContext *C, wmOperator *op)
   }
 
   MDeformVert *dvert;
-  const int def_nr = ob->actdef - 1;
-  bDeformGroup *defgroup = BLI_findlink(&ob->defbase, def_nr);
+  const int def_nr = gpd->vertex_group_active_index - 1;
+
+  bDeformGroup *defgroup = BLI_findlink(&gpd->vertex_group_names, def_nr);
   if (defgroup == NULL) {
     return OPERATOR_CANCELLED;
   }
@@ -2373,7 +2389,6 @@ static int gpencil_vertex_group_invert_exec(bContext *C, wmOperator *op)
   CTX_DATA_END;
 
   /* notifiers */
-  bGPdata *gpd = ob->data;
   DEG_id_tag_update(&gpd->id, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY);
   WM_event_add_notifier(C, NC_GPENCIL | ND_DATA | NA_EDITED | ND_SPACE_PROPERTIES, NULL);
 
@@ -2403,14 +2418,15 @@ static int gpencil_vertex_group_smooth_exec(bContext *C, wmOperator *op)
 
   ToolSettings *ts = CTX_data_tool_settings(C);
   Object *ob = CTX_data_active_object(C);
+  bGPdata *gpd = ob->data;
 
   /* sanity checks */
   if (ELEM(NULL, ts, ob, ob->data)) {
     return OPERATOR_CANCELLED;
   }
 
-  const int def_nr = ob->actdef - 1;
-  bDeformGroup *defgroup = BLI_findlink(&ob->defbase, def_nr);
+  const int def_nr = gpd->vertex_group_active_index - 1;
+  bDeformGroup *defgroup = BLI_findlink(&gpd->vertex_group_names, def_nr);
   if (defgroup == NULL) {
     return OPERATOR_CANCELLED;
   }
@@ -2470,7 +2486,6 @@ static int gpencil_vertex_group_smooth_exec(bContext *C, wmOperator *op)
   CTX_DATA_END;
 
   /* notifiers */
-  bGPdata *gpd = ob->data;
   DEG_id_tag_update(&gpd->id, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY);
   WM_event_add_notifier(C, NC_GPENCIL | ND_DATA | NA_EDITED | ND_SPACE_PROPERTIES, NULL);
 
@@ -2500,6 +2515,7 @@ static int gpencil_vertex_group_normalize_exec(bContext *C, wmOperator *op)
 {
   ToolSettings *ts = CTX_data_tool_settings(C);
   Object *ob = CTX_data_active_object(C);
+  bGPdata *gpd = ob->data;
 
   /* sanity checks */
   if (ELEM(NULL, ts, ob, ob->data)) {
@@ -2508,8 +2524,8 @@ static int gpencil_vertex_group_normalize_exec(bContext *C, wmOperator *op)
 
   MDeformVert *dvert = NULL;
   MDeformWeight *dw = NULL;
-  const int def_nr = ob->actdef - 1;
-  bDeformGroup *defgroup = BLI_findlink(&ob->defbase, def_nr);
+  const int def_nr = gpd->vertex_group_active_index - 1;
+  bDeformGroup *defgroup = BLI_findlink(&gpd->vertex_group_names, def_nr);
   if (defgroup == NULL) {
     return OPERATOR_CANCELLED;
   }
@@ -2548,7 +2564,6 @@ static int gpencil_vertex_group_normalize_exec(bContext *C, wmOperator *op)
   CTX_DATA_END;
 
   /* notifiers */
-  bGPdata *gpd = ob->data;
   DEG_id_tag_update(&gpd->id, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY);
   WM_event_add_notifier(C, NC_GPENCIL | ND_DATA | NA_EDITED | ND_SPACE_PROPERTIES, NULL);
 
@@ -2576,6 +2591,7 @@ static int gpencil_vertex_group_normalize_all_exec(bContext *C, wmOperator *op)
   ToolSettings *ts = CTX_data_tool_settings(C);
   Object *ob = CTX_data_active_object(C);
   bool lock_active = RNA_boolean_get(op->ptr, "lock_active");
+  bGPdata *gpd = ob->data;
 
   /* sanity checks */
   if (ELEM(NULL, ts, ob, ob->data)) {
@@ -2585,8 +2601,8 @@ static int gpencil_vertex_group_normalize_all_exec(bContext *C, wmOperator *op)
   bDeformGroup *defgroup = NULL;
   MDeformVert *dvert = NULL;
   MDeformWeight *dw = NULL;
-  const int def_nr = ob->actdef - 1;
-  const int defbase_tot = BLI_listbase_count(&ob->defbase);
+  const int def_nr = gpd->vertex_group_active_index - 1;
+  const int defbase_tot = BLI_listbase_count(&gpd->vertex_group_names);
   if (defbase_tot == 0) {
     return OPERATOR_CANCELLED;
   }
@@ -2603,7 +2619,7 @@ static int gpencil_vertex_group_normalize_all_exec(bContext *C, wmOperator *op)
     for (int i = 0; i < gps->totpoints; i++) {
       dvert = &gps->dvert[i];
       for (int v = 0; v < defbase_tot; v++) {
-        defgroup = BLI_findlink(&ob->defbase, v);
+        defgroup = BLI_findlink(&gpd->vertex_group_names, v);
         /* skip NULL or locked groups */
         if ((defgroup == NULL) || (defgroup->flag & DG_LOCK_WEIGHT)) {
           continue;
@@ -2629,7 +2645,7 @@ static int gpencil_vertex_group_normalize_all_exec(bContext *C, wmOperator *op)
 
       dvert = &gps->dvert[i];
       for (int v = 0; v < defbase_tot; v++) {
-        defgroup = BLI_findlink(&ob->defbase, v);
+        defgroup = BLI_findlink(&gpd->vertex_group_names, v);
         /* skip NULL or locked groups */
         if ((defgroup == NULL) || (defgroup->flag & DG_LOCK_WEIGHT)) {
           continue;
@@ -2653,7 +2669,6 @@ static int gpencil_vertex_group_normalize_all_exec(bContext *C, wmOperator *op)
   CTX_DATA_END;
 
   /* notifiers */
-  bGPdata *gpd = ob->data;
   DEG_id_tag_update(&gpd->id, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY);
   WM_event_add_notifier(C, NC_GPENCIL | ND_DATA | NA_EDITED | ND_SPACE_PROPERTIES, NULL);
 
@@ -2718,9 +2733,8 @@ static void gpencil_joined_fix_animdata_cb(ID *id, FCurve *fcu, void *user_data)
         fcu->rna_path = BKE_animsys_fix_rna_path_rename(
             id, fcu->rna_path, "layers", old_name, new_name, 0, 0, false);
 
-        /* we don't want to apply a second remapping on this F-Curve now,
-         * so stop trying to fix names names
-         */
+        /* We don't want to apply a second remapping on this F-Curve now,
+         * so stop trying to fix names. */
         break;
       }
     }
@@ -2770,7 +2784,6 @@ int ED_gpencil_join_objects_exec(bContext *C, wmOperator *op)
   Scene *scene = CTX_data_scene(C);
   Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   Object *ob_active = CTX_data_active_object(C);
-  bGPdata *gpd_dst = NULL;
   bool ok = false;
 
   /* Ensure we're in right mode and that the active object is correct */
@@ -2808,7 +2821,7 @@ int ED_gpencil_join_objects_exec(bContext *C, wmOperator *op)
     return OPERATOR_CANCELLED;
   }
 
-  gpd_dst = ob_active->data;
+  bGPdata *gpd_dst = ob_active->data;
   Object *ob_dst = ob_active;
 
   /* loop and join all data */
@@ -2829,11 +2842,11 @@ int ED_gpencil_join_objects_exec(bContext *C, wmOperator *op)
 
         /* copy vertex groups to the base one's */
         int old_idx = 0;
-        LISTBASE_FOREACH (bDeformGroup *, dg, &ob_iter->defbase) {
+        LISTBASE_FOREACH (bDeformGroup *, dg, &gpd_src->vertex_group_names) {
           bDeformGroup *vgroup = MEM_dupallocN(dg);
-          int idx = BLI_listbase_count(&ob_active->defbase);
+          int idx = BLI_listbase_count(&gpd_dst->vertex_group_names);
           BKE_object_defgroup_unique_name(vgroup, ob_active);
-          BLI_addtail(&ob_active->defbase, vgroup);
+          BLI_addtail(&gpd_dst->vertex_group_names, vgroup);
           /* update vertex groups in strokes in original data */
           LISTBASE_FOREACH (bGPDlayer *, gpl_src, &gpd->layers) {
             LISTBASE_FOREACH (bGPDframe *, gpf, &gpl_src->frames) {
@@ -2853,8 +2866,9 @@ int ED_gpencil_join_objects_exec(bContext *C, wmOperator *op)
           }
           old_idx++;
         }
-        if (ob_active->defbase.first && ob_active->actdef == 0) {
-          ob_active->actdef = 1;
+        if (!BLI_listbase_is_empty(&gpd_dst->vertex_group_names) &&
+            gpd_dst->vertex_group_active_index == 0) {
+          gpd_dst->vertex_group_active_index = 1;
         }
 
         /* add missing materials reading source materials and checking in destination object */
@@ -2865,7 +2879,7 @@ int ED_gpencil_join_objects_exec(bContext *C, wmOperator *op)
           BKE_gpencil_object_material_ensure(bmain, ob_dst, tmp_ma);
         }
 
-        /* duplicate bGPDlayers  */
+        /* Duplicate #bGPDlayers. */
         tJoinGPencil_AdtFixData afd = {0};
         afd.src_gpd = gpd_src;
         afd.tar_gpd = gpd_dst;
@@ -3356,7 +3370,7 @@ static int gpencil_material_unlock_all_exec(bContext *C, wmOperator *UNUSED(op))
     return OPERATOR_CANCELLED;
   }
 
-  /* make all layers editable again*/
+  /* Make all layers editable again. */
   MaterialGPencilStyle *gp_style = NULL;
 
   for (short i = 0; i < *totcol; i++) {
@@ -3410,7 +3424,7 @@ static int gpencil_material_select_exec(bContext *C, wmOperator *op)
     return OPERATOR_CANCELLED;
   }
 
-  /* read all strokes and select*/
+  /* Read all strokes and select. */
   CTX_DATA_BEGIN (C, bGPDlayer *, gpl, editable_gpencil_layers) {
     bGPDframe *init_gpf = (is_multiedit) ? gpl->frames.first : gpl->actframe;
 
@@ -3452,7 +3466,7 @@ static int gpencil_material_select_exec(bContext *C, wmOperator *op)
           }
         }
       }
-      /* if not multiedit, exit loop*/
+      /* If not multi-edit, exit loop. */
       if (!is_multiedit) {
         break;
       }

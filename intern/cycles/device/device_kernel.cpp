@@ -26,12 +26,16 @@ const char *device_kernel_as_string(DeviceKernel kernel)
     /* Integrator. */
     case DEVICE_KERNEL_INTEGRATOR_INIT_FROM_CAMERA:
       return "integrator_init_from_camera";
+    case DEVICE_KERNEL_INTEGRATOR_INIT_FROM_BAKE:
+      return "integrator_init_from_bake";
     case DEVICE_KERNEL_INTEGRATOR_INTERSECT_CLOSEST:
       return "integrator_intersect_closest";
     case DEVICE_KERNEL_INTEGRATOR_INTERSECT_SHADOW:
       return "integrator_intersect_shadow";
     case DEVICE_KERNEL_INTEGRATOR_INTERSECT_SUBSURFACE:
       return "integrator_intersect_subsurface";
+    case DEVICE_KERNEL_INTEGRATOR_INTERSECT_VOLUME_STACK:
+      return "integrator_intersect_volume_stack";
     case DEVICE_KERNEL_INTEGRATOR_SHADE_BACKGROUND:
       return "integrator_shade_background";
     case DEVICE_KERNEL_INTEGRATOR_SHADE_LIGHT:
@@ -40,6 +44,8 @@ const char *device_kernel_as_string(DeviceKernel kernel)
       return "integrator_shade_shadow";
     case DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE:
       return "integrator_shade_surface";
+    case DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE_RAYTRACE:
+      return "integrator_shade_surface_raytrace";
     case DEVICE_KERNEL_INTEGRATOR_SHADE_VOLUME:
       return "integrator_shade_volume";
     case DEVICE_KERNEL_INTEGRATOR_MEGAKERNEL:
@@ -54,8 +60,14 @@ const char *device_kernel_as_string(DeviceKernel kernel)
       return "integrator_terminated_paths_array";
     case DEVICE_KERNEL_INTEGRATOR_SORTED_PATHS_ARRAY:
       return "integrator_sorted_paths_array";
+    case DEVICE_KERNEL_INTEGRATOR_COMPACT_PATHS_ARRAY:
+      return "integrator_compact_paths_array";
+    case DEVICE_KERNEL_INTEGRATOR_COMPACT_STATES:
+      return "integrator_compact_states";
     case DEVICE_KERNEL_INTEGRATOR_RESET:
       return "integrator_reset";
+    case DEVICE_KERNEL_INTEGRATOR_SHADOW_CATCHER_COUNT_POSSIBLE_SPLITS:
+      return "integrator_shadow_catcher_count_possible_splits";
 
     /* Shader evaluation. */
     case DEVICE_KERNEL_SHADER_EVAL_DISPLACE:
@@ -63,9 +75,29 @@ const char *device_kernel_as_string(DeviceKernel kernel)
     case DEVICE_KERNEL_SHADER_EVAL_BACKGROUND:
       return "shader_eval_background";
 
-    /* Film. */
-    case DEVICE_KERNEL_CONVERT_TO_HALF_FLOAT:
-      return "convert_to_half_float";
+      /* Film. */
+
+#define FILM_CONVERT_KERNEL_AS_STRING(variant, variant_lowercase) \
+  case DEVICE_KERNEL_FILM_CONVERT_##variant: \
+    return "film_convert_" #variant_lowercase; \
+  case DEVICE_KERNEL_FILM_CONVERT_##variant##_HALF_RGBA: \
+    return "film_convert_" #variant_lowercase "_half_rgba";
+
+      FILM_CONVERT_KERNEL_AS_STRING(DEPTH, depth)
+      FILM_CONVERT_KERNEL_AS_STRING(MIST, mist)
+      FILM_CONVERT_KERNEL_AS_STRING(SAMPLE_COUNT, sample_count)
+      FILM_CONVERT_KERNEL_AS_STRING(FLOAT, float)
+      FILM_CONVERT_KERNEL_AS_STRING(LIGHT_PATH, light_path)
+      FILM_CONVERT_KERNEL_AS_STRING(FLOAT3, float3)
+      FILM_CONVERT_KERNEL_AS_STRING(MOTION, motion)
+      FILM_CONVERT_KERNEL_AS_STRING(CRYPTOMATTE, cryptomatte)
+      FILM_CONVERT_KERNEL_AS_STRING(SHADOW_CATCHER, shadow_catcher)
+      FILM_CONVERT_KERNEL_AS_STRING(SHADOW_CATCHER_MATTE_WITH_SHADOW,
+                                    shadow_catcher_matte_with_shadow)
+      FILM_CONVERT_KERNEL_AS_STRING(COMBINED, combined)
+      FILM_CONVERT_KERNEL_AS_STRING(FLOAT4, float4)
+
+#undef FILM_CONVERT_KERNEL_AS_STRING
 
     /* Adaptive sampling. */
     case DEVICE_KERNEL_ADAPTIVE_SAMPLING_CONVERGENCE_CHECK:
@@ -76,10 +108,18 @@ const char *device_kernel_as_string(DeviceKernel kernel)
       return "adaptive_sampling_filter_y";
 
     /* Denoising. */
-    case DEVICE_KERNEL_FILTER_CONVERT_TO_RGB:
-      return "filter_convert_to_rgb";
-    case DEVICE_KERNEL_FILTER_CONVERT_FROM_RGB:
-      return "filter_convert_from_rgb";
+    case DEVICE_KERNEL_FILTER_GUIDING_PREPROCESS:
+      return "filter_guiding_preprocess";
+    case DEVICE_KERNEL_FILTER_GUIDING_SET_FAKE_ALBEDO:
+      return "filter_guiding_set_fake_albedo";
+    case DEVICE_KERNEL_FILTER_COLOR_PREPROCESS:
+      return "filter_color_preprocess";
+    case DEVICE_KERNEL_FILTER_COLOR_POSTPROCESS:
+      return "filter_color_postprocess";
+
+    /* Cryptomatte. */
+    case DEVICE_KERNEL_CRYPTOMATTE_POSTPROCESS:
+      return "cryptomatte_postprocess";
 
     /* Generic */
     case DEVICE_KERNEL_PREFIX_SUM:

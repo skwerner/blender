@@ -146,8 +146,9 @@ void device_cuda_info(vector<DeviceInfo> &devices)
 
     info.has_half_images = (major >= 3);
     info.has_nanovdb = true;
-    info.has_volume_decoupled = false;
     info.denoisers = 0;
+
+    info.has_gpu_queue = true;
 
     /* Check if the device has P2P access to any other device in the system. */
     for (int peer_num = 0; peer_num < count && !info.has_peer_memory; peer_num++) {

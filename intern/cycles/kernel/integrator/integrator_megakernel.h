@@ -20,6 +20,7 @@
 #include "kernel/integrator/integrator_intersect_closest.h"
 #include "kernel/integrator/integrator_intersect_shadow.h"
 #include "kernel/integrator/integrator_intersect_subsurface.h"
+#include "kernel/integrator/integrator_intersect_volume_stack.h"
 #include "kernel/integrator/integrator_shade_background.h"
 #include "kernel/integrator/integrator_shade_light.h"
 #include "kernel/integrator/integrator_shade_shadow.h"
@@ -63,11 +64,20 @@ ccl_device void integrator_megakernel(INTEGRATOR_STATE_ARGS,
         case DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE:
           integrator_shade_surface(INTEGRATOR_STATE_PASS, render_buffer);
           break;
+        case DEVICE_KERNEL_INTEGRATOR_SHADE_VOLUME:
+          integrator_shade_volume(INTEGRATOR_STATE_PASS, render_buffer);
+          break;
+        case DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE_RAYTRACE:
+          integrator_shade_surface_raytrace(INTEGRATOR_STATE_PASS, render_buffer);
+          break;
         case DEVICE_KERNEL_INTEGRATOR_SHADE_LIGHT:
           integrator_shade_light(INTEGRATOR_STATE_PASS, render_buffer);
           break;
         case DEVICE_KERNEL_INTEGRATOR_INTERSECT_SUBSURFACE:
           integrator_intersect_subsurface(INTEGRATOR_STATE_PASS);
+          break;
+        case DEVICE_KERNEL_INTEGRATOR_INTERSECT_VOLUME_STACK:
+          integrator_intersect_volume_stack(INTEGRATOR_STATE_PASS);
           break;
         default:
           kernel_assert(0);

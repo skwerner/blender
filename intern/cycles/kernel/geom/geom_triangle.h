@@ -24,7 +24,7 @@
 
 CCL_NAMESPACE_BEGIN
 
-/* normal on triangle  */
+/* Normal on triangle. */
 ccl_device_inline float3 triangle_normal(const KernelGlobals *kg, ShaderData *sd)
 {
   /* load triangle vertices */
@@ -42,7 +42,7 @@ ccl_device_inline float3 triangle_normal(const KernelGlobals *kg, ShaderData *sd
   }
 }
 
-/* point and normal on triangle  */
+/* Point and normal on triangle. */
 ccl_device_inline void triangle_point_normal(const KernelGlobals *kg,
                                              int object,
                                              int prim,
@@ -83,6 +83,22 @@ ccl_device_inline void triangle_vertices(const KernelGlobals *kg, int prim, floa
   P[2] = float4_to_float3(kernel_tex_fetch(__prim_tri_verts, tri_vindex.w + 2));
 }
 
+/* Triangle vertex locations and vertex normals */
+
+ccl_device_inline void triangle_vertices_and_normals(const KernelGlobals *kg,
+                                                     int prim,
+                                                     float3 P[3],
+                                                     float3 N[3])
+{
+  const uint4 tri_vindex = kernel_tex_fetch(__tri_vindex, prim);
+  P[0] = float4_to_float3(kernel_tex_fetch(__prim_tri_verts, tri_vindex.w + 0));
+  P[1] = float4_to_float3(kernel_tex_fetch(__prim_tri_verts, tri_vindex.w + 1));
+  P[2] = float4_to_float3(kernel_tex_fetch(__prim_tri_verts, tri_vindex.w + 2));
+  N[0] = float4_to_float3(kernel_tex_fetch(__tri_vnormal, tri_vindex.x));
+  N[1] = float4_to_float3(kernel_tex_fetch(__tri_vnormal, tri_vindex.y));
+  N[2] = float4_to_float3(kernel_tex_fetch(__tri_vnormal, tri_vindex.z));
+}
+
 /* Interpolate smooth vertex normal from vertices */
 
 ccl_device_inline float3
@@ -95,6 +111,27 @@ triangle_smooth_normal(const KernelGlobals *kg, float3 Ng, int prim, float u, fl
   float3 n2 = float4_to_float3(kernel_tex_fetch(__tri_vnormal, tri_vindex.z));
 
   float3 N = safe_normalize((1.0f - u - v) * n2 + u * n0 + v * n1);
+
+  return is_zero(N) ? Ng : N;
+}
+
+ccl_device_inline float3 triangle_smooth_normal_unnormalized(
+    const KernelGlobals *kg, const ShaderData *sd, float3 Ng, int prim, float u, float v)
+{
+  /* load triangle vertices */
+  const uint4 tri_vindex = kernel_tex_fetch(__tri_vindex, prim);
+  float3 n0 = float4_to_float3(kernel_tex_fetch(__tri_vnormal, tri_vindex.x));
+  float3 n1 = float4_to_float3(kernel_tex_fetch(__tri_vnormal, tri_vindex.y));
+  float3 n2 = float4_to_float3(kernel_tex_fetch(__tri_vnormal, tri_vindex.z));
+
+  /* ensure that the normals are in object space */
+  if (sd->object_flag & SD_OBJECT_TRANSFORM_APPLIED) {
+    object_inverse_normal_transform(kg, sd, &n0);
+    object_inverse_normal_transform(kg, sd, &n1);
+    object_inverse_normal_transform(kg, sd, &n2);
+  }
+
+  float3 N = (1.0f - u - v) * n2 + u * n0 + v * n1;
 
   return is_zero(N) ? Ng : N;
 }

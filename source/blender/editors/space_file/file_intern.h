@@ -92,6 +92,9 @@ void file_sfile_to_operator(struct Main *bmain, struct wmOperator *op, struct Sp
 
 void file_operator_to_sfile(struct Main *bmain, struct SpaceFile *sfile, struct wmOperator *op);
 
+/* space_file.c */
+extern const char *file_context_dir[]; /* doc access */
+
 /* filesel.c */
 void fileselect_refresh_params(struct SpaceFile *sfile);
 void fileselect_file_set(SpaceFile *sfile, const int index);
@@ -108,10 +111,22 @@ FileAttributeColumnType file_attribute_column_type_find_isect(const View2D *v2d,
 float file_string_width(const char *str);
 
 float file_font_pointsize(void);
+void file_select_deselect_all(SpaceFile *sfile, uint flag);
 int file_select_match(struct SpaceFile *sfile, const char *pattern, char *matched_file);
 int autocomplete_directory(struct bContext *C, char *str, void *arg_v);
 int autocomplete_file(struct bContext *C, char *str, void *arg_v);
 
+void file_params_smoothscroll_timer_clear(struct wmWindowManager *wm,
+                                          struct wmWindow *win,
+                                          SpaceFile *sfile);
+void file_params_renamefile_clear(struct FileSelectParams *params);
+void file_params_invoke_rename_postscroll(struct wmWindowManager *wm,
+                                          struct wmWindow *win,
+                                          SpaceFile *sfile);
+void file_params_rename_end(struct wmWindowManager *wm,
+                            struct wmWindow *win,
+                            SpaceFile *sfile,
+                            struct FileDirEntry *rename_file);
 void file_params_renamefile_activate(struct SpaceFile *sfile, struct FileSelectParams *params);
 
 typedef void *onReloadFnData;

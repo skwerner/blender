@@ -109,7 +109,7 @@ static void draw_current_frame(const Scene *scene,
   if (draw_line) {
     /* Draw vertical line to from the bottom of the current frame box to the bottom of the screen.
      */
-    const float subframe_x = UI_view2d_view_to_region_x(v2d, BKE_scene_frame_get(scene));
+    const float subframe_x = UI_view2d_view_to_region_x(v2d, BKE_scene_ctime_get(scene));
     GPUVertFormat *format = immVertexFormat();
     uint pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
     immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
@@ -244,6 +244,10 @@ void ED_time_scrub_channel_search_draw(const bContext *C, ARegion *region, bDope
   UI_block_align_end(block);
   UI_block_layout_resolve(block, NULL, NULL);
 
+  /* Make sure the events are consumed from the search and don't reach other UI blocks since this
+   * is drawn on top of animation-channels. */
+  UI_block_flag_enable(block, UI_BLOCK_CLIP_EVENTS);
+  UI_block_bounds_set_normal(block, 0);
   UI_block_end(C, block);
   UI_block_draw(C, block);
 

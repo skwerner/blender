@@ -36,6 +36,7 @@ class CUDADeviceQueue : public DeviceQueue {
   ~CUDADeviceQueue();
 
   virtual int num_concurrent_states(const size_t state_size) const override;
+  virtual int num_concurrent_busy_states() override;
 
   virtual void init_execution() override;
 
@@ -53,6 +54,8 @@ class CUDADeviceQueue : public DeviceQueue {
   {
     return cuda_stream_;
   }
+
+  virtual unique_ptr<DeviceGraphicsInterop> graphics_interop_create() override;
 
  protected:
   CUDADevice *cuda_device_;

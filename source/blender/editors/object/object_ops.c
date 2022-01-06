@@ -183,6 +183,9 @@ void ED_operatortypes_object(void)
   WM_operatortype_append(POSE_OT_ik_add);
   WM_operatortype_append(POSE_OT_ik_clear);
   WM_operatortype_append(CONSTRAINT_OT_delete);
+  WM_operatortype_append(CONSTRAINT_OT_apply);
+  WM_operatortype_append(CONSTRAINT_OT_copy);
+  WM_operatortype_append(CONSTRAINT_OT_copy_to_selected);
   WM_operatortype_append(CONSTRAINT_OT_move_up);
   WM_operatortype_append(CONSTRAINT_OT_move_down);
   WM_operatortype_append(CONSTRAINT_OT_move_to_index);
@@ -201,7 +204,6 @@ void ED_operatortypes_object(void)
   WM_operatortype_append(OBJECT_OT_vertex_group_remove_from);
   WM_operatortype_append(OBJECT_OT_vertex_group_select);
   WM_operatortype_append(OBJECT_OT_vertex_group_deselect);
-  WM_operatortype_append(OBJECT_OT_vertex_group_copy_to_linked);
   WM_operatortype_append(OBJECT_OT_vertex_group_copy_to_selected);
   WM_operatortype_append(OBJECT_OT_vertex_group_copy);
   WM_operatortype_append(OBJECT_OT_vertex_group_normalize);
@@ -322,7 +324,7 @@ void ED_keymap_object(wmKeyConfig *keyconf)
   keymap = WM_keymap_ensure(keyconf, "Object Non-modal", 0, 0);
 
   /* Object Mode ---------------------------------------------------------------- */
-  /* Note: this keymap gets disabled in non-objectmode,  */
+  /* NOTE: this keymap gets disabled in non-objectmode. */
   keymap = WM_keymap_ensure(keyconf, "Object Mode", 0, 0);
   keymap->poll = object_mode_poll;
 }

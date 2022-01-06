@@ -153,7 +153,7 @@ static void ObjectToTransData(TransInfo *t, TransData *td, Object *ob)
 
   if (t->mode != TFM_DUMMY && ob->rigidbody_object) {
     float rot[3][3], scale[3];
-    float ctime = BKE_scene_frame_get(scene);
+    float ctime = BKE_scene_ctime_get(scene);
 
     /* only use rigid body transform if simulation is running,
      * avoids problems with initial setup of rigid bodies */
@@ -749,7 +749,7 @@ static void autokeyframe_object(
     /* Get flags used for inserting keyframes. */
     flag = ANIM_get_keyframing_flags(scene, true);
 
-    /* add datasource override for the object */
+    /* Add data-source override for the object. */
     ANIM_relative_keyingset_add_source(&dsources, id, NULL, NULL);
 
     if (IS_AUTOKEY_FLAG(scene, ONLYKEYINGSET) && (active_ks)) {
@@ -978,7 +978,7 @@ void special_aftertrans_update__object(bContext *C, TransInfo *t)
 
     /* restore rigid body transform */
     if (ob->rigidbody_object && canceled) {
-      float ctime = BKE_scene_frame_get(t->scene);
+      float ctime = BKE_scene_ctime_get(t->scene);
       if (BKE_rigidbody_check_sim_running(t->scene->rigidbody_world, ctime)) {
         BKE_rigidbody_aftertrans_update(ob,
                                         td->ext->oloc,

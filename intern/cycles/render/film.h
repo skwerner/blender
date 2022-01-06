@@ -56,7 +56,6 @@ class Film : public Node {
   NODE_SOCKET_API(float, mist_depth)
   NODE_SOCKET_API(float, mist_falloff)
 
-  NODE_SOCKET_API(bool, use_light_visibility)
   NODE_SOCKET_API(CryptomatteType, cryptomatte_passes)
   NODE_SOCKET_API(int, cryptomatte_depth)
 
@@ -66,6 +65,9 @@ class Film : public Node {
 
  private:
   size_t filter_table_offset_;
+  bool prev_have_uv_pass = false;
+  bool prev_have_motion_pass = false;
+  bool prev_have_ao_pass = false;
 
  public:
   Film();
@@ -77,9 +79,24 @@ class Film : public Node {
   void device_update(Device *device, DeviceScene *dscene, Scene *scene);
   void device_free(Device *device, DeviceScene *dscene, Scene *scene);
 
-  void assign_and_tag_passes_update(Scene *scene, const vector<Pass> &passes);
-
   int get_aov_offset(Scene *scene, string name, bool &is_color);
+
+  /* Get display pass from its name.
+   * Will do special logic to replace combined pass with shadow catcher matte. */
+  const Pass *get_actual_display_pass(Scene *scene, const Pass *pass);
+
+  /* Update passes so that they contain all passes required for the configured functionality.
+   *
+   * If `add_sample_count_pass` is true then the SAMPLE_COUNT pass is ensured to be added. */
+  void update_passes(Scene *scene, bool add_sample_count_pass);
+
+  uint get_kernel_features(const Scene *scene) const;
+
+ private:
+  void add_auto_pass(Scene *scene, PassType type, const char *name = nullptr);
+  void add_auto_pass(Scene *scene, PassType type, PassMode mode, const char *name = nullptr);
+  void remove_auto_passes(Scene *scene);
+  void finalize_passes(Scene *scene, const bool use_denoise);
 };
 
 CCL_NAMESPACE_END

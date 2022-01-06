@@ -140,7 +140,7 @@ static void rna_def_movieclip_proxy(BlenderRNA *brna)
   PropertyRNA *prop;
 
   static const EnumPropertyItem clip_tc_items[] = {
-      {IMB_TC_NONE, "NONE", 0, "No TC in use", ""},
+      {IMB_TC_NONE, "NONE", 0, "None", ""},
       {IMB_TC_RECORD_RUN,
        "RECORD_RUN",
        0,
@@ -354,7 +354,7 @@ static void rna_def_movieclip(BlenderRNA *brna)
                             0,
                             0,
                             "Size",
-                            "Width and height in pixels, zero when image data cant be loaded",
+                            "Width and height in pixels, zero when image data can't be loaded",
                             0,
                             0);
   RNA_def_property_int_funcs(prop, "rna_MovieClip_size_get", NULL, NULL);

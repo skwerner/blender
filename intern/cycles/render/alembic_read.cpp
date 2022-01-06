@@ -44,9 +44,19 @@ static set<chrono_t> get_relevant_sample_times(AlembicProcedural *proc,
     return result;
   }
 
-  // load the data for the entire animation
-  const double start_frame = static_cast<double>(proc->get_start_frame());
-  const double end_frame = static_cast<double>(proc->get_end_frame());
+  double start_frame;
+  double end_frame;
+
+  if (proc->get_use_prefetch()) {
+    // load the data for the entire animation
+    start_frame = static_cast<double>(proc->get_start_frame());
+    end_frame = static_cast<double>(proc->get_end_frame());
+  }
+  else {
+    // load the data for the current frame
+    start_frame = static_cast<double>(proc->get_frame());
+    end_frame = start_frame;
+  }
 
   const double frame_rate = static_cast<double>(proc->get_frame_rate());
   const double start_time = start_frame / frame_rate;
@@ -606,7 +616,8 @@ void read_geometry_data(AlembicProcedural *proc,
 
 template<typename T> struct value_type_converter {
   using cycles_type = float;
-  static constexpr TypeDesc type_desc = TypeFloat;
+  /* Use `TypeDesc::FLOAT` instead of `TypeFloat` to work around a compiler bug in gcc 11. */
+  static constexpr TypeDesc type_desc = TypeDesc::FLOAT;
   static constexpr const char *type_name = "float (default)";
 
   static cycles_type convert_value(T value)
@@ -735,13 +746,14 @@ static void process_uvs(CachedData &cache,
                         const IV2fGeomParam::Sample &sample,
                         double time)
 {
-  if (scope != kFacevaryingScope) {
+  if (scope != kFacevaryingScope && scope != kVaryingScope && scope != kVertexScope) {
     return;
   }
 
   const array<int> *uv_loops = cache.uv_loops.data_for_time_no_check(time).get_data_or_null();
 
-  if (!uv_loops) {
+  /* It's ok to not have loop indices, as long as the scope is not face-varying. */
+  if (!uv_loops && scope == kFacevaryingScope) {
     return;
   }
 
@@ -765,9 +777,27 @@ static void process_uvs(CachedData &cache,
   const uint32_t *indices = sample.getIndices()->get();
   const V2f *values = sample.getVals()->get();
 
-  for (const int uv_loop_index : *uv_loops) {
-    const uint32_t index = indices[uv_loop_index];
-    *data_float2++ = make_float2(values[index][0], values[index][1]);
+  if (scope == kFacevaryingScope) {
+    for (const int uv_loop_index : *uv_loops) {
+      const uint32_t index = indices[uv_loop_index];
+      *data_float2++ = make_float2(values[index][0], values[index][1]);
+    }
+  }
+  else if (scope == kVaryingScope || scope == kVertexScope) {
+    if (triangles) {
+      for (size_t i = 0; i < triangles->size(); i++) {
+        const int3 t = (*triangles)[i];
+        *data_float2++ = make_float2(values[t.x][0], values[t.x][1]);
+        *data_float2++ = make_float2(values[t.y][0], values[t.y][1]);
+        *data_float2++ = make_float2(values[t.z][0], values[t.z][1]);
+      }
+    }
+    else if (corners) {
+      for (size_t i = 0; i < corners->size(); i++) {
+        const int c = (*corners)[i];
+        *data_float2++ = make_float2(values[c][0], values[c][1]);
+      }
+    }
   }
 
   attribute.data.add_data(data, time);

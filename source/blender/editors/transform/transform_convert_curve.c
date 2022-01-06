@@ -277,8 +277,8 @@ void createTransCurveVerts(TransInfo *t)
               }
               td->ext = NULL;
 
-              /* TODO - make points scale */
-              if (t->mode == TFM_CURVE_SHRINKFATTEN) { /* || t->mode==TFM_RESIZE) {*/
+              /* TODO: make points scale. */
+              if (t->mode == TFM_CURVE_SHRINKFATTEN /* `|| t->mode == TFM_RESIZE` */) {
                 td->val = &(bezt->radius);
                 td->ival = bezt->radius;
               }
@@ -423,7 +423,7 @@ void createTransCurveVerts(TransInfo *t)
         calc_distanceCurveVerts(head, tail, cyclic);
       }
 
-      /* TODO - in the case of tilt and radius we can also avoid allocating the
+      /* TODO: in the case of tilt and radius we can also avoid allocating the
        * initTransDataCurveHandles but for now just don't change handle types */
       if ((nu->type == CU_BEZIER) &&
           ELEM(t->mode, TFM_CURVE_SHRINKFATTEN, TFM_TILT, TFM_DUMMY) == 0) {
@@ -453,7 +453,7 @@ void recalcData_curve(TransInfo *t)
 
     if (t->state == TRANS_CANCEL) {
       while (nu) {
-        /* Cant do testhandlesNurb here, it messes up the h1 and h2 flags */
+        /* Can't do testhandlesNurb here, it messes up the h1 and h2 flags */
         BKE_nurb_handles_calc(nu);
         nu = nu->next;
       }

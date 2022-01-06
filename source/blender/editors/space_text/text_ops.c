@@ -236,10 +236,7 @@ void text_update_line_edited(TextLine *line)
   }
 
   /* we just free format here, and let it rebuild during draw */
-  if (line->format) {
-    MEM_freeN(line->format);
-    line->format = NULL;
-  }
+  MEM_SAFE_FREE(line->format);
 }
 
 void text_update_edited(Text *text)
@@ -745,7 +742,7 @@ void TEXT_OT_save_as(wmOperatorType *ot)
                                  FILE_SAVE,
                                  WM_FILESEL_FILEPATH,
                                  FILE_DEFAULTDISPLAY,
-                                 FILE_SORT_DEFAULT); /* XXX TODO, relative_path. */
+                                 FILE_SORT_DEFAULT); /* XXX TODO: relative_path. */
 }
 
 /** \} */
@@ -1958,7 +1955,7 @@ static void txt_wrap_move_eol(SpaceText *st, ARegion *region, const bool sel)
         end = MIN2(end, i);
 
         if (chop) {
-          endj = BLI_str_prev_char_utf8((*linep)->line + j) - (*linep)->line;
+          endj = BLI_str_find_prev_char_utf8((*linep)->line + j, (*linep)->line) - (*linep)->line;
         }
 
         if (endj >= oldc) {
@@ -2782,8 +2779,7 @@ void TEXT_OT_scroll(wmOperatorType *ot)
   /* identifiers */
   ot->name = "Scroll";
   /* don't really see the difference between this and
-   * scroll_bar. Both do basically the same thing (aside
-   * from keymaps).*/
+   * scroll_bar. Both do basically the same thing (aside from key-maps). */
   ot->idname = "TEXT_OT_scroll";
 
   /* api callbacks */
@@ -2889,8 +2885,7 @@ void TEXT_OT_scroll_bar(wmOperatorType *ot)
   /* identifiers */
   ot->name = "Scrollbar";
   /* don't really see the difference between this and
-   * scroll. Both do basically the same thing (aside
-   * from keymaps).*/
+   * scroll. Both do basically the same thing (aside from key-maps). */
   ot->idname = "TEXT_OT_scroll_bar";
 
   /* api callbacks */
@@ -3429,25 +3424,26 @@ static int text_insert_exec(bContext *C, wmOperator *op)
   SpaceText *st = CTX_wm_space_text(C);
   Text *text = CTX_data_edit_text(C);
   char *str;
+  int str_len;
   bool done = false;
   size_t i = 0;
   uint code;
 
   text_drawcache_tag_update(st, 0);
 
-  str = RNA_string_get_alloc(op->ptr, "text", NULL, 0);
+  str = RNA_string_get_alloc(op->ptr, "text", NULL, 0, &str_len);
 
   ED_text_undo_push_init(C);
 
   if (st && st->overwrite) {
     while (str[i]) {
-      code = BLI_str_utf8_as_unicode_step(str, &i);
+      code = BLI_str_utf8_as_unicode_step(str, str_len, &i);
       done |= txt_replace_char(text, code);
     }
   }
   else {
     while (str[i]) {
-      code = BLI_str_utf8_as_unicode_step(str, &i);
+      code = BLI_str_utf8_as_unicode_step(str, str_len, &i);
       done |= txt_add_char(text, code);
     }
   }
@@ -3470,7 +3466,7 @@ static int text_insert_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
   int ret;
 
-  /* Note, the "text" property is always set from key-map,
+  /* NOTE: the "text" property is always set from key-map,
    * so we can't use #RNA_struct_property_is_set, check the length instead. */
   if (!RNA_string_length(op->ptr, "text")) {
     /* if alt/ctrl/super are pressed pass through except for utf8 character event
@@ -3490,7 +3486,7 @@ static int text_insert_invoke(bContext *C, wmOperator *op, const wmEvent *event)
     }
     else {
       /* in theory, ghost can set value to extended ascii here */
-      len = BLI_str_utf8_from_unicode(event->ascii, str);
+      len = BLI_str_utf8_from_unicode(event->ascii, str, sizeof(str) - 1);
     }
     str[len] = '\0';
     RNA_string_set(op->ptr, "text", str);

@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include "render/alembic.h"
 #include "render/camera.h"
 #include "render/graph.h"
 #include "render/integrator.h"
@@ -109,22 +110,22 @@ void BlenderSync::sync_object_motion_init(BL::Object &b_parent, BL::Object &b_ob
   }
 
   Geometry *geom = object->get_geometry();
-  geom->set_use_motion_blur(false);
-  geom->set_motion_steps(0);
 
-  uint motion_steps;
+  int motion_steps = 0;
+  bool use_motion_blur = false;
 
   if (need_motion == Scene::MOTION_BLUR) {
     motion_steps = object_motion_steps(b_parent, b_ob, Object::MAX_MOTION_STEPS);
-    geom->set_motion_steps(motion_steps);
     if (motion_steps && object_use_deform_motion(b_parent, b_ob)) {
-      geom->set_use_motion_blur(true);
+      use_motion_blur = true;
     }
   }
   else {
     motion_steps = 3;
-    geom->set_motion_steps(motion_steps);
   }
+
+  geom->set_use_motion_blur(use_motion_blur);
+  geom->set_motion_steps(motion_steps);
 
   motion.resize(motion_steps, transform_empty());
 
@@ -153,7 +154,7 @@ Object *BlenderSync::sync_object(BL::Depsgraph &b_depsgraph,
   const bool is_instance = b_instance.is_instance();
   BL::Object b_ob = b_instance.object();
   BL::Object b_parent = is_instance ? b_instance.parent() : b_instance.object();
-  BL::Object b_ob_instance = is_instance ? b_instance.instance_object() : b_ob;
+  BObjectInfo b_ob_info{b_ob, is_instance ? b_instance.instance_object() : b_ob, b_ob.data()};
   const bool motion = motion_time != 0.0f;
   /*const*/ Transform tfm = get_transform(b_ob.matrix_world());
   int *persistent_id = NULL;
@@ -177,8 +178,7 @@ Object *BlenderSync::sync_object(BL::Depsgraph &b_depsgraph,
     {
       sync_light(b_parent,
                  persistent_id,
-                 b_ob,
-                 b_ob_instance,
+                 b_ob_info,
                  is_instance ? b_instance.random_id() : 0,
                  tfm,
                  use_portal);
@@ -199,8 +199,7 @@ Object *BlenderSync::sync_object(BL::Depsgraph &b_depsgraph,
 
   /* Visibility flags for both parent and child. */
   PointerRNA cobject = RNA_pointer_get(&b_ob.ptr, "cycles");
-  bool use_holdout = get_boolean(cobject, "is_holdout") ||
-                     b_parent.holdout_get(PointerRNA_NULL, b_view_layer);
+  bool use_holdout = b_parent.holdout_get(PointerRNA_NULL, b_view_layer);
   uint visibility = object_ray_visibility(b_ob) & PATH_RAY_ALL_VISIBILITY;
 
   if (b_parent.ptr.data != b_ob.ptr.data) {
@@ -231,7 +230,7 @@ Object *BlenderSync::sync_object(BL::Depsgraph &b_depsgraph,
   TaskPool *object_geom_task_pool = (is_instance) ? NULL : geom_task_pool;
 
   /* key to lookup object */
-  ObjectKey key(b_parent, persistent_id, b_ob_instance, use_particle_hair);
+  ObjectKey key(b_parent, persistent_id, b_ob_info.real_object, use_particle_hair);
   Object *object;
 
   /* motion vector case */
@@ -249,12 +248,8 @@ Object *BlenderSync::sync_object(BL::Depsgraph &b_depsgraph,
 
       /* mesh deformation */
       if (object->get_geometry())
-        sync_geometry_motion(b_depsgraph,
-                             b_ob_instance,
-                             object,
-                             motion_time,
-                             use_particle_hair,
-                             object_geom_task_pool);
+        sync_geometry_motion(
+            b_depsgraph, b_ob_info, object, motion_time, use_particle_hair, object_geom_task_pool);
     }
 
     return object;
@@ -265,15 +260,8 @@ Object *BlenderSync::sync_object(BL::Depsgraph &b_depsgraph,
                         (tfm != object->get_tfm());
 
   /* mesh sync */
-  /* b_ob is owned by the iterator and will go out of scope at the end of the block.
-   * b_ob_instance is the original object and will remain valid for deferred geometry
-   * sync. */
-  Geometry *geometry = sync_geometry(b_depsgraph,
-                                     b_ob_instance,
-                                     b_ob_instance,
-                                     object_updated,
-                                     use_particle_hair,
-                                     object_geom_task_pool);
+  Geometry *geometry = sync_geometry(
+      b_depsgraph, b_ob_info, object_updated, use_particle_hair, object_geom_task_pool);
   object->set_geometry(geometry);
 
   /* special case not tracked by object update flags */
@@ -287,11 +275,21 @@ Object *BlenderSync::sync_object(BL::Depsgraph &b_depsgraph,
 
   object->set_visibility(visibility);
 
-  bool is_shadow_catcher = get_boolean(cobject, "is_shadow_catcher");
-  object->set_is_shadow_catcher(is_shadow_catcher);
+  object->set_is_shadow_catcher(b_ob.is_shadow_catcher());
 
-  float shadow_terminator_offset = get_float(cobject, "shadow_terminator_offset");
-  object->set_shadow_terminator_offset(shadow_terminator_offset);
+  float shadow_terminator_shading_offset = get_float(cobject, "shadow_terminator_offset");
+  object->set_shadow_terminator_shading_offset(shadow_terminator_shading_offset);
+
+  float shadow_terminator_geometry_offset = get_float(cobject,
+                                                      "shadow_terminator_geometry_offset");
+  object->set_shadow_terminator_geometry_offset(shadow_terminator_geometry_offset);
+
+  float ao_distance = get_float(cobject, "ao_distance");
+  if (ao_distance == 0.0f && b_parent.ptr.data != b_ob.ptr.data) {
+    PointerRNA cparent = RNA_pointer_get(&b_parent.ptr, "cycles");
+    ao_distance = get_float(cparent, "ao_distance");
+  }
+  object->set_ao_distance(ao_distance);
 
   /* sync the asset name for Cryptomatte */
   BL::Object parent = b_ob.parent();
@@ -366,7 +364,7 @@ static bool lookup_property(BL::ID b_id, const string &name, float4 *r_value)
     if (type == PROP_FLOAT)
       value = RNA_property_float_get(&ptr, prop);
     else if (type == PROP_INT)
-      value = RNA_property_int_get(&ptr, prop);
+      value = static_cast<float>(RNA_property_int_get(&ptr, prop));
     else
       return false;
 
@@ -475,6 +473,72 @@ bool BlenderSync::sync_object_attributes(BL::DepsgraphObjectInstance &b_instance
 
 /* Object Loop */
 
+void BlenderSync::sync_procedural(BL::Object &b_ob,
+                                  BL::MeshSequenceCacheModifier &b_mesh_cache,
+                                  bool has_subdivision_modifier)
+{
+#ifdef WITH_ALEMBIC
+  BL::CacheFile cache_file = b_mesh_cache.cache_file();
+  void *cache_file_key = cache_file.ptr.data;
+
+  AlembicProcedural *procedural = static_cast<AlembicProcedural *>(
+      procedural_map.find(cache_file_key));
+
+  if (procedural == nullptr) {
+    procedural = scene->create_node<AlembicProcedural>();
+    procedural_map.add(cache_file_key, procedural);
+  }
+  else {
+    procedural_map.used(procedural);
+  }
+
+  float current_frame = static_cast<float>(b_scene.frame_current());
+  if (cache_file.override_frame()) {
+    current_frame = cache_file.frame();
+  }
+
+  if (!cache_file.override_frame()) {
+    procedural->set_start_frame(static_cast<float>(b_scene.frame_start()));
+    procedural->set_end_frame(static_cast<float>(b_scene.frame_end()));
+  }
+
+  procedural->set_frame(current_frame);
+  procedural->set_frame_rate(b_scene.render().fps() / b_scene.render().fps_base());
+  procedural->set_frame_offset(cache_file.frame_offset());
+
+  string absolute_path = blender_absolute_path(b_data, b_ob, b_mesh_cache.cache_file().filepath());
+  procedural->set_filepath(ustring(absolute_path));
+
+  procedural->set_scale(cache_file.scale());
+
+  procedural->set_use_prefetch(cache_file.use_prefetch());
+  procedural->set_prefetch_cache_size(cache_file.prefetch_cache_size());
+
+  /* create or update existing AlembicObjects */
+  ustring object_path = ustring(b_mesh_cache.object_path());
+
+  AlembicObject *abc_object = procedural->get_or_create_object(object_path);
+
+  array<Node *> used_shaders = find_used_shaders(b_ob);
+  abc_object->set_used_shaders(used_shaders);
+
+  PointerRNA cobj = RNA_pointer_get(&b_ob.ptr, "cycles");
+  const float subd_dicing_rate = max(0.1f, RNA_float_get(&cobj, "dicing_rate") * dicing_rate);
+  abc_object->set_subd_dicing_rate(subd_dicing_rate);
+  abc_object->set_subd_max_level(max_subdivisions);
+
+  abc_object->set_ignore_subdivision(!has_subdivision_modifier);
+
+  if (abc_object->is_modified() || procedural->is_modified()) {
+    procedural->tag_update(scene);
+  }
+#else
+  (void)b_ob;
+  (void)b_mesh_cache;
+  (void)has_subdivision_modifier;
+#endif
+}
+
 void BlenderSync::sync_objects(BL::Depsgraph &b_depsgraph,
                                BL::SpaceView3D &b_v3d,
                                float motion_time)
@@ -490,6 +554,7 @@ void BlenderSync::sync_objects(BL::Depsgraph &b_depsgraph,
     light_map.pre_sync();
     geometry_map.pre_sync();
     object_map.pre_sync();
+    procedural_map.pre_sync();
     particle_system_map.pre_sync();
     motion_times.clear();
   }
@@ -503,7 +568,7 @@ void BlenderSync::sync_objects(BL::Depsgraph &b_depsgraph,
   /* object loop */
   bool cancel = false;
   bool use_portal = false;
-  const bool show_lights = BlenderViewportParameters(b_v3d).use_scene_lights;
+  const bool show_lights = BlenderViewportParameters(b_v3d, use_developer_ui).use_scene_lights;
 
   BL::ViewLayer b_view_layer = b_depsgraph.view_layer_eval();
   BL::Depsgraph::object_instances_iterator b_instance_iter;
@@ -530,15 +595,39 @@ void BlenderSync::sync_objects(BL::Depsgraph &b_depsgraph,
 
     /* Object itself. */
     if (b_instance.show_self()) {
-      sync_object(b_depsgraph,
-                  b_view_layer,
-                  b_instance,
-                  motion_time,
-                  false,
-                  show_lights,
-                  culling,
-                  &use_portal,
-                  sync_hair ? NULL : &geom_task_pool);
+#ifdef WITH_ALEMBIC
+      bool use_procedural = false;
+      bool has_subdivision_modifier = false;
+      BL::MeshSequenceCacheModifier b_mesh_cache(PointerRNA_NULL);
+
+      /* Experimental as Blender does not have good support for procedurals at the moment, also
+       * only available in preview renders since currently do not have a good cache policy, the
+       * data being loaded at once for all the frames. */
+      if (experimental && b_v3d) {
+        b_mesh_cache = object_mesh_cache_find(b_ob, &has_subdivision_modifier);
+        use_procedural = b_mesh_cache && b_mesh_cache.cache_file().use_render_procedural();
+      }
+
+      if (use_procedural) {
+        /* Skip in the motion case, as generating motion blur data will be handled in the
+         * procedural. */
+        if (!motion) {
+          sync_procedural(b_ob, b_mesh_cache, has_subdivision_modifier);
+        }
+      }
+      else
+#endif
+      {
+        sync_object(b_depsgraph,
+                    b_view_layer,
+                    b_instance,
+                    motion_time,
+                    false,
+                    show_lights,
+                    culling,
+                    &use_portal,
+                    sync_hair ? NULL : &geom_task_pool);
+      }
     }
 
     /* Particle hair as separate object. */
@@ -571,6 +660,7 @@ void BlenderSync::sync_objects(BL::Depsgraph &b_depsgraph,
     object_map.post_sync();
     geometry_map.post_sync();
     particle_system_map.post_sync();
+    procedural_map.post_sync();
   }
 
   if (motion)
@@ -629,6 +719,14 @@ void BlenderSync::sync_motion(BL::RenderSettings &b_render,
     }
   }
 
+  /* Check which geometry already has motion blur so it can be skipped. */
+  geometry_motion_attribute_synced.clear();
+  for (Geometry *geom : scene->geometry) {
+    if (geom->attributes.find(ATTR_STD_MOTION_VERTEX_POSITION)) {
+      geometry_motion_attribute_synced.insert(geom);
+    }
+  }
+
   /* note iteration over motion_times set happens in sorted order */
   foreach (float relative_time, motion_times) {
     /* center time is already handled. */
@@ -658,6 +756,8 @@ void BlenderSync::sync_motion(BL::RenderSettings &b_render,
     /* sync object */
     sync_objects(b_depsgraph, b_v3d, relative_time);
   }
+
+  geometry_motion_attribute_synced.clear();
 
   /* we need to set the python thread state again because this
    * function assumes it is being executed from python and will

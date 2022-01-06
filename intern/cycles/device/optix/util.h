@@ -22,7 +22,7 @@
 
 #  ifdef WITH_CUDA_DYNLOAD
 #    include <cuew.h>
- // Do not use CUDA SDK headers when using CUEW
+// Do not use CUDA SDK headers when using CUEW
 #    define OPTIX_DONT_INCLUDE_CUDA
 #  endif
 

@@ -60,14 +60,6 @@ ccl_device int bsdf_oren_nayar_setup(OrenNayarBsdf *bsdf)
   return SD_BSDF | SD_BSDF_HAS_EVAL;
 }
 
-ccl_device bool bsdf_oren_nayar_merge(const ShaderClosure *a, const ShaderClosure *b)
-{
-  const OrenNayarBsdf *bsdf_a = (const OrenNayarBsdf *)a;
-  const OrenNayarBsdf *bsdf_b = (const OrenNayarBsdf *)b;
-
-  return (isequal_float3(bsdf_a->N, bsdf_b->N)) && (bsdf_a->roughness == bsdf_b->roughness);
-}
-
 ccl_device float3 bsdf_oren_nayar_eval_reflect(const ShaderClosure *sc,
                                                const float3 I,
                                                const float3 omega_in,

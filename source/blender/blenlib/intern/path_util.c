@@ -180,7 +180,7 @@ void BLI_path_normalize(const char *relabase, char *path)
   else {
     if (path[0] == '/' && path[1] == '/') {
       if (path[2] == '\0') {
-        return; /* path is "//" - cant clean it */
+        return; /* path is "//" - can't clean it */
       }
       path = path + 2; /* leave the initial "//" untouched */
     }
@@ -235,13 +235,13 @@ void BLI_path_normalize(const char *relabase, char *path)
       memmove(path + a, eind, strlen(eind) + 1);
     }
     else {
-      /* support for odd paths: eg /../home/me --> /home/me
-       * this is a valid path in blender but we cant handle this the usual way below
+      /* Support for odd paths: eg `/../home/me` --> `/home/me`
+       * this is a valid path in blender but we can't handle this the usual way below
        * simply strip this prefix then evaluate the path as usual.
-       * pythons os.path.normpath() does this */
+       * Python's `os.path.normpath()` does this. */
 
-      /* Note: previous version of following call used an offset of 3 instead of 4,
-       * which meant that the "/../home/me" example actually became "home/me".
+      /* NOTE: previous version of following call used an offset of 3 instead of 4,
+       * which meant that the `/../home/me` example actually became `home/me`.
        * Using offset of 3 gives behavior consistent with the aforementioned
        * Python routine. */
       memmove(path, path + 3, strlen(path + 3) + 1);
@@ -1070,8 +1070,8 @@ bool BLI_path_abs(char *path, const char *basepath)
    * paths relative to the .blend file -elubie */
   BLI_str_replace_char(tmp + BLI_path_unc_prefix_len(tmp), '\\', '/');
 
-  /* Paths starting with // will get the blend file as their base,
-   * this isn't standard in any os but is used in blender all over the place */
+  /* Paths starting with `//` will get the blend file as their base,
+   * this isn't standard in any OS but is used in blender all over the place. */
   if (wasrelative) {
     const char *lslash;
     BLI_strncpy(base, basepath, sizeof(base));
@@ -1102,12 +1102,9 @@ bool BLI_path_abs(char *path, const char *basepath)
   }
 
 #ifdef WIN32
-  /* skip first two chars, which in case of
-   * absolute path will be drive:/blabla and
-   * in case of relpath //blabla/. So relpath
-   * // will be retained, rest will be nice and
-   * shiny win32 backward slashes :) -jesterKing
-   */
+  /* NOTE(@jesterking): Skip first two chars, which in case of absolute path will
+   * be `drive:/blabla` and in case of `relpath` `//blabla/`.
+   * So `relpath` `//` will be retained, rest will be nice and shiny WIN32 backward slashes. */
   BLI_str_replace_char(path + 2, '/', '\\');
 #endif
 
@@ -1275,7 +1272,7 @@ void BLI_setenv(const char *env, const char *val)
 {
   /* free windows */
 
-#if (defined(WIN32) || defined(WIN64))
+#if (defined(_WIN32) || defined(_WIN64))
   uputenv(env, val);
 
 #else
@@ -1646,8 +1643,8 @@ bool BLI_path_filename_ensure(char *filepath, size_t maxlen, const char *filenam
 /**
  * Converts `/foo/bar.txt` to `/foo/` and `bar.txt`
  *
- * - Wont change \a string.
- * - Wont create any directories.
+ * - Won't change \a string.
+ * - Won't create any directories.
  * - Doesn't use CWD, or deal with relative paths.
  * - Only fill's in \a dir and \a file when they are non NULL.
  */
@@ -1897,7 +1894,7 @@ bool BLI_path_name_at_index(const char *__restrict path,
           if (index_step == index) {
             *r_offset = prev;
             *r_len = i - prev;
-            /* printf("!!! %d %d\n", start, end); */
+            // printf("!!! %d %d\n", start, end);
             return true;
           }
           index_step += 1;
@@ -2013,9 +2010,9 @@ void BLI_path_slash_native(char *path)
 {
 #ifdef WIN32
   if (path && BLI_strnlen(path, 3) > 2) {
-    BLI_str_replace_char(path + 2, '/', '\\');
+    BLI_str_replace_char(path + 2, ALTSEP, SEP);
   }
 #else
-  BLI_str_replace_char(path + BLI_path_unc_prefix_len(path), '\\', '/');
+  BLI_str_replace_char(path + BLI_path_unc_prefix_len(path), ALTSEP, SEP);
 #endif
 }

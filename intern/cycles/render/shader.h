@@ -41,7 +41,6 @@ CCL_NAMESPACE_BEGIN
 
 class Device;
 class DeviceScene;
-class DeviceRequestedFeatures;
 class Mesh;
 class Progress;
 class Scene;
@@ -120,6 +119,7 @@ class Shader : public Node {
   bool has_surface;
   bool has_surface_emission;
   bool has_surface_transparent;
+  bool has_surface_raytrace;
   bool has_volume;
   bool has_displacement;
   bool has_surface_bssrdf;
@@ -156,6 +156,14 @@ class Shader : public Node {
   void set_graph(ShaderGraph *graph);
   void tag_update(Scene *scene);
   void tag_used(Scene *scene);
+
+  /* Return true when either of the surface or displacement socket of the output node is linked.
+   * This should be used to ensure that surface attributes are also requested even when only the
+   * displacement socket is linked. */
+  bool has_surface_link() const
+  {
+    return has_surface || has_displacement;
+  }
 
   bool need_update_geometry() const;
 };
@@ -211,7 +219,7 @@ class ShaderManager {
   static void add_default(Scene *scene);
 
   /* Selective nodes compilation. */
-  void get_requested_features(Scene *scene, DeviceRequestedFeatures *requested_features);
+  uint get_kernel_features(Scene *scene);
 
   static void free_memory();
 
@@ -239,8 +247,7 @@ class ShaderManager {
 
   size_t beckmann_table_offset;
 
-  void get_requested_graph_features(ShaderGraph *graph,
-                                    DeviceRequestedFeatures *requested_features);
+  uint get_graph_kernel_features(ShaderGraph *graph);
 
   thread_spin_lock attribute_lock_;
 

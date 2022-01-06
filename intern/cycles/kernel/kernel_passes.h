@@ -35,7 +35,7 @@ ccl_device_forceinline ccl_global float *kernel_pass_pixel_render_buffer(
 
 #ifdef __DENOISING_FEATURES__
 
-ccl_device_inline void kernel_write_denoising_features(
+ccl_device_forceinline void kernel_write_denoising_features_surface(
     INTEGRATOR_STATE_ARGS, const ShaderData *sd, ccl_global float *ccl_restrict render_buffer)
 {
   if (!(INTEGRATOR_STATE(path, flag) & PATH_RAY_DENOISING_FEATURES)) {
@@ -103,8 +103,7 @@ ccl_device_inline void kernel_write_denoising_features(
       normal = transform_direction(&worldtocamera, normal);
 
       const float3 denoising_normal = ensure_finite3(normal);
-      kernel_write_pass_float3_unaligned(buffer + kernel_data.film.pass_denoising_normal,
-                                         denoising_normal);
+      kernel_write_pass_float3(buffer + kernel_data.film.pass_denoising_normal, denoising_normal);
     }
 
     if (kernel_data.film.pass_denoising_albedo != PASS_UNUSED) {
@@ -112,8 +111,7 @@ ccl_device_inline void kernel_write_denoising_features(
                                                                    denoising_feature_throughput);
       const float3 denoising_albedo = ensure_finite3(denoising_feature_throughput *
                                                      diffuse_albedo);
-      kernel_write_pass_float3_unaligned(buffer + kernel_data.film.pass_denoising_albedo,
-                                         denoising_albedo);
+      kernel_write_pass_float3(buffer + kernel_data.film.pass_denoising_albedo, denoising_albedo);
     }
 
     INTEGRATOR_STATE_WRITE(path, flag) &= ~PATH_RAY_DENOISING_FEATURES;
@@ -122,18 +120,45 @@ ccl_device_inline void kernel_write_denoising_features(
     INTEGRATOR_STATE_WRITE(path, denoising_feature_throughput) *= specular_albedo;
   }
 }
+
+ccl_device_forceinline void kernel_write_denoising_features_volume(INTEGRATOR_STATE_ARGS,
+                                                                   const float3 albedo,
+                                                                   const bool scatter,
+                                                                   ccl_global float *ccl_restrict
+                                                                       render_buffer)
+{
+  ccl_global float *buffer = kernel_pass_pixel_render_buffer(INTEGRATOR_STATE_PASS, render_buffer);
+  const float3 denoising_feature_throughput = INTEGRATOR_STATE(path, denoising_feature_throughput);
+
+  if (scatter && kernel_data.film.pass_denoising_normal != PASS_UNUSED) {
+    /* Assume scatter is sufficiently diffuse to stop writing denoising features. */
+    INTEGRATOR_STATE_WRITE(path, flag) &= ~PATH_RAY_DENOISING_FEATURES;
+
+    /* Write view direction as normal. */
+    const float3 denoising_normal = make_float3(0.0f, 0.0f, -1.0f);
+    kernel_write_pass_float3(buffer + kernel_data.film.pass_denoising_normal, denoising_normal);
+  }
+
+  if (kernel_data.film.pass_denoising_albedo != PASS_UNUSED) {
+    /* Write albedo. */
+    const float3 denoising_albedo = ensure_finite3(denoising_feature_throughput * albedo);
+    kernel_write_pass_float3(buffer + kernel_data.film.pass_denoising_albedo, denoising_albedo);
+  }
+}
 #endif /* __DENOISING_FEATURES__ */
 
 #ifdef __SHADOW_CATCHER__
 
-/* Write transparency to the matte pass at a bounce off the shadow catcher object (this is where
- * the path split happens). */
-ccl_device_inline void kernel_write_shadow_catcher_bounce_data(
+/* Write shadow catcher passes on a bounce from the shadow catcher object. */
+ccl_device_forceinline void kernel_write_shadow_catcher_bounce_data(
     INTEGRATOR_STATE_ARGS, const ShaderData *sd, ccl_global float *ccl_restrict render_buffer)
 {
-  if (kernel_data.film.pass_shadow_catcher_matte == PASS_UNUSED) {
+  if (!kernel_data.integrator.has_shadow_catcher) {
     return;
   }
+
+  kernel_assert(kernel_data.film.pass_shadow_catcher_sample_count != PASS_UNUSED);
+  kernel_assert(kernel_data.film.pass_shadow_catcher_matte != PASS_UNUSED);
 
   if (!kernel_shadow_catcher_is_path_split_bounce(INTEGRATOR_STATE_PASS, sd->object_flag)) {
     return;
@@ -141,62 +166,25 @@ ccl_device_inline void kernel_write_shadow_catcher_bounce_data(
 
   ccl_global float *buffer = kernel_pass_pixel_render_buffer(INTEGRATOR_STATE_PASS, render_buffer);
 
-  /* TODO(sergey): Use contribution and transparency based on the throughput, allowing to have
-   * transparent object between camera and shadow catcher. */
+  /* Count sample for the shadow catcher object. */
+  kernel_write_pass_float(buffer + kernel_data.film.pass_shadow_catcher_sample_count, 1.0f);
 
-  kernel_write_pass_float(buffer + kernel_data.film.pass_shadow_catcher_matte + 3, 1.0f);
+  /* Since the split is done, the sample does not contribute to the matte, so accumulate it as
+   * transparency to the matte. */
+  const float3 throughput = INTEGRATOR_STATE(path, throughput);
+  kernel_write_pass_float(buffer + kernel_data.film.pass_shadow_catcher_matte + 3,
+                          average(throughput));
 }
 
 #endif /* __SHADOW_CATCHER__ */
 
-#if 0
-#  ifdef __KERNEL_DEBUG__
-ccl_device_inline void kernel_write_debug_passes(const KernelGlobals *ccl_restrict kg,
-                                                 ccl_global float *ccl_restrict buffer,
-                                                 PathRadiance *L)
+ccl_device_inline size_t kernel_write_id_pass(float *ccl_restrict buffer,
+                                              size_t depth,
+                                              float id,
+                                              float matte_weight)
 {
-  int flag = kernel_data.film.pass_flag;
-  if (flag & PASSMASK(BVH_TRAVERSED_NODES)) {
-    kernel_write_pass_float(buffer + kernel_data.film.pass_bvh_traversed_nodes,
-                            L->debug_data.num_bvh_traversed_nodes);
-  }
-  if (flag & PASSMASK(BVH_TRAVERSED_INSTANCES)) {
-    kernel_write_pass_float(buffer + kernel_data.film.pass_bvh_traversed_instances,
-                            L->debug_data.num_bvh_traversed_instances);
-  }
-  if (flag & PASSMASK(BVH_INTERSECTIONS)) {
-    kernel_write_pass_float(buffer + kernel_data.film.pass_bvh_intersections,
-                            L->debug_data.num_bvh_intersections);
-  }
-  if (flag & PASSMASK(RAY_BOUNCES)) {
-    kernel_write_pass_float(buffer + kernel_data.film.pass_ray_bounces,
-                            L->debug_data.num_ray_bounces);
-  }
-}
-#  endif /* __KERNEL_DEBUG__ */
-#endif
-
-#ifdef __KERNEL_CPU__
-#  define WRITE_ID_SLOT(buffer, depth, id, matte_weight, name) \
-    kernel_write_id_pass_cpu(buffer, depth * 2, id, matte_weight, kg->coverage_##name)
-ccl_device_inline size_t kernel_write_id_pass_cpu(
-    float *ccl_restrict buffer, size_t depth, float id, float matte_weight, CoverageMap *map)
-{
-  if (map) {
-    (*map)[id] += matte_weight;
-    return 0;
-  }
-#else /* __KERNEL_CPU__ */
-#  define WRITE_ID_SLOT(buffer, depth, id, matte_weight, name) \
-    kernel_write_id_slots_gpu(buffer, depth * 2, id, matte_weight)
-ccl_device_inline size_t kernel_write_id_slots_gpu(ccl_global float *ccl_restrict buffer,
-                                                   size_t depth,
-                                                   float id,
-                                                   float matte_weight)
-{
-#endif /* __KERNEL_CPU__ */
-  kernel_write_id_slots(buffer, depth, id, matte_weight);
-  return depth * 2;
+  kernel_write_id_slots(buffer, depth * 2, id, matte_weight);
+  return depth * 4;
 }
 
 ccl_device_inline void kernel_write_data_passes(INTEGRATOR_STATE_ARGS,
@@ -223,29 +211,37 @@ ccl_device_inline void kernel_write_data_passes(INTEGRATOR_STATE_ARGS,
         average(shader_bsdf_alpha(kg, sd)) >= kernel_data.film.pass_alpha_threshold) {
       if (INTEGRATOR_STATE(path, sample) == 0) {
         if (flag & PASSMASK(DEPTH)) {
-          float depth = camera_z_depth(kg, sd->P);
+          const float depth = camera_z_depth(kg, sd->P);
           kernel_write_pass_float(buffer + kernel_data.film.pass_depth, depth);
         }
         if (flag & PASSMASK(OBJECT_ID)) {
-          float id = object_pass_id(kg, sd->object);
+          const float id = object_pass_id(kg, sd->object);
           kernel_write_pass_float(buffer + kernel_data.film.pass_object_id, id);
         }
         if (flag & PASSMASK(MATERIAL_ID)) {
-          float id = shader_pass_id(kg, sd);
+          const float id = shader_pass_id(kg, sd);
           kernel_write_pass_float(buffer + kernel_data.film.pass_material_id, id);
         }
       }
 
+      if (flag & PASSMASK(POSITION)) {
+        const float3 position = sd->P;
+        kernel_write_pass_float3(buffer + kernel_data.film.pass_position, position);
+      }
       if (flag & PASSMASK(NORMAL)) {
-        float3 normal = shader_bsdf_average_normal(kg, sd);
+        const float3 normal = shader_bsdf_average_normal(kg, sd);
         kernel_write_pass_float3(buffer + kernel_data.film.pass_normal, normal);
       }
+      if (flag & PASSMASK(ROUGHNESS)) {
+        const float roughness = shader_bsdf_average_roughness(sd);
+        kernel_write_pass_float(buffer + kernel_data.film.pass_roughness, roughness);
+      }
       if (flag & PASSMASK(UV)) {
-        float3 uv = primitive_uv(kg, sd);
+        const float3 uv = primitive_uv(kg, sd);
         kernel_write_pass_float3(buffer + kernel_data.film.pass_uv, uv);
       }
       if (flag & PASSMASK(MOTION)) {
-        float4 speed = primitive_motion_vector(kg, sd);
+        const float4 speed = primitive_motion_vector(kg, sd);
         kernel_write_pass_float4(buffer + kernel_data.film.pass_motion, speed);
         kernel_write_pass_float(buffer + kernel_data.film.pass_motion_weight, 1.0f);
       }
@@ -261,19 +257,19 @@ ccl_device_inline void kernel_write_data_passes(INTEGRATOR_STATE_ARGS,
     if (matte_weight > 0.0f) {
       ccl_global float *cryptomatte_buffer = buffer + kernel_data.film.pass_cryptomatte;
       if (kernel_data.film.cryptomatte_passes & CRYPT_OBJECT) {
-        float id = object_cryptomatte_id(kg, sd->object);
-        cryptomatte_buffer += WRITE_ID_SLOT(
-            cryptomatte_buffer, kernel_data.film.cryptomatte_depth, id, matte_weight, object);
+        const float id = object_cryptomatte_id(kg, sd->object);
+        cryptomatte_buffer += kernel_write_id_pass(
+            cryptomatte_buffer, kernel_data.film.cryptomatte_depth, id, matte_weight);
       }
       if (kernel_data.film.cryptomatte_passes & CRYPT_MATERIAL) {
-        float id = shader_cryptomatte_id(kg, sd->shader);
-        cryptomatte_buffer += WRITE_ID_SLOT(
-            cryptomatte_buffer, kernel_data.film.cryptomatte_depth, id, matte_weight, material);
+        const float id = shader_cryptomatte_id(kg, sd->shader);
+        cryptomatte_buffer += kernel_write_id_pass(
+            cryptomatte_buffer, kernel_data.film.cryptomatte_depth, id, matte_weight);
       }
       if (kernel_data.film.cryptomatte_passes & CRYPT_ASSET) {
-        float id = object_cryptomatte_asset_id(kg, sd->object);
-        cryptomatte_buffer += WRITE_ID_SLOT(
-            cryptomatte_buffer, kernel_data.film.cryptomatte_depth, id, matte_weight, asset);
+        const float id = object_cryptomatte_asset_id(kg, sd->object);
+        cryptomatte_buffer += kernel_write_id_pass(
+            cryptomatte_buffer, kernel_data.film.cryptomatte_depth, id, matte_weight);
       }
     }
   }
@@ -325,82 +321,5 @@ ccl_device_inline void kernel_write_data_passes(INTEGRATOR_STATE_ARGS,
   }
 #endif
 }
-
-#if 0
-ccl_device_inline void kernel_write_light_passes(const KernelGlobals *ccl_restrict kg,
-                                                 ccl_global float *ccl_restrict buffer,
-                                                 PathRadiance *L)
-{
-#  ifdef __PASSES__
-  int light_flag = kernel_data.film.light_pass_flag;
-
-  if (!kernel_data.film.use_light_pass)
-    return;
-
-  if (light_flag & PASSMASK(AO))
-    kernel_write_pass_float3(buffer + kernel_data.film.pass_ao, L->ao);
-#  endif
-}
-#endif
-
-#if 0
-ccl_device_inline void kernel_write_result(const KernelGlobals *ccl_restrict kg,
-                                           ccl_global float *ccl_restrict buffer,
-                                           int sample,
-                                           PathRadiance *L)
-{
-  PROFILING_INIT(kg, PROFILING_WRITE_RESULT);
-  PROFILING_OBJECT(PRIM_NONE);
-
-  float alpha;
-  float3 L_sum = path_radiance_clamp_and_sum(kg, L, &alpha);
-
-  if (kernel_data.film.light_pass_flag & PASSMASK(COMBINED)) {
-    kernel_write_pass_float4(buffer, make_float4(L_sum.x, L_sum.y, L_sum.z, alpha));
-  }
-
-#  ifdef __KERNEL_DEBUG__
-  kernel_write_debug_passes(kg, buffer, L);
-#  endif
-
-  /* Adaptive Sampling. Fill the additional buffer with the odd samples and calculate our stopping
-     criteria. This is the heuristic from "A hierarchical automatic stopping condition for Monte
-     Carlo global illumination" except that here it is applied per pixel and not in hierarchical
-     tiles. */
-  if (kernel_data.film.pass_adaptive_aux_buffer != PASS_UNUSED) {
-    if (sample_is_even(kernel_data.integrator.sampling_pattern, sample)) {
-      kernel_write_pass_float4(buffer + kernel_data.film.pass_adaptive_aux_buffer,
-                               make_float4(L_sum.x * 2.0f, L_sum.y * 2.0f, L_sum.z * 2.0f, 0.0f));
-    }
-#  ifdef __KERNEL_CPU__
-    if ((sample > kernel_data.integrator.adaptive_min_samples) &&
-        kernel_data.integrator.adaptive_stop_per_sample) {
-      const int step = kernel_data.integrator.adaptive_step;
-
-      if ((sample & (step - 1)) == (step - 1)) {
-        kernel_do_adaptive_stopping(kg, buffer, sample);
-      }
-    }
-#  endif
-  }
-
-  /* Write the sample count as negative numbers initially to mark the samples as in progress.
-   * Once the tile has finished rendering, the sign gets flipped and all the pixel values
-   * are scaled as if they were taken at a uniform sample count. */
-  if (kernel_data.film.pass_sample_count != PASS_UNUSED) {
-    /* Make sure it's a negative number. In progressive refine mode, this bit gets flipped between
-     * passes. */
-#  ifdef __ATOMIC_PASS_WRITE__
-    atomic_fetch_and_or_uint32((ccl_global uint *)(buffer + kernel_data.film.pass_sample_count),
-                               0x80000000);
-#  else
-    if (buffer[kernel_data.film.pass_sample_count] > 0) {
-      buffer[kernel_data.film.pass_sample_count] *= -1.0f;
-    }
-#  endif
-    kernel_write_pass_float(buffer + kernel_data.film.pass_sample_count, -1.0f);
-  }
-}
-#endif
 
 CCL_NAMESPACE_END

@@ -47,7 +47,7 @@ struct KernelParamsOptiX {
 };
 
 #ifdef __NVCC__
-extern "C" __constant__ KernelParamsOptiX __params;
+extern "C" static __constant__ KernelParamsOptiX __params;
 #endif
 
 /* Abstraction macros */

@@ -69,7 +69,7 @@
 
 extern "C" {
 
-// The following prevents a linking error in debug mode for MSVC using the libs in CVS
+/* The following prevents a linking error in debug mode for MSVC using the libs in SVN. */
 #if defined(WITH_OPENEXR) && defined(_WIN32) && defined(DEBUG) && _MSC_VER < 1900
 _CRTIMP void __cdecl _invalid_parameter_noinfo(void)
 {
@@ -930,7 +930,7 @@ void IMB_exrtile_begin_write(
   exr_printf("%s %-6s %-22s \"%s\"\n", "p", "view", "name", "internal_name");
   exr_printf("---------------------------------------------------------------\n");
 
-  /* assign channels  */
+  /* Assign channels. */
   for (echan = (ExrChannel *)data->channels.first; echan; echan = echan->next) {
     /* Tiles are expected to be saved with full float currently. */
     BLI_assert(echan->use_half_float == 0);
@@ -1705,13 +1705,13 @@ static void exr_print_filecontents(MultiPartInputFile &file)
   }
 }
 
-/* for non-multilayer, map  R G B A channel names to something that's in this file */
+/* For non-multi-layer, map R G B A channel names to something that's in this file. */
 static const char *exr_rgba_channelname(MultiPartInputFile &file, const char *chan)
 {
   const ChannelList &channels = file.header(0).channels();
 
   for (ChannelList::ConstIterator i = channels.begin(); i != channels.end(); ++i) {
-    /* const Channel &channel = i.channel(); */ /* Not used yet */
+    // const Channel &channel = i.channel(); /* Not used yet. */
     const char *str = i.name();
     int len = strlen(str);
     if (len) {

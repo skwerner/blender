@@ -129,6 +129,7 @@ NODE_DEFINE(Light)
 
   SOCKET_BOOLEAN(cast_shadow, "Cast Shadow", true);
   SOCKET_BOOLEAN(use_mis, "Use Mis", false);
+  SOCKET_BOOLEAN(use_camera, "Use Camera", true);
   SOCKET_BOOLEAN(use_diffuse, "Use Diffuse", true);
   SOCKET_BOOLEAN(use_glossy, "Use Glossy", true);
   SOCKET_BOOLEAN(use_transmission, "Use Transmission", true);
@@ -137,6 +138,7 @@ NODE_DEFINE(Light)
   SOCKET_INT(max_bounces, "Max Bounces", 1024);
   SOCKET_UINT(random_id, "Random ID", 0);
 
+  SOCKET_BOOLEAN(is_shadow_catcher, "Shadow Catcher", true);
   SOCKET_BOOLEAN(is_portal, "Is Portal", false);
   SOCKET_BOOLEAN(is_enabled, "Is Enabled", true);
 
@@ -177,7 +179,6 @@ LightManager::LightManager()
 {
   update_flags = UPDATE_ALL;
   need_update_background = true;
-  use_light_visibility = false;
   last_background_enabled = false;
   last_background_resolution = 0;
 }
@@ -341,21 +342,23 @@ void LightManager::device_update_distribution(Device *,
     int object_id = j;
     int shader_flag = 0;
 
+    if (!(object->get_visibility() & PATH_RAY_CAMERA)) {
+      shader_flag |= SHADER_EXCLUDE_CAMERA;
+    }
     if (!(object->get_visibility() & PATH_RAY_DIFFUSE)) {
       shader_flag |= SHADER_EXCLUDE_DIFFUSE;
-      use_light_visibility = true;
     }
     if (!(object->get_visibility() & PATH_RAY_GLOSSY)) {
       shader_flag |= SHADER_EXCLUDE_GLOSSY;
-      use_light_visibility = true;
     }
     if (!(object->get_visibility() & PATH_RAY_TRANSMIT)) {
       shader_flag |= SHADER_EXCLUDE_TRANSMIT;
-      use_light_visibility = true;
     }
     if (!(object->get_visibility() & PATH_RAY_VOLUME_SCATTER)) {
       shader_flag |= SHADER_EXCLUDE_SCATTER;
-      use_light_visibility = true;
+    }
+    if (!(object->get_is_shadow_catcher())) {
+      shader_flag |= SHADER_EXCLUDE_SHADOW_CATCHER;
     }
 
     size_t mesh_num_triangles = mesh->num_triangles();
@@ -394,38 +397,39 @@ void LightManager::device_update_distribution(Device *,
   }
 
   float trianglearea = totarea;
-
   /* point lights */
-  float lightarea = (totarea > 0.0f) ? totarea / num_lights : 1.0f;
   bool use_lamp_mis = false;
-
   int light_index = 0;
-  foreach (Light *light, scene->lights) {
-    if (!light->is_enabled)
-      continue;
 
-    distribution[offset].totarea = totarea;
-    distribution[offset].prim = ~light_index;
-    distribution[offset].lamp.pad = 1.0f;
-    distribution[offset].lamp.size = light->size;
-    totarea += lightarea;
+  if (num_lights > 0) {
+    float lightarea = (totarea > 0.0f) ? totarea / num_lights : 1.0f;
+    foreach (Light *light, scene->lights) {
+      if (!light->is_enabled)
+        continue;
 
-    if (light->light_type == LIGHT_DISTANT) {
-      use_lamp_mis |= (light->angle > 0.0f && light->use_mis);
-    }
-    else if (light->light_type == LIGHT_POINT || light->light_type == LIGHT_SPOT) {
-      use_lamp_mis |= (light->size > 0.0f && light->use_mis);
-    }
-    else if (light->light_type == LIGHT_AREA) {
-      use_lamp_mis |= light->use_mis;
-    }
-    else if (light->light_type == LIGHT_BACKGROUND) {
-      num_background_lights++;
-      background_mis |= light->use_mis;
-    }
+      distribution[offset].totarea = totarea;
+      distribution[offset].prim = ~light_index;
+      distribution[offset].lamp.pad = 1.0f;
+      distribution[offset].lamp.size = light->size;
+      totarea += lightarea;
 
-    light_index++;
-    offset++;
+      if (light->light_type == LIGHT_DISTANT) {
+        use_lamp_mis |= (light->angle > 0.0f && light->use_mis);
+      }
+      else if (light->light_type == LIGHT_POINT || light->light_type == LIGHT_SPOT) {
+        use_lamp_mis |= (light->size > 0.0f && light->use_mis);
+      }
+      else if (light->light_type == LIGHT_AREA) {
+        use_lamp_mis |= light->use_mis;
+      }
+      else if (light->light_type == LIGHT_BACKGROUND) {
+        num_background_lights++;
+        background_mis |= light->use_mis;
+      }
+
+      light_index++;
+      offset++;
+    }
   }
 
   /* normalize cumulative distribution functions */
@@ -479,10 +483,10 @@ void LightManager::device_update_distribution(Device *,
     kfilm->pass_shadow_scale = 1.0f;
 
     if (kintegrator->pdf_triangles != 0.0f)
-      kfilm->pass_shadow_scale *= 0.5f;
+      kfilm->pass_shadow_scale /= 0.5f;
 
     if (num_background_lights < num_lights)
-      kfilm->pass_shadow_scale *= (float)(num_lights - num_background_lights) / (float)num_lights;
+      kfilm->pass_shadow_scale /= (float)(num_lights - num_background_lights) / (float)num_lights;
 
     /* CDF */
     dscene->light_distribution.copy_to_device();
@@ -749,21 +753,23 @@ void LightManager::device_update_points(Device *, DeviceScene *dscene, Scene *sc
     if (!light->cast_shadow)
       shader_id &= ~SHADER_CAST_SHADOW;
 
+    if (!light->use_camera) {
+      shader_id |= SHADER_EXCLUDE_CAMERA;
+    }
     if (!light->use_diffuse) {
       shader_id |= SHADER_EXCLUDE_DIFFUSE;
-      use_light_visibility = true;
     }
     if (!light->use_glossy) {
       shader_id |= SHADER_EXCLUDE_GLOSSY;
-      use_light_visibility = true;
     }
     if (!light->use_transmission) {
       shader_id |= SHADER_EXCLUDE_TRANSMIT;
-      use_light_visibility = true;
     }
     if (!light->use_scatter) {
       shader_id |= SHADER_EXCLUDE_SCATTER;
-      use_light_visibility = true;
+    }
+    if (!light->is_shadow_catcher) {
+      shader_id |= SHADER_EXCLUDE_SHADOW_CATCHER;
     }
 
     klights[light_index].type = light->light_type;
@@ -818,19 +824,15 @@ void LightManager::device_update_points(Device *, DeviceScene *dscene, Scene *sc
 
       if (!(visibility & PATH_RAY_DIFFUSE)) {
         shader_id |= SHADER_EXCLUDE_DIFFUSE;
-        use_light_visibility = true;
       }
       if (!(visibility & PATH_RAY_GLOSSY)) {
         shader_id |= SHADER_EXCLUDE_GLOSSY;
-        use_light_visibility = true;
       }
       if (!(visibility & PATH_RAY_TRANSMIT)) {
         shader_id |= SHADER_EXCLUDE_TRANSMIT;
-        use_light_visibility = true;
       }
       if (!(visibility & PATH_RAY_VOLUME_SCATTER)) {
         shader_id |= SHADER_EXCLUDE_SCATTER;
-        use_light_visibility = true;
       }
     }
     else if (light->light_type == LIGHT_AREA) {
@@ -980,8 +982,6 @@ void LightManager::device_update(Device *device,
 
   device_free(device, dscene, need_update_background);
 
-  use_light_visibility = false;
-
   device_update_points(device, dscene, scene);
   if (progress.get_cancel())
     return;
@@ -999,8 +999,6 @@ void LightManager::device_update(Device *device,
   device_update_ies(dscene);
   if (progress.get_cancel())
     return;
-
-  scene->film->set_use_light_visibility(use_light_visibility);
 
   update_flags = UPDATE_NONE;
   need_update_background = false;

@@ -130,7 +130,7 @@ class ImageTextureNode : public ImageSlotTextureNode {
   NODE_SOCKET_API(float3, vector)
   NODE_SOCKET_API(float3, vector_dx)
   NODE_SOCKET_API(float3, vector_dy)
-  NODE_SOCKET_API(array<int>, tiles)
+  NODE_SOCKET_API_ARRAY(array<int>, tiles)
 
  protected:
   void cull_tiles(Scene *scene, ShaderGraph *graph);
@@ -144,10 +144,6 @@ class EnvironmentTextureNode : public ImageSlotTextureNode {
   bool has_attribute_dependency()
   {
     return true;
-  }
-  virtual int get_group()
-  {
-    return NODE_GROUP_LEVEL_2;
   }
 
   virtual bool equals(const ShaderNode &other)
@@ -173,11 +169,6 @@ class EnvironmentTextureNode : public ImageSlotTextureNode {
 class SkyTextureNode : public TextureNode {
  public:
   SHADER_NODE_CLASS(SkyTextureNode)
-
-  virtual int get_group()
-  {
-    return NODE_GROUP_LEVEL_2;
-  }
 
   NODE_SOCKET_API(NodeSkyType, sky_type)
   NODE_SOCKET_API(float3, sun_direction)
@@ -228,29 +219,19 @@ class OutputAOVNode : public ShaderNode {
 
   NODE_SOCKET_API(ustring, name)
 
-  virtual int get_group()
-  {
-    return NODE_GROUP_LEVEL_4;
-  }
-
   /* Don't allow output node de-duplication. */
   virtual bool equals(const ShaderNode & /*other*/)
   {
     return false;
   }
 
-  int slot;
+  int offset;
   bool is_color;
 };
 
 class GradientTextureNode : public TextureNode {
  public:
   SHADER_NODE_CLASS(GradientTextureNode)
-
-  virtual int get_group()
-  {
-    return NODE_GROUP_LEVEL_2;
-  }
 
   NODE_SOCKET_API(NodeGradientType, gradient_type)
   NODE_SOCKET_API(float3, vector)
@@ -273,19 +254,14 @@ class VoronoiTextureNode : public TextureNode {
  public:
   SHADER_NODE_CLASS(VoronoiTextureNode)
 
-  virtual int get_group()
-  {
-    return NODE_GROUP_LEVEL_2;
-  }
-
   virtual int get_feature()
   {
     int result = ShaderNode::get_feature();
     if (dimensions == 4) {
-      result |= NODE_FEATURE_VORONOI_EXTRA;
+      result |= KERNEL_FEATURE_NODE_VORONOI_EXTRA;
     }
     else if (dimensions >= 2 && feature == NODE_VORONOI_SMOOTH_F1) {
-      result |= NODE_FEATURE_VORONOI_EXTRA;
+      result |= KERNEL_FEATURE_NODE_VORONOI_EXTRA;
     }
     return result;
   }
@@ -305,11 +281,6 @@ class MusgraveTextureNode : public TextureNode {
  public:
   SHADER_NODE_CLASS(MusgraveTextureNode)
 
-  virtual int get_group()
-  {
-    return NODE_GROUP_LEVEL_2;
-  }
-
   NODE_SOCKET_API(int, dimensions)
   NODE_SOCKET_API(NodeMusgraveType, musgrave_type)
   NODE_SOCKET_API(float, w)
@@ -325,11 +296,6 @@ class MusgraveTextureNode : public TextureNode {
 class WaveTextureNode : public TextureNode {
  public:
   SHADER_NODE_CLASS(WaveTextureNode)
-
-  virtual int get_group()
-  {
-    return NODE_GROUP_LEVEL_2;
-  }
 
   NODE_SOCKET_API(NodeWaveType, wave_type)
   NODE_SOCKET_API(NodeWaveBandsDirection, bands_direction)
@@ -349,11 +315,6 @@ class MagicTextureNode : public TextureNode {
  public:
   SHADER_NODE_CLASS(MagicTextureNode)
 
-  virtual int get_group()
-  {
-    return NODE_GROUP_LEVEL_2;
-  }
-
   NODE_SOCKET_API(int, depth)
   NODE_SOCKET_API(float3, vector)
   NODE_SOCKET_API(float, scale)
@@ -368,11 +329,6 @@ class CheckerTextureNode : public TextureNode {
   NODE_SOCKET_API(float3, color1)
   NODE_SOCKET_API(float3, color2)
   NODE_SOCKET_API(float, scale)
-
-  virtual int get_group()
-  {
-    return NODE_GROUP_LEVEL_2;
-  }
 };
 
 class BrickTextureNode : public TextureNode {
@@ -394,20 +350,11 @@ class BrickTextureNode : public TextureNode {
   NODE_SOCKET_API(float, brick_width)
   NODE_SOCKET_API(float, row_height)
   NODE_SOCKET_API(float3, vector)
-
-  virtual int get_group()
-  {
-    return NODE_GROUP_LEVEL_2;
-  }
 };
 
 class PointDensityTextureNode : public ShaderNode {
  public:
   SHADER_NODE_NO_CLONE_CLASS(PointDensityTextureNode)
-  virtual int get_group()
-  {
-    return NODE_GROUP_LEVEL_4;
-  }
 
   ~PointDensityTextureNode();
   ShaderNode *clone(ShaderGraph *graph) const;
@@ -447,10 +394,6 @@ class IESLightNode : public TextureNode {
 
   ~IESLightNode();
   ShaderNode *clone(ShaderGraph *graph) const;
-  virtual int get_group()
-  {
-    return NODE_GROUP_LEVEL_2;
-  }
 
   NODE_SOCKET_API(ustring, filename)
   NODE_SOCKET_API(ustring, ies)
@@ -468,10 +411,6 @@ class IESLightNode : public TextureNode {
 class WhiteNoiseTextureNode : public ShaderNode {
  public:
   SHADER_NODE_CLASS(WhiteNoiseTextureNode)
-  virtual int get_group()
-  {
-    return NODE_GROUP_LEVEL_2;
-  }
 
   NODE_SOCKET_API(int, dimensions)
   NODE_SOCKET_API(float3, vector)
@@ -481,10 +420,6 @@ class WhiteNoiseTextureNode : public ShaderNode {
 class MappingNode : public ShaderNode {
  public:
   SHADER_NODE_CLASS(MappingNode)
-  virtual int get_group()
-  {
-    return NODE_GROUP_LEVEL_2;
-  }
   void constant_fold(const ConstantFolder &folder);
 
   NODE_SOCKET_API(float3, vector)
@@ -552,7 +487,7 @@ class BsdfBaseNode : public ShaderNode {
 
   virtual int get_feature()
   {
-    return ShaderNode::get_feature() | NODE_FEATURE_BSDF;
+    return ShaderNode::get_feature() | KERNEL_FEATURE_NODE_BSDF;
   }
 
  protected:
@@ -615,6 +550,8 @@ class PrincipledBsdfNode : public BsdfBaseNode {
                ShaderInput *metallic,
                ShaderInput *subsurface,
                ShaderInput *subsurface_radius,
+               ShaderInput *subsurface_ior,
+               ShaderInput *subsurface_anisotropy,
                ShaderInput *specular,
                ShaderInput *roughness,
                ShaderInput *specular_tint,
@@ -631,6 +568,8 @@ class PrincipledBsdfNode : public BsdfBaseNode {
   NODE_SOCKET_API(float3, base_color)
   NODE_SOCKET_API(float3, subsurface_color)
   NODE_SOCKET_API(float3, subsurface_radius)
+  NODE_SOCKET_API(float, subsurface_ior)
+  NODE_SOCKET_API(float, subsurface_anisotropy)
   NODE_SOCKET_API(float, metallic)
   NODE_SOCKET_API(float, subsurface)
   NODE_SOCKET_API(float, specular)
@@ -767,14 +706,14 @@ class SubsurfaceScatteringNode : public BsdfNode {
   bool has_bssrdf_bump();
   ClosureType get_closure_type()
   {
-    return falloff;
+    return method;
   }
 
   NODE_SOCKET_API(float, scale)
   NODE_SOCKET_API(float3, radius)
-  NODE_SOCKET_API(float, sharpness)
-  NODE_SOCKET_API(float, texture_blur)
-  NODE_SOCKET_API(ClosureType, falloff)
+  NODE_SOCKET_API(float, subsurface_ior)
+  NODE_SOCKET_API(float, subsurface_anisotropy)
+  NODE_SOCKET_API(ClosureType, method)
 };
 
 class EmissionNode : public ShaderNode {
@@ -793,7 +732,7 @@ class EmissionNode : public ShaderNode {
 
   virtual int get_feature()
   {
-    return ShaderNode::get_feature() | NODE_FEATURE_EMISSION;
+    return ShaderNode::get_feature() | KERNEL_FEATURE_NODE_EMISSION;
   }
 
   NODE_SOCKET_API(float3, color)
@@ -808,7 +747,7 @@ class BackgroundNode : public ShaderNode {
 
   virtual int get_feature()
   {
-    return ShaderNode::get_feature() | NODE_FEATURE_EMISSION;
+    return ShaderNode::get_feature() | KERNEL_FEATURE_NODE_EMISSION;
   }
 
   NODE_SOCKET_API(float3, color)
@@ -819,10 +758,6 @@ class BackgroundNode : public ShaderNode {
 class HoldoutNode : public ShaderNode {
  public:
   SHADER_NODE_CLASS(HoldoutNode)
-  virtual int get_group()
-  {
-    return NODE_GROUP_LEVEL_1;
-  }
   virtual ClosureType get_closure_type()
   {
     return CLOSURE_HOLDOUT_ID;
@@ -840,13 +775,9 @@ class AmbientOcclusionNode : public ShaderNode {
   {
     return true;
   }
-  virtual int get_group()
+  virtual int get_feature()
   {
-    return NODE_GROUP_LEVEL_3;
-  }
-  virtual bool has_raytrace()
-  {
-    return true;
+    return KERNEL_FEATURE_NODE_RAYTRACE;
   }
 
   NODE_SOCKET_API(float3, color)
@@ -864,13 +795,9 @@ class VolumeNode : public ShaderNode {
   SHADER_NODE_BASE_CLASS(VolumeNode)
 
   void compile(SVMCompiler &compiler, ShaderInput *param1, ShaderInput *param2);
-  virtual int get_group()
-  {
-    return NODE_GROUP_LEVEL_1;
-  }
   virtual int get_feature()
   {
-    return ShaderNode::get_feature() | NODE_FEATURE_VOLUME;
+    return ShaderNode::get_feature() | KERNEL_FEATURE_NODE_VOLUME;
   }
   virtual ClosureType get_closure_type()
   {
@@ -1032,10 +959,6 @@ class UVMapNode : public ShaderNode {
   {
     return true;
   }
-  virtual int get_group()
-  {
-    return NODE_GROUP_LEVEL_1;
-  }
 
   NODE_SOCKET_API(ustring, attribute)
   NODE_SOCKET_API(bool, from_dupli)
@@ -1044,10 +967,6 @@ class UVMapNode : public ShaderNode {
 class LightPathNode : public ShaderNode {
  public:
   SHADER_NODE_CLASS(LightPathNode)
-  virtual int get_group()
-  {
-    return NODE_GROUP_LEVEL_1;
-  }
 };
 
 class LightFalloffNode : public ShaderNode {
@@ -1057,10 +976,6 @@ class LightFalloffNode : public ShaderNode {
   {
     return true;
   }
-  virtual int get_group()
-  {
-    return NODE_GROUP_LEVEL_2;
-  }
 
   NODE_SOCKET_API(float, strength)
   NODE_SOCKET_API(float, smooth)
@@ -1069,10 +984,6 @@ class LightFalloffNode : public ShaderNode {
 class ObjectInfoNode : public ShaderNode {
  public:
   SHADER_NODE_CLASS(ObjectInfoNode)
-  virtual int get_group()
-  {
-    return NODE_GROUP_LEVEL_1;
-  }
 };
 
 class ParticleInfoNode : public ShaderNode {
@@ -1082,10 +993,6 @@ class ParticleInfoNode : public ShaderNode {
   bool has_attribute_dependency()
   {
     return true;
-  }
-  virtual int get_group()
-  {
-    return NODE_GROUP_LEVEL_1;
   }
 };
 
@@ -1102,13 +1009,9 @@ class HairInfoNode : public ShaderNode {
   {
     return true;
   }
-  virtual int get_group()
-  {
-    return NODE_GROUP_LEVEL_1;
-  }
   virtual int get_feature()
   {
-    return ShaderNode::get_feature() | NODE_FEATURE_HAIR;
+    return ShaderNode::get_feature() | KERNEL_FEATURE_NODE_HAIR;
   }
 };
 
@@ -1187,10 +1090,6 @@ class InvertNode : public ShaderNode {
  public:
   SHADER_NODE_CLASS(InvertNode)
   void constant_fold(const ConstantFolder &folder);
-  virtual int get_group()
-  {
-    return NODE_GROUP_LEVEL_3;
-  }
 
   NODE_SOCKET_API(float, fac)
   NODE_SOCKET_API(float3, color)
@@ -1200,11 +1099,6 @@ class MixNode : public ShaderNode {
  public:
   SHADER_NODE_CLASS(MixNode)
   void constant_fold(const ConstantFolder &folder);
-
-  virtual int get_group()
-  {
-    return NODE_GROUP_LEVEL_3;
-  }
 
   NODE_SOCKET_API(NodeMix, mix_type)
   NODE_SOCKET_API(bool, use_clamp)
@@ -1217,10 +1111,6 @@ class CombineRGBNode : public ShaderNode {
  public:
   SHADER_NODE_CLASS(CombineRGBNode)
   void constant_fold(const ConstantFolder &folder);
-  virtual int get_group()
-  {
-    return NODE_GROUP_LEVEL_3;
-  }
 
   NODE_SOCKET_API(float, r)
   NODE_SOCKET_API(float, g)
@@ -1231,10 +1121,6 @@ class CombineHSVNode : public ShaderNode {
  public:
   SHADER_NODE_CLASS(CombineHSVNode)
   void constant_fold(const ConstantFolder &folder);
-  virtual int get_group()
-  {
-    return NODE_GROUP_LEVEL_3;
-  }
 
   NODE_SOCKET_API(float, h)
   NODE_SOCKET_API(float, s)
@@ -1245,10 +1131,6 @@ class CombineXYZNode : public ShaderNode {
  public:
   SHADER_NODE_CLASS(CombineXYZNode)
   void constant_fold(const ConstantFolder &folder);
-  virtual int get_group()
-  {
-    return NODE_GROUP_LEVEL_3;
-  }
 
   NODE_SOCKET_API(float, x)
   NODE_SOCKET_API(float, y)
@@ -1259,10 +1141,6 @@ class GammaNode : public ShaderNode {
  public:
   SHADER_NODE_CLASS(GammaNode)
   void constant_fold(const ConstantFolder &folder);
-  virtual int get_group()
-  {
-    return NODE_GROUP_LEVEL_1;
-  }
 
   NODE_SOCKET_API(float3, color)
   NODE_SOCKET_API(float, gamma)
@@ -1272,10 +1150,6 @@ class BrightContrastNode : public ShaderNode {
  public:
   SHADER_NODE_CLASS(BrightContrastNode)
   void constant_fold(const ConstantFolder &folder);
-  virtual int get_group()
-  {
-    return NODE_GROUP_LEVEL_1;
-  }
 
   NODE_SOCKET_API(float3, color)
   NODE_SOCKET_API(float, bright)
@@ -1286,10 +1160,6 @@ class SeparateRGBNode : public ShaderNode {
  public:
   SHADER_NODE_CLASS(SeparateRGBNode)
   void constant_fold(const ConstantFolder &folder);
-  virtual int get_group()
-  {
-    return NODE_GROUP_LEVEL_3;
-  }
 
   NODE_SOCKET_API(float3, color)
 };
@@ -1298,10 +1168,6 @@ class SeparateHSVNode : public ShaderNode {
  public:
   SHADER_NODE_CLASS(SeparateHSVNode)
   void constant_fold(const ConstantFolder &folder);
-  virtual int get_group()
-  {
-    return NODE_GROUP_LEVEL_3;
-  }
 
   NODE_SOCKET_API(float3, color)
 };
@@ -1310,10 +1176,6 @@ class SeparateXYZNode : public ShaderNode {
  public:
   SHADER_NODE_CLASS(SeparateXYZNode)
   void constant_fold(const ConstantFolder &folder);
-  virtual int get_group()
-  {
-    return NODE_GROUP_LEVEL_3;
-  }
 
   NODE_SOCKET_API(float3, vector)
 };
@@ -1352,10 +1214,6 @@ class CameraNode : public ShaderNode {
   {
     return true;
   }
-  virtual int get_group()
-  {
-    return NODE_GROUP_LEVEL_2;
-  }
 };
 
 class FresnelNode : public ShaderNode {
@@ -1364,10 +1222,6 @@ class FresnelNode : public ShaderNode {
   bool has_spatial_varying()
   {
     return true;
-  }
-  virtual int get_group()
-  {
-    return NODE_GROUP_LEVEL_1;
   }
 
   NODE_SOCKET_API(float3, normal)
@@ -1381,10 +1235,6 @@ class LayerWeightNode : public ShaderNode {
   {
     return true;
   }
-  virtual int get_group()
-  {
-    return NODE_GROUP_LEVEL_1;
-  }
 
   NODE_SOCKET_API(float3, normal)
   NODE_SOCKET_API(float, blend)
@@ -1397,10 +1247,6 @@ class WireframeNode : public ShaderNode {
   {
     return true;
   }
-  virtual int get_group()
-  {
-    return NODE_GROUP_LEVEL_3;
-  }
 
   NODE_SOCKET_API(float, size)
   NODE_SOCKET_API(bool, use_pixel_size)
@@ -1409,10 +1255,6 @@ class WireframeNode : public ShaderNode {
 class WavelengthNode : public ShaderNode {
  public:
   SHADER_NODE_CLASS(WavelengthNode)
-  virtual int get_group()
-  {
-    return NODE_GROUP_LEVEL_3;
-  }
 
   NODE_SOCKET_API(float, wavelength)
 };
@@ -1421,10 +1263,6 @@ class BlackbodyNode : public ShaderNode {
  public:
   SHADER_NODE_CLASS(BlackbodyNode)
   void constant_fold(const ConstantFolder &folder);
-  virtual int get_group()
-  {
-    return NODE_GROUP_LEVEL_3;
-  }
 
   NODE_SOCKET_API(float, temperature)
 };
@@ -1432,10 +1270,6 @@ class BlackbodyNode : public ShaderNode {
 class MapRangeNode : public ShaderNode {
  public:
   SHADER_NODE_CLASS(MapRangeNode)
-  virtual int get_group()
-  {
-    return NODE_GROUP_LEVEL_3;
-  }
   void expand(ShaderGraph *graph);
 
   NODE_SOCKET_API(float, value)
@@ -1452,10 +1286,6 @@ class ClampNode : public ShaderNode {
  public:
   SHADER_NODE_CLASS(ClampNode)
   void constant_fold(const ConstantFolder &folder);
-  virtual int get_group()
-  {
-    return NODE_GROUP_LEVEL_3;
-  }
   NODE_SOCKET_API(float, value)
   NODE_SOCKET_API(float, min)
   NODE_SOCKET_API(float, max)
@@ -1465,10 +1295,6 @@ class ClampNode : public ShaderNode {
 class MathNode : public ShaderNode {
  public:
   SHADER_NODE_CLASS(MathNode)
-  virtual int get_group()
-  {
-    return NODE_GROUP_LEVEL_1;
-  }
   void expand(ShaderGraph *graph);
   void constant_fold(const ConstantFolder &folder);
 
@@ -1482,10 +1308,6 @@ class MathNode : public ShaderNode {
 class NormalNode : public ShaderNode {
  public:
   SHADER_NODE_CLASS(NormalNode)
-  virtual int get_group()
-  {
-    return NODE_GROUP_LEVEL_2;
-  }
 
   NODE_SOCKET_API(float3, direction)
   NODE_SOCKET_API(float3, normal)
@@ -1494,10 +1316,6 @@ class NormalNode : public ShaderNode {
 class VectorMathNode : public ShaderNode {
  public:
   SHADER_NODE_CLASS(VectorMathNode)
-  virtual int get_group()
-  {
-    return NODE_GROUP_LEVEL_1;
-  }
   void constant_fold(const ConstantFolder &folder);
 
   NODE_SOCKET_API(float3, vector1)
@@ -1511,10 +1329,6 @@ class VectorRotateNode : public ShaderNode {
  public:
   SHADER_NODE_CLASS(VectorRotateNode)
 
-  virtual int get_group()
-  {
-    return NODE_GROUP_LEVEL_3;
-  }
   NODE_SOCKET_API(NodeVectorRotateType, rotate_type)
   NODE_SOCKET_API(bool, invert)
   NODE_SOCKET_API(float3, vector)
@@ -1527,11 +1341,6 @@ class VectorRotateNode : public ShaderNode {
 class VectorTransformNode : public ShaderNode {
  public:
   SHADER_NODE_CLASS(VectorTransformNode)
-
-  virtual int get_group()
-  {
-    return NODE_GROUP_LEVEL_3;
-  }
 
   NODE_SOCKET_API(NodeVectorTransformType, transform_type)
   NODE_SOCKET_API(NodeVectorTransformConvertSpace, convert_from)
@@ -1549,7 +1358,7 @@ class BumpNode : public ShaderNode {
   }
   virtual int get_feature()
   {
-    return NODE_FEATURE_BUMP;
+    return KERNEL_FEATURE_NODE_BUMP;
   }
 
   NODE_SOCKET_API(bool, invert)
@@ -1568,12 +1377,7 @@ class CurvesNode : public ShaderNode {
   explicit CurvesNode(const NodeType *node_type);
   SHADER_NODE_BASE_CLASS(CurvesNode)
 
-  virtual int get_group()
-  {
-    return NODE_GROUP_LEVEL_3;
-  }
-
-  NODE_SOCKET_API(array<float3>, curves)
+  NODE_SOCKET_API_ARRAY(array<float3>, curves)
   NODE_SOCKET_API(float, min_x)
   NODE_SOCKET_API(float, max_x)
   NODE_SOCKET_API(float, fac)
@@ -1602,13 +1406,9 @@ class RGBRampNode : public ShaderNode {
  public:
   SHADER_NODE_CLASS(RGBRampNode)
   void constant_fold(const ConstantFolder &folder);
-  virtual int get_group()
-  {
-    return NODE_GROUP_LEVEL_1;
-  }
 
-  NODE_SOCKET_API(array<float3>, ramp)
-  NODE_SOCKET_API(array<float>, ramp_alpha)
+  NODE_SOCKET_API_ARRAY(array<float3>, ramp)
+  NODE_SOCKET_API_ARRAY(array<float>, ramp_alpha)
   NODE_SOCKET_API(float, fac)
   NODE_SOCKET_API(bool, interpolate)
 };
@@ -1675,10 +1475,6 @@ class NormalMapNode : public ShaderNode {
   {
     return true;
   }
-  virtual int get_group()
-  {
-    return NODE_GROUP_LEVEL_3;
-  }
 
   NODE_SOCKET_API(NodeNormalMapSpace, space)
   NODE_SOCKET_API(ustring, attribute)
@@ -1699,10 +1495,6 @@ class TangentNode : public ShaderNode {
   {
     return true;
   }
-  virtual int get_group()
-  {
-    return NODE_GROUP_LEVEL_3;
-  }
 
   NODE_SOCKET_API(NodeTangentDirectionType, direction_type)
   NODE_SOCKET_API(NodeTangentAxis, axis)
@@ -1717,13 +1509,9 @@ class BevelNode : public ShaderNode {
   {
     return true;
   }
-  virtual int get_group()
+  virtual int get_feature()
   {
-    return NODE_GROUP_LEVEL_3;
-  }
-  virtual bool has_raytrace()
-  {
-    return true;
+    return KERNEL_FEATURE_NODE_RAYTRACE;
   }
 
   NODE_SOCKET_API(float, radius)
@@ -1737,7 +1525,7 @@ class DisplacementNode : public ShaderNode {
   void constant_fold(const ConstantFolder &folder);
   virtual int get_feature()
   {
-    return NODE_FEATURE_BUMP;
+    return KERNEL_FEATURE_NODE_BUMP;
   }
 
   NODE_SOCKET_API(NodeNormalMapSpace, space)
@@ -1758,7 +1546,7 @@ class VectorDisplacementNode : public ShaderNode {
   void constant_fold(const ConstantFolder &folder);
   virtual int get_feature()
   {
-    return NODE_FEATURE_BUMP;
+    return KERNEL_FEATURE_NODE_BUMP;
   }
 
   NODE_SOCKET_API(NodeNormalMapSpace, space)

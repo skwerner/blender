@@ -23,6 +23,7 @@
 #include "RNA_types.h"
 
 #include "blender/blender_id_map.h"
+#include "blender/blender_util.h"
 #include "blender/blender_viewport.h"
 
 #include "render/scene.h"
@@ -74,7 +75,7 @@ class BlenderSync {
                  int width,
                  int height,
                  void **python_thread_state);
-  void sync_view_layer(BL::SpaceView3D &b_v3d, BL::ViewLayer &b_view_layer);
+  void sync_view_layer(BL::ViewLayer &b_view_layer);
   void sync_render_passes(BL::RenderLayer &b_render_layer, BL::ViewLayer &b_view_layer);
   void sync_integrator(BL::ViewLayer &b_view_layer, bool background);
   void sync_camera(BL::RenderSettings &b_render,
@@ -99,14 +100,8 @@ class BlenderSync {
                                           BL::Scene &b_scene,
                                           bool background);
   static bool get_session_pause(BL::Scene &b_scene, bool background);
-  static BufferParams get_buffer_params(BL::RenderSettings &b_render,
-                                        BL::SpaceView3D &b_v3d,
-                                        BL::RegionView3D &b_rv3d,
-                                        Camera *cam,
-                                        int width,
-                                        int height);
-
-  static PassType get_pass_type(BL::RenderPass &b_pass);
+  static BufferParams get_buffer_params(
+      BL::SpaceView3D &b_v3d, BL::RegionView3D &b_rv3d, Camera *cam, int width, int height);
 
  private:
   static DenoiseParams get_denoise_params(BL::Scene &b_scene,
@@ -145,21 +140,31 @@ class BlenderSync {
                       TaskPool *geom_task_pool);
   void sync_object_motion_init(BL::Object &b_parent, BL::Object &b_ob, Object *object);
 
+  void sync_procedural(BL::Object &b_ob,
+                       BL::MeshSequenceCacheModifier &b_mesh_cache,
+                       bool has_subdivision);
+
   bool sync_object_attributes(BL::DepsgraphObjectInstance &b_instance, Object *object);
 
   /* Volume */
-  void sync_volume(BL::Object &b_ob, Volume *volume);
+  void sync_volume(BObjectInfo &b_ob_info, Volume *volume);
 
   /* Mesh */
-  void sync_mesh(BL::Depsgraph b_depsgraph, BL::Object b_ob, Mesh *mesh);
-  void sync_mesh_motion(BL::Depsgraph b_depsgraph, BL::Object b_ob, Mesh *mesh, int motion_step);
+  void sync_mesh(BL::Depsgraph b_depsgraph, BObjectInfo &b_ob_info, Mesh *mesh);
+  void sync_mesh_motion(BL::Depsgraph b_depsgraph,
+                        BObjectInfo &b_ob_info,
+                        Mesh *mesh,
+                        int motion_step);
 
   /* Hair */
-  void sync_hair(BL::Depsgraph b_depsgraph, BL::Object b_ob, Hair *hair);
-  void sync_hair_motion(BL::Depsgraph b_depsgraph, BL::Object b_ob, Hair *hair, int motion_step);
-  void sync_hair(Hair *hair, BL::Object &b_ob, bool motion, int motion_step = 0);
+  void sync_hair(BL::Depsgraph b_depsgraph, BObjectInfo &b_ob_info, Hair *hair);
+  void sync_hair_motion(BL::Depsgraph b_depsgraph,
+                        BObjectInfo &b_ob_info,
+                        Hair *hair,
+                        int motion_step);
+  void sync_hair(Hair *hair, BObjectInfo &b_ob_info, bool motion, int motion_step = 0);
   void sync_particle_hair(
-      Hair *hair, BL::Mesh &b_mesh, BL::Object &b_ob, bool motion, int motion_step = 0);
+      Hair *hair, BL::Mesh &b_mesh, BObjectInfo &b_ob_info, bool motion, int motion_step = 0);
   bool object_has_particle_hair(BL::Object b_ob);
 
   /* Camera */
@@ -168,14 +173,13 @@ class BlenderSync {
 
   /* Geometry */
   Geometry *sync_geometry(BL::Depsgraph &b_depsgrpah,
-                          BL::Object &b_ob,
-                          BL::Object &b_ob_instance,
+                          BObjectInfo &b_ob_info,
                           bool object_updated,
                           bool use_particle_hair,
                           TaskPool *task_pool);
 
   void sync_geometry_motion(BL::Depsgraph &b_depsgraph,
-                            BL::Object &b_ob,
+                            BObjectInfo &b_ob_info,
                             Object *object,
                             float motion_time,
                             bool use_particle_hair,
@@ -184,8 +188,7 @@ class BlenderSync {
   /* Light */
   void sync_light(BL::Object &b_parent,
                   int persistent_id[OBJECT_PERSISTENT_ID_SIZE],
-                  BL::Object &b_ob,
-                  BL::Object &b_ob_instance,
+                  BObjectInfo &b_ob_info,
                   int random_id,
                   Transform &tfm,
                   bool *use_portal);
@@ -215,11 +218,13 @@ class BlenderSync {
 
   id_map<void *, Shader> shader_map;
   id_map<ObjectKey, Object> object_map;
+  id_map<void *, Procedural> procedural_map;
   id_map<GeometryKey, Geometry> geometry_map;
   id_map<ObjectKey, Light> light_map;
   id_map<ParticleSystemKey, ParticleSystem> particle_system_map;
   set<Geometry *> geometry_synced;
   set<Geometry *> geometry_motion_synced;
+  set<Geometry *> geometry_motion_attribute_synced;
   set<float> motion_times;
   void *world_map;
   bool world_recalc;
@@ -237,10 +242,10 @@ class BlenderSync {
     RenderLayerInfo()
         : material_override(PointerRNA_NULL),
           use_background_shader(true),
-          use_background_ao(true),
           use_surfaces(true),
           use_hair(true),
           use_volumes(true),
+          use_motion_blur(true),
           samples(0),
           bound_samples(false)
     {
@@ -249,10 +254,10 @@ class BlenderSync {
     string name;
     BL::Material material_override;
     bool use_background_shader;
-    bool use_background_ao;
     bool use_surfaces;
     bool use_hair;
     bool use_volumes;
+    bool use_motion_blur;
     int samples;
     bool bound_samples;
   } view_layer;

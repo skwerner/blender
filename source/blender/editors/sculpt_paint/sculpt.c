@@ -1146,10 +1146,9 @@ void SCULPT_floodfill_add_active(
       v = SCULPT_active_vertex_get(ss);
     }
     else if (radius > 0.0f) {
-      float radius_squared = (radius == FLT_MAX) ? FLT_MAX : radius * radius;
       float location[3];
       flip_v3_v3(location, SCULPT_active_vertex_co_get(ss), i);
-      v = SCULPT_nearest_vertex_get(sd, ob, location, radius_squared, false);
+      v = SCULPT_nearest_vertex_get(sd, ob, location, radius, false);
     }
 
     if (v != -1) {
@@ -1854,7 +1853,7 @@ static void flip_v3(float v[3], const ePaintSymmetryFlags symm)
   flip_v3_v3(v, v, symm);
 }
 
-static void flip_qt(float quat[3], const ePaintSymmetryFlags symm)
+static void flip_qt(float quat[4], const ePaintSymmetryFlags symm)
 {
   flip_qt_qt(quat, quat, symm);
 }
@@ -2395,7 +2394,7 @@ static float brush_strength(const Sculpt *sd,
         case BRUSH_MASK_SMOOTH:
           return alpha * pressure * feather;
       }
-      BLI_assert(!"Not supposed to happen");
+      BLI_assert_msg(0, "Not supposed to happen");
       return 0.0f;
 
     case SCULPT_TOOL_CREASE:
@@ -3317,7 +3316,7 @@ static void do_draw_brush(Sculpt *sd, Object *ob, PBVHNode **nodes, int totnode)
   mul_v3_v3(offset, ss->cache->scale);
   mul_v3_fl(offset, bstrength);
 
-  /* XXX - this shouldn't be necessary, but sculpting crashes in blender2.8 otherwise
+  /* XXX: this shouldn't be necessary, but sculpting crashes in blender2.8 otherwise
    * initialize before threads so they can do curve mapping. */
   BKE_curvemapping_init(brush->curve);
 
@@ -3396,7 +3395,7 @@ static void do_draw_sharp_brush(Sculpt *sd, Object *ob, PBVHNode **nodes, int to
   mul_v3_v3(offset, ss->cache->scale);
   mul_v3_fl(offset, bstrength);
 
-  /* XXX - this shouldn't be necessary, but sculpting crashes in blender2.8 otherwise
+  /* XXX: this shouldn't be necessary, but sculpting crashes in blender2.8 otherwise
    * initialize before threads so they can do curve mapping. */
   BKE_curvemapping_init(brush->curve);
 
@@ -4196,7 +4195,7 @@ void SCULPT_flip_v3_by_symm_area(float v[3],
   }
 }
 
-void SCULPT_flip_quat_by_symm_area(float quat[3],
+void SCULPT_flip_quat_by_symm_area(float quat[4],
                                    const ePaintSymmetryFlags symm,
                                    const ePaintSymmetryAreas symmarea,
                                    const float pivot[3])
@@ -5792,7 +5791,7 @@ void SCULPT_vertcos_to_key(Object *ob, KeyBlock *kb, const float (*vertCos)[3])
   BKE_keyblock_update_from_vertcos(ob, kb, vertCos);
 }
 
-/* Note: we do the topology update before any brush actions to avoid
+/* NOTE: we do the topology update before any brush actions to avoid
  * issues with the proxies. The size of the proxy can't change, so
  * topology must be updated first. */
 static void sculpt_topology_update(Sculpt *sd,
@@ -6363,7 +6362,7 @@ void SCULPT_flush_stroke_deform(Sculpt *sd, Object *ob, bool is_proxy_used)
     MEM_SAFE_FREE(nodes);
 
     /* Modifiers could depend on mesh normals, so we should update them.
-     * Note, then if sculpting happens on locked key, normals should be re-calculate after applying
+     * NOTE: then if sculpting happens on locked key, normals should be re-calculate after applying
      * coords from key-block on base mesh. */
     BKE_mesh_calc_normals(me);
   }
@@ -6561,10 +6560,7 @@ static void sculpt_update_tex(const Scene *scene, Sculpt *sd, SculptSession *ss)
   Brush *brush = BKE_paint_brush(&sd->paint);
   const int radius = BKE_brush_size_get(scene, brush);
 
-  if (ss->texcache) {
-    MEM_freeN(ss->texcache);
-    ss->texcache = NULL;
-  }
+  MEM_SAFE_FREE(ss->texcache);
 
   if (ss->tex_pool) {
     BKE_image_pool_free(ss->tex_pool);
@@ -7875,7 +7871,7 @@ static bool over_mesh(bContext *C, struct wmOperator *UNUSED(op), float x, float
 static bool sculpt_stroke_test_start(bContext *C, struct wmOperator *op, const float mouse[2])
 {
   /* Don't start the stroke until mouse goes over the mesh.
-   * note: mouse will only be null when re-executing the saved stroke.
+   * NOTE: mouse will only be null when re-executing the saved stroke.
    * We have exception for 'exec' strokes since they may not set 'mouse',
    * only 'location', see: T52195. */
   if (((op->flag & OP_IS_INVOKE) == 0) || (mouse == NULL) ||
@@ -7887,6 +7883,9 @@ static bool sculpt_stroke_test_start(bContext *C, struct wmOperator *op, const f
     ED_view3d_init_mats_rv3d(ob, CTX_wm_region_view3d(C));
 
     sculpt_update_cache_invariants(C, sd, ss, op, mouse);
+
+    SculptCursorGeometryInfo sgi;
+    SCULPT_cursor_geometry_info_update(C, &sgi, mouse, false);
 
     SCULPT_undo_push_begin(ob, sculpt_tool_name(sd));
 

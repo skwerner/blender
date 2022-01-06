@@ -171,7 +171,7 @@ class CompositorContext {
   }
 
   /**
-   * \brief set view settings of color color management
+   * \brief set view settings of color management
    */
   void setViewSettings(const ColorManagedViewSettings *viewSettings)
   {
@@ -179,7 +179,7 @@ class CompositorContext {
   }
 
   /**
-   * \brief get view settings of color color management
+   * \brief get view settings of color management
    */
   const ColorManagedViewSettings *getViewSettings() const
   {
@@ -187,7 +187,7 @@ class CompositorContext {
   }
 
   /**
-   * \brief set display settings of color color management
+   * \brief set display settings of color management
    */
   void setDisplaySettings(const ColorManagedDisplaySettings *displaySettings)
   {
@@ -195,7 +195,7 @@ class CompositorContext {
   }
 
   /**
-   * \brief get display settings of color color management
+   * \brief get display settings of color management
    */
   const ColorManagedDisplaySettings *getDisplaySettings() const
   {
@@ -237,6 +237,12 @@ class CompositorContext {
   void setHasActiveOpenCLDevices(bool hasAvtiveOpenCLDevices)
   {
     this->m_hasActiveOpenCLDevices = hasAvtiveOpenCLDevices;
+  }
+
+  /** Whether it has a view with a specific name and not the default one. */
+  bool has_explicit_view() const
+  {
+    return m_viewName && m_viewName[0] != '\0';
   }
 
   /**
@@ -281,6 +287,11 @@ class CompositorContext {
   {
     return m_rd->size * 0.01f;
   }
+
+  /**
+   * Get active execution model.
+   */
+  eExecutionModel get_execution_model() const;
 };
 
 }  // namespace blender::compositor

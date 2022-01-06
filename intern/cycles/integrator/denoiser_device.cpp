@@ -19,14 +19,15 @@
 #include "device/device.h"
 #include "device/device_denoise.h"
 #include "device/device_memory.h"
+#include "device/device_queue.h"
 #include "render/buffers.h"
 #include "util/util_logging.h"
 #include "util/util_progress.h"
 
 CCL_NAMESPACE_BEGIN
 
-DeviceDenoiser::DeviceDenoiser(Device *device, const DenoiseParams &params)
-    : Denoiser(device, params)
+DeviceDenoiser::DeviceDenoiser(Device *path_trace_device, const DenoiseParams &params)
+    : Denoiser(path_trace_device, params)
 {
 }
 
@@ -35,170 +36,35 @@ DeviceDenoiser::~DeviceDenoiser()
   /* Explicit implementation, to allow forward declaration of Device in the header. */
 }
 
-void DeviceDenoiser::load_kernels(Progress *progress)
-{
-  get_denoiser_device(progress);
-}
-
-void DeviceDenoiser::denoise_buffer(const BufferParams &buffer_params,
+bool DeviceDenoiser::denoise_buffer(const BufferParams &buffer_params,
                                     RenderBuffers *render_buffers,
-                                    const int num_samples)
+                                    const int num_samples,
+                                    bool allow_inplace_modification)
 {
-  Device *denoiser_device = get_denoiser_device(nullptr);
-
+  Device *denoiser_device = get_denoiser_device();
   if (!denoiser_device) {
-    device_->set_error("No device available to denoise on");
-    return;
+    return false;
   }
 
-  VLOG(3) << "Will denoise on " << denoiser_device->info.description << " ("
-          << denoiser_device->info.id << ")";
-
-  denoise_buffer_on_device(denoiser_device, buffer_params, render_buffers, num_samples);
-}
-
-/* Check whether given device is single (not a MultiDevice) and supports requested denoiser. */
-static bool is_single_supported_device(Device *device, DenoiserType type)
-{
-  return (device->info.type != DEVICE_MULTI) && (device->info.denoisers & type);
-}
-
-/* Find best suitable device to perform denoiser on. Will iterate over possible sub-devices of
- * multi-device.
- *
- * If there is no device available which supports given denoiser type nullptr is returned. */
-static Device *find_best_device(Device *device, DenoiserType type)
-{
-  Device *best_device = nullptr;
-
-  device->foreach_device([&](Device *sub_device) {
-    if ((sub_device->info.denoisers & type) == 0) {
-      return;
-    }
-    if (!best_device) {
-      best_device = sub_device;
-    }
-    else {
-      /* TODO(sergey): Choose fastest device from available ones. Taking into account performance
-       * of the device and data transfer cost. */
-    }
-  });
-
-  return best_device;
-}
-
-Device *DeviceDenoiser::get_denoiser_device(Progress *progress)
-{
-  /* The best device has been found already, avoid sequential lookups. */
-  if (denoiser_device_ || device_creation_attempted_) {
-    return denoiser_device_;
-  }
-
-  /* Simple case: rendering happens on a single device which also supports denoiser. */
-  if (is_single_supported_device(device_, params_.type)) {
-    denoiser_device_ = device_;
-    return device_;
-  }
-
-  /* Find best device from the ones which are already used for rendering. */
-  denoiser_device_ = find_best_device(device_, params_.type);
-  if (denoiser_device_) {
-    return denoiser_device_;
-  }
-
-  if (progress) {
-    progress->set_status("Loading denoising kernels (may take a few minutes the first time)");
-  }
-
-  denoiser_device_ = create_denoiser_device();
-
-  return denoiser_device_;
-}
-
-Device *DeviceDenoiser::create_denoiser_device()
-{
-  device_creation_attempted_ = true;
-
-  const uint device_type_mask = get_device_type_mask();
-  const vector<DeviceInfo> device_infos = Device::available_devices(device_type_mask);
-  if (device_infos.empty()) {
-    return nullptr;
-  }
-
-  /* TODO(sergey): Use one of the already configured devices, so that OptiX denoising can happen on
-   * a physical CUDA device which is already used for rendering. */
-
-  /* TODO(sergey): Choose fastest device for denoising. */
-
-  const DeviceInfo denoiser_device_info = device_infos.front();
-
-  local_denoiser_device_.reset(
-      Device::create(denoiser_device_info, device_->stats, device_->profiler));
-
-  if (!local_denoiser_device_) {
-    return nullptr;
-  }
-
-  if (local_denoiser_device_->have_error()) {
-    return nullptr;
-  }
-
-  /* Only need denoising feature, everything else is unused. */
-  DeviceRequestedFeatures denoising_features;
-  denoising_features.use_denoising = true;
-  denoising_features.use_path_tracing = false;
-  if (!local_denoiser_device_->load_kernels(denoising_features)) {
-    return nullptr;
-  }
-
-  return local_denoiser_device_.get();
-}
-
-/* Initialize fields of the task which are not related on device or device pointers. */
-static DeviceDenoiseTask initialize_task(const BufferParams &buffer_params,
-                                         const DenoiseParams &params,
-                                         const int num_samples)
-{
   DeviceDenoiseTask task;
-
-  task.x = buffer_params.full_x;
-  task.y = buffer_params.full_y;
-  task.width = buffer_params.width;
-  task.height = buffer_params.height;
-
-  task.offset = buffer_params.offset;
-  task.stride = buffer_params.stride;
-
-  task.pass_stride = buffer_params.pass_stride;
-
+  task.params = params_;
   task.num_samples = num_samples;
+  task.buffer_params = buffer_params;
+  task.allow_inplace_modification = allow_inplace_modification;
 
-  task.pass_sample_count = buffer_params.pass_sample_count;
-  task.pass_denoising_color = buffer_params.pass_denoising_color;
-  task.pass_denoising_normal = buffer_params.pass_denoising_normal;
-  task.pass_denoising_albedo = buffer_params.pass_denoising_albedo;
-
-  task.params = params;
-
-  return task;
-}
-
-void DeviceDenoiser::denoise_buffer_on_device(Device *device,
-                                              const BufferParams &buffer_params,
-                                              RenderBuffers *render_buffers,
-                                              const int num_samples)
-{
-  DeviceDenoiseTask task = initialize_task(buffer_params, params_, num_samples);
-
-  device_vector<float> local_buffer(device, "denoiser local buffer", MEM_READ_WRITE);
+  RenderBuffers local_render_buffers(denoiser_device);
   bool local_buffer_used = false;
 
-  if (device == device_) {
+  if (denoiser_device == render_buffers->buffer.device) {
     /* The device can access an existing buffer pointer. */
     local_buffer_used = false;
-    task.buffer = render_buffers->buffer.device_pointer;
+    task.render_buffers = render_buffers;
   }
   else {
+    VLOG(3) << "Creating temporary buffer on denoiser device.";
+
+    DeviceQueue *queue = denoiser_device->get_denoise_queue();
+
     /* Create buffer which is available by the device used by denoiser. */
 
     /* TODO(sergey): Optimize data transfers. For example, only copy denoising related passes,
@@ -208,36 +74,33 @@ void DeviceDenoiser::denoise_buffer_on_device(Device *device,
 
     render_buffers->copy_from_device();
 
-    local_buffer.alloc(render_buffers->buffer.size());
-    memcpy(local_buffer.data(),
-           render_buffers->buffer.data(),
-           sizeof(float) * render_buffers->buffer.size());
-    local_buffer.copy_to_device();
+    local_render_buffers.reset(buffer_params);
 
-    task.buffer = local_buffer.device_pointer;
+    /* NOTE: The local buffer is allocated for an exact size of the effective render size, while
+     * the input render buffer is allcoated for the lowest resolution divider possible. So it is
+     * important to only copy actually needed part of the input buffer. */
+    memcpy(local_render_buffers.buffer.data(),
+           render_buffers->buffer.data(),
+           sizeof(float) * local_render_buffers.buffer.size());
+
+    queue->copy_to_device(local_render_buffers.buffer);
+
+    task.render_buffers = &local_render_buffers;
+    task.allow_inplace_modification = true;
   }
 
-  device->denoise_buffer(task);
+  const bool denoise_result = denoiser_device->denoise_buffer(task);
 
   if (local_buffer_used) {
-    /* TODO(sergey): Only copy denoised pass. */
-    local_buffer.copy_from_device();
-    memcpy(render_buffers->buffer.data(),
-           local_buffer.data(),
-           sizeof(float) * render_buffers->buffer.size());
-    render_buffers->buffer.copy_to_device();
-  }
-}
+    local_render_buffers.copy_from_device();
 
-DeviceInfo DeviceDenoiser::get_denoiser_device_info() const
-{
-  if (!denoiser_device_) {
-    DeviceInfo device_info;
-    device_info.type = DEVICE_NONE;
-    return device_info;
+    render_buffers_host_copy_denoised(
+        render_buffers, buffer_params, &local_render_buffers, local_render_buffers.params);
+
+    render_buffers->copy_to_device();
   }
 
-  return denoiser_device_->info;
+  return denoise_result;
 }
 
 CCL_NAMESPACE_END

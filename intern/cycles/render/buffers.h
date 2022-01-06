@@ -40,14 +40,14 @@ struct float4;
 class BufferParams {
  public:
   /* width/height of the physical buffer */
-  int width;
-  int height;
+  int width = 0;
+  int height = 0;
 
   /* offset into and width/height of the full buffer */
-  int full_x;
-  int full_y;
-  int full_width;
-  int full_height;
+  int full_x = 0;
+  int full_y = 0;
+  int full_width = 0;
+  int full_height = 0;
 
   /* Runtime fields, only valid after `update_passes()` or `update_offset_stride()`. */
   int offset = -1, stride = -1;
@@ -55,22 +55,27 @@ class BufferParams {
   /* Runtime fields, only valid after `update_passes()`. */
   int pass_stride = -1;
 
-  /* Offsets of passes needed for the rendering functionality like adaptive sampling and denoising.
-   * Pre-calculated so that they are available in areas where list of passes is not accessible. */
-  int pass_sample_count = PASS_UNUSED;
-  int pass_denoising_color = PASS_UNUSED;
-  int pass_denoising_normal = PASS_UNUSED;
-  int pass_denoising_albedo = PASS_UNUSED;
-
   /* functions */
   BufferParams();
 
   /* Pre-calculate all fields which depends on the passes. */
-  void update_passes(vector<Pass> &passes);
+  void update_passes(const vector<Pass *> &passes);
+
+  /* Returns PASS_UNUSED if there is no such pass in the buffer. */
+  int get_pass_offset(PassType type, PassMode mode = PassMode::NOISY) const;
 
   void update_offset_stride();
 
-  bool modified(const BufferParams &params) const;
+  bool modified(const BufferParams &other) const;
+
+ protected:
+  void reset_pass_offset();
+
+  /* Multipled by 2 to be able to store noisy and denoised pass types. */
+  static constexpr int kNumPassOffsets = PASS_NUM * 2;
+
+  /* Indexed by pass type, indicates offset of the corresponding pass in the buffer. */
+  int pass_offset_[kNumPassOffsets];
 };
 
 /* Render Buffers */
@@ -90,79 +95,23 @@ class RenderBuffers {
   void zero();
 
   bool copy_from_device();
+  void copy_to_device();
 };
 
-/* Render Tile
- * Rendering task on a buffer */
-
-class RenderTile {
- public:
-  typedef enum { PATH_TRACE = (1 << 0), BAKE = (1 << 1), DENOISE = (1 << 2) } Task;
-
-  Task task;
-  int x, y, w, h;
-  int start_sample;
-  int num_samples;
-  int sample;
-  int resolution;
-  int offset;
-  int stride;
-  int tile_index;
-
-  device_ptr buffer;
-  int device_size;
-
-  typedef enum { NO_STEALING = 0, CAN_BE_STOLEN = 1, WAS_STOLEN = 2 } StealingState;
-  StealingState stealing_state;
-
-  RenderBuffers *buffers;
-
-  RenderTile();
-
-  int4 bounds() const
-  {
-    return make_int4(x,      /* xmin */
-                     y,      /* ymin */
-                     x + w,  /* xmax */
-                     y + h); /* ymax */
-  }
-};
-
-/* Render Tile Neighbors
- * Set of neighboring tiles used for denoising. Tile order:
- *  0 1 2
- *  3 4 5
- *  6 7 8 */
-
-class RenderTileNeighbors {
- public:
-  static const int SIZE = 9;
-  static const int CENTER = 4;
-
-  RenderTile tiles[SIZE];
-  RenderTile target;
-
-  RenderTileNeighbors(const RenderTile &center)
-  {
-    tiles[CENTER] = center;
-  }
-
-  int4 bounds() const
-  {
-    return make_int4(tiles[3].x,               /* xmin */
-                     tiles[1].y,               /* ymin */
-                     tiles[5].x + tiles[5].w,  /* xmax */
-                     tiles[7].y + tiles[7].h); /* ymax */
-  }
-
-  void set_bounds_from_center()
-  {
-    tiles[3].x = tiles[CENTER].x;
-    tiles[1].y = tiles[CENTER].y;
-    tiles[5].x = tiles[CENTER].x + tiles[CENTER].w;
-    tiles[7].y = tiles[CENTER].y + tiles[CENTER].h;
-  }
-};
+/* Copy denoised passes form source to destination.
+ *
+ * Buffer parameters are provided explicitly, allowing to copy pixelks between render buffers which
+ * content corresponds to a render result at a non-unit resolution divider.
+ *
+ * `src_offset` allows to offset source pixel index which is used when a fraction of the source
+ * buffer is to be copied.
+ *
+ * Copy happens of the number of pixels in the destination. */
+void render_buffers_host_copy_denoised(RenderBuffers *dst,
+                                       const BufferParams &dst_params,
+                                       const RenderBuffers *src,
+                                       const BufferParams &src_params,
+                                       const size_t src_offset = 0);
 
 CCL_NAMESPACE_END
 

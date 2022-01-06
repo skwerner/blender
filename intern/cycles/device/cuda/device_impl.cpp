@@ -147,7 +147,7 @@ CUDADevice::~CUDADevice()
   cuda_assert(cuCtxDestroy(cuContext));
 }
 
-bool CUDADevice::support_device(const DeviceRequestedFeatures & /*requested_features*/)
+bool CUDADevice::support_device(const uint /*kernel_features*/)
 {
   int major, minor;
   cuDeviceGetAttribute(&major, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR, cuDevId);
@@ -220,8 +220,7 @@ bool CUDADevice::use_adaptive_compilation()
 /* Common NVCC flags which stays the same regardless of shading model,
  * kernel sources md5 and only depends on compiler or compilation settings.
  */
-string CUDADevice::compile_kernel_get_common_cflags(
-    const DeviceRequestedFeatures &requested_features)
+string CUDADevice::compile_kernel_get_common_cflags(const uint kernel_features)
 {
   const int machine = system_cpu_bits();
   const string source_path = path_get("source");
@@ -235,15 +234,12 @@ string CUDADevice::compile_kernel_get_common_cflags(
       machine,
       include_path.c_str());
   if (use_adaptive_compilation()) {
-    cflags += " " + requested_features.get_build_options();
+    cflags += " -D__KERNEL_FEATURES__=" + to_string(kernel_features);
   }
   const char *extra_cflags = getenv("CYCLES_CUDA_EXTRA_CFLAGS");
   if (extra_cflags) {
     cflags += string(" ") + string(extra_cflags);
   }
-#  ifdef WITH_CYCLES_DEBUG
-  cflags += " -D__KERNEL_DEBUG__";
-#  endif
 
 #  ifdef WITH_NANOVDB
   cflags += " -DWITH_NANOVDB";
@@ -252,7 +248,7 @@ string CUDADevice::compile_kernel_get_common_cflags(
   return cflags;
 }
 
-string CUDADevice::compile_kernel(const DeviceRequestedFeatures &requested_features,
+string CUDADevice::compile_kernel(const uint kernel_features,
                                   const char *name,
                                   const char *base,
                                   bool force_ptx)
@@ -301,7 +297,7 @@ string CUDADevice::compile_kernel(const DeviceRequestedFeatures &requested_featu
   /* We include cflags into md5 so changing cuda toolkit or changing other
    * compiler command line arguments makes sure cubin gets re-built.
    */
-  string common_cflags = compile_kernel_get_common_cflags(requested_features);
+  string common_cflags = compile_kernel_get_common_cflags(kernel_features);
   const string kernel_md5 = util_md5_string(source_md5 + common_cflags);
 
   const char *const kernel_ext = force_ptx ? "ptx" : "cubin";
@@ -346,18 +342,19 @@ string CUDADevice::compile_kernel(const DeviceRequestedFeatures &requested_featu
 
   const int nvcc_cuda_version = cuewCompilerVersion();
   VLOG(1) << "Found nvcc " << nvcc << ", CUDA version " << nvcc_cuda_version << ".";
-  if (nvcc_cuda_version < 80) {
+  if (nvcc_cuda_version < 101) {
     printf(
         "Unsupported CUDA version %d.%d detected, "
-        "you need CUDA 8.0 or newer.\n",
+        "you need CUDA 10.1 or newer.\n",
         nvcc_cuda_version / 10,
         nvcc_cuda_version % 10);
     return string();
   }
-  else if (!(nvcc_cuda_version == 101 || nvcc_cuda_version == 102)) {
+  else if (!(nvcc_cuda_version == 101 || nvcc_cuda_version == 102 || nvcc_cuda_version == 111 ||
+             nvcc_cuda_version == 112 || nvcc_cuda_version == 113 || nvcc_cuda_version == 114)) {
     printf(
         "CUDA version %d.%d detected, build may succeed but only "
-        "CUDA 10.1 and 10.2 are officially supported.\n",
+        "CUDA 10.1 to 11.4 are officially supported.\n",
         nvcc_cuda_version / 10,
         nvcc_cuda_version % 10);
   }
@@ -409,7 +406,7 @@ string CUDADevice::compile_kernel(const DeviceRequestedFeatures &requested_featu
   return cubin;
 }
 
-bool CUDADevice::load_kernels(const DeviceRequestedFeatures &requested_features)
+bool CUDADevice::load_kernels(const uint kernel_features)
 {
   /* TODO(sergey): Support kernels re-load for CUDA devices.
    *
@@ -426,12 +423,12 @@ bool CUDADevice::load_kernels(const DeviceRequestedFeatures &requested_features)
     return false;
 
   /* check if GPU is supported */
-  if (!support_device(requested_features))
+  if (!support_device(kernel_features))
     return false;
 
   /* get kernel */
   const char *kernel_name = "kernel";
-  string cubin = compile_kernel(requested_features, kernel_name);
+  string cubin = compile_kernel(kernel_features, kernel_name);
   if (cubin.empty())
     return false;
 
@@ -451,57 +448,48 @@ bool CUDADevice::load_kernels(const DeviceRequestedFeatures &requested_features)
         "Failed to load CUDA kernel from '%s' (%s)", cubin.c_str(), cuewErrorString(result)));
 
   if (result == CUDA_SUCCESS) {
-    reserve_local_memory(requested_features);
     kernels.load(this);
+    reserve_local_memory(kernel_features);
   }
 
   return (result == CUDA_SUCCESS);
 }
 
-void CUDADevice::reserve_local_memory(const DeviceRequestedFeatures &requested_features)
+void CUDADevice::reserve_local_memory(const uint /* kernel_features */)
 {
   /* Together with CU_CTX_LMEM_RESIZE_TO_MAX, this reserves local memory
    * needed for kernel launches, so that we can reliably figure out when
    * to allocate scene data in mapped host memory. */
-  CUDAContextScope scope(this);
-
   size_t total = 0, free_before = 0, free_after = 0;
-  cuMemGetInfo(&free_before, &total);
 
-  /* TODO: implement for new integrator kernels. */
-#  if 0
-  /* Get kernel function. */
-  CUfunction cuRender;
-
-  if (requested_features.use_baking) {
-    cuda_assert(cuModuleGetFunction(&cuRender, cuModule, "kernel_cuda_bake"));
-  }
-  else {
-    cuda_assert(cuModuleGetFunction(&cuRender, cuModule, "kernel_cuda_path_trace"));
+  {
+    CUDAContextScope scope(this);
+    cuMemGetInfo(&free_before, &total);
   }
 
-  cuda_assert(cuFuncSetCacheConfig(cuRender, CU_FUNC_CACHE_PREFER_L1));
+  {
+    /* Use the biggest kernel for estimation. */
+    const DeviceKernel test_kernel = DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE_RAYTRACE;
 
-  int min_blocks, num_threads_per_block;
-  cuda_assert(
-      cuOccupancyMaxPotentialBlockSize(&min_blocks, &num_threads_per_block, cuRender, NULL, 0, 0));
+    /* Launch kernel, using just 1 block appears sufficient to reserve memory for all
+     * multiprocessors. It would be good to do this in parallel for the multi GPU case
+     * still to make it faster. */
+    CUDADeviceQueue queue(this);
 
-  /* Launch kernel, using just 1 block appears sufficient to reserve
-   * memory for all multiprocessors. It would be good to do this in
-   * parallel for the multi GPU case still to make it faster. */
-  CUdeviceptr d_work_tiles = 0;
-  uint total_work_size = 0;
+    void *d_path_index = nullptr;
+    void *d_render_buffer = nullptr;
+    int d_work_size = 0;
+    void *args[] = {&d_path_index, &d_render_buffer, &d_work_size};
 
-  void *args[] = {&d_work_tiles, &total_work_size};
+    queue.init_execution();
+    queue.enqueue(test_kernel, 1, args);
+    queue.synchronize();
+  }
 
-  cuda_assert(cuLaunchKernel(cuRender, 1, 1, 1, num_threads_per_block, 1, 1, 0, 0, args, 0));
-
-  cuda_assert(cuCtxSynchronize());
-
-  cuMemGetInfo(&free_after, &total);
-#  else
-  free_after = free_before;
-#  endif
+  {
+    CUDAContextScope scope(this);
+    cuMemGetInfo(&free_after, &total);
+  }
 
   VLOG(1) << "Local memory reserved " << string_human_readable_number(free_before - free_after)
           << " bytes. (" << string_human_readable_size(free_before - free_after) << ")";
@@ -1321,95 +1309,6 @@ unique_ptr<DeviceQueue> CUDADevice::gpu_queue_create()
   return make_unique<CUDADeviceQueue>(this);
 }
 
-/* --------------------------------------------------------------------
- * Graphics resources interoperability.
- */
-
-namespace {
-
-class CUDADeviceGraphicsInterop : public DeviceGraphicsInterop {
- public:
-  CUDADeviceGraphicsInterop(CUDADevice *device) : device_(device)
-  {
-  }
-
-  CUDADeviceGraphicsInterop(const CUDADeviceGraphicsInterop &other) = delete;
-  CUDADeviceGraphicsInterop(CUDADeviceGraphicsInterop &&other) noexcept = delete;
-
-  ~CUDADeviceGraphicsInterop()
-  {
-    CUDAContextScope scope(device_);
-
-    if (cu_graphics_resource_) {
-      cuda_device_assert(device_, cuGraphicsUnregisterResource(cu_graphics_resource_));
-    }
-  }
-
-  CUDADeviceGraphicsInterop &operator=(const CUDADeviceGraphicsInterop &other) = delete;
-  CUDADeviceGraphicsInterop &operator=(CUDADeviceGraphicsInterop &&other) = delete;
-
-  virtual void set_destination(const DeviceGraphicsInteropDestination &destination) override
-  {
-    const int64_t new_buffer_area = int64_t(destination.buffer_width) * destination.buffer_height;
-
-    if (opengl_pbo_id_ == destination.opengl_pbo_id && buffer_area_ == new_buffer_area) {
-      return;
-    }
-
-    CUDAContextScope scope(device_);
-
-    if (cu_graphics_resource_) {
-      cuda_device_assert(device_, cuGraphicsUnregisterResource(cu_graphics_resource_));
-    }
-
-    const CUresult result = cuGraphicsGLRegisterBuffer(
-        &cu_graphics_resource_, destination.opengl_pbo_id, CU_GRAPHICS_MAP_RESOURCE_FLAGS_NONE);
-    if (result != CUDA_SUCCESS) {
-      LOG(ERROR) << "Error registering OpenGL buffer: " << cuewErrorString(result);
-    }
-
-    opengl_pbo_id_ = destination.opengl_pbo_id;
-    buffer_area_ = new_buffer_area;
-  }
-
-  virtual device_ptr map() override
-  {
-    if (!cu_graphics_resource_) {
-      return 0;
-    }
-
-    CUDAContextScope scope(device_);
-
-    CUdeviceptr cu_buffer;
-    size_t bytes;
-
-    cuda_device_assert(device_, cuGraphicsMapResources(1, &cu_graphics_resource_, 0));
-    cuda_device_assert(
-        device_, cuGraphicsResourceGetMappedPointer(&cu_buffer, &bytes, cu_graphics_resource_));
-
-    return static_cast<device_ptr>(cu_buffer);
-  }
-
-  virtual void unmap() override
-  {
-    CUDAContextScope scope(device_);
-
-    cuda_device_assert(device_, cuGraphicsUnmapResources(1, &cu_graphics_resource_, 0));
-  }
-
- protected:
-  CUDADevice *device_ = nullptr;
-
-  /* OpenGL PBO which is currently registered as the destination for the CUDA buffer. */
-  uint opengl_pbo_id_ = 0;
-  /* Buffer area in pixels of the corresponding PBO. */
-  int64_t buffer_area_ = 0;
-
-  CUgraphicsResource cu_graphics_resource_ = nullptr;
-};
-
-} /* namespace */
-
 bool CUDADevice::should_use_graphics_interop()
 {
   /* Check whether this device is part of OpenGL context.
@@ -1440,9 +1339,30 @@ bool CUDADevice::should_use_graphics_interop()
   return false;
 }
 
-unique_ptr<DeviceGraphicsInterop> CUDADevice::graphics_interop_create()
+int CUDADevice::get_num_multiprocessors()
 {
-  return make_unique<CUDADeviceGraphicsInterop>(this);
+  return get_device_default_attribute(CU_DEVICE_ATTRIBUTE_MULTIPROCESSOR_COUNT, 0);
+}
+
+int CUDADevice::get_max_num_threads_per_multiprocessor()
+{
+  return get_device_default_attribute(CU_DEVICE_ATTRIBUTE_MAX_THREADS_PER_MULTIPROCESSOR, 0);
+}
+
+bool CUDADevice::get_device_attribute(CUdevice_attribute attribute, int *value)
+{
+  CUDAContextScope scope(this);
+
+  return cuDeviceGetAttribute(value, attribute, cuDevice) == CUDA_SUCCESS;
+}
+
+int CUDADevice::get_device_default_attribute(CUdevice_attribute attribute, int default_value)
+{
+  int value = 0;
+  if (!get_device_attribute(attribute, &value)) {
+    return default_value;
+  }
+  return value;
 }
 
 CCL_NAMESPACE_END

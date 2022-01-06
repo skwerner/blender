@@ -66,7 +66,7 @@ class GVArray {
 
   bool is_empty() const
   {
-    return size_;
+    return size_ == 0;
   }
 
   /* Copies the value at the given index into the provided storage. The `r_value` pointer is
@@ -129,9 +129,9 @@ class GVArray {
   }
 
   /* Same as `get_internal_single`, but `r_value` points to initialized memory. */
-  void get_single_to_uninitialized(void *r_value) const
+  void get_internal_single_to_uninitialized(void *r_value) const
   {
-    type_->construct_default(r_value);
+    type_->default_construct(r_value);
     this->get_internal_single(r_value);
   }
 
@@ -688,7 +688,7 @@ class GVArray_For_EmbeddedVArray : public GVArray_For_VArray<T> {
 
  public:
   template<typename... Args>
-  GVArray_For_EmbeddedVArray(const int64_t size, Args &&... args)
+  GVArray_For_EmbeddedVArray(const int64_t size, Args &&...args)
       : GVArray_For_VArray<T>(size), embedded_varray_(std::forward<Args>(args)...)
   {
     this->varray_ = &embedded_varray_;
@@ -703,7 +703,7 @@ class GVMutableArray_For_EmbeddedVMutableArray : public GVMutableArray_For_VMuta
 
  public:
   template<typename... Args>
-  GVMutableArray_For_EmbeddedVMutableArray(const int64_t size, Args &&... args)
+  GVMutableArray_For_EmbeddedVMutableArray(const int64_t size, Args &&...args)
       : GVMutableArray_For_VMutableArray<T>(size), embedded_varray_(std::forward<Args>(args)...)
   {
     this->varray_ = &embedded_varray_;
@@ -832,7 +832,7 @@ template<typename T> class GVArray_Typed {
   }
 
   /* Support implicit cast to the typed virtual array for convenience when `varray->typed<T>()` is
-   * used within an expression.  */
+   * used within an expression. */
   operator const VArray<T> &() const
   {
     return *varray_;

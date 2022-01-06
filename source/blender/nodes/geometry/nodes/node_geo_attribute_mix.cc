@@ -25,26 +25,28 @@
 
 #include "node_geometry_util.hh"
 
-static bNodeSocketTemplate geo_node_attribute_mix_in[] = {
-    {SOCK_GEOMETRY, N_("Geometry")},
-    {SOCK_STRING, N_("Factor")},
-    {SOCK_FLOAT, N_("Factor"), 0.5, 0.0, 0.0, 0.0, 0.0, 1.0, PROP_FACTOR},
-    {SOCK_STRING, N_("A")},
-    {SOCK_FLOAT, N_("A"), 0.0, 0.0, 0.0, 0.0, -FLT_MAX, FLT_MAX},
-    {SOCK_VECTOR, N_("A"), 0.0, 0.0, 0.0, 0.0, -FLT_MAX, FLT_MAX},
-    {SOCK_RGBA, N_("A"), 0.5, 0.5, 0.5, 1.0},
-    {SOCK_STRING, N_("B")},
-    {SOCK_FLOAT, N_("B"), 0.0, 0.0, 0.0, 0.0, -FLT_MAX, FLT_MAX},
-    {SOCK_VECTOR, N_("B"), 0.0, 0.0, 0.0, 0.0, -FLT_MAX, FLT_MAX},
-    {SOCK_RGBA, N_("B"), 0.5, 0.5, 0.5, 1.0},
-    {SOCK_STRING, N_("Result")},
-    {-1, ""},
-};
+namespace blender::nodes {
 
-static bNodeSocketTemplate geo_node_mix_attribute_out[] = {
-    {SOCK_GEOMETRY, N_("Geometry")},
-    {-1, ""},
-};
+static void geo_node_mix_attribute_declare(NodeDeclarationBuilder &b)
+{
+  b.add_input<decl::Geometry>("Geometry");
+  b.add_input<decl::String>("Factor");
+  b.add_input<decl::Float>("Factor", "Factor_001")
+      .default_value(0.5f)
+      .min(0.0f)
+      .max(1.0f)
+      .subtype(PROP_FACTOR);
+  b.add_input<decl::String>("A");
+  b.add_input<decl::Float>("A", "A_001");
+  b.add_input<decl::Vector>("A", "A_002");
+  b.add_input<decl::Color>("A", "A_003").default_value({0.5f, 0.5f, 0.5f, 1.0f});
+  b.add_input<decl::String>("B");
+  b.add_input<decl::Float>("B", "B_001");
+  b.add_input<decl::Vector>("B", "B_002");
+  b.add_input<decl::Color>("B", "B_003").default_value({0.5f, 0.5f, 0.5f, 1.0f});
+  b.add_input<decl::String>("Result");
+  b.add_output<decl::Geometry>("Geometry");
+}
 
 static void geo_node_attribute_mix_layout(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
 {
@@ -56,8 +58,6 @@ static void geo_node_attribute_mix_layout(uiLayout *layout, bContext *UNUSED(C),
   uiItemR(col, ptr, "input_type_a", 0, IFACE_("A"), ICON_NONE);
   uiItemR(col, ptr, "input_type_b", 0, IFACE_("B"), ICON_NONE);
 }
-
-namespace blender::nodes {
 
 static void geo_node_attribute_mix_init(bNodeTree *UNUSED(ntree), bNode *node)
 {
@@ -88,7 +88,7 @@ static void do_mix_operation_float(const int blend_mode,
                                    VMutableArray<float> &results)
 {
   const int size = results.size();
-  parallel_for(IndexRange(size), 512, [&](IndexRange range) {
+  threading::parallel_for(IndexRange(size), 512, [&](IndexRange range) {
     for (const int i : range) {
       const float factor = factors[i];
       float3 a{inputs_a[i]};
@@ -107,7 +107,7 @@ static void do_mix_operation_float3(const int blend_mode,
                                     VMutableArray<float3> &results)
 {
   const int size = results.size();
-  parallel_for(IndexRange(size), 512, [&](IndexRange range) {
+  threading::parallel_for(IndexRange(size), 512, [&](IndexRange range) {
     for (const int i : range) {
       const float factor = factors[i];
       float3 a = inputs_a[i];
@@ -120,16 +120,16 @@ static void do_mix_operation_float3(const int blend_mode,
 
 static void do_mix_operation_color4f(const int blend_mode,
                                      const VArray<float> &factors,
-                                     const VArray<Color4f> &inputs_a,
-                                     const VArray<Color4f> &inputs_b,
-                                     VMutableArray<Color4f> &results)
+                                     const VArray<ColorGeometry4f> &inputs_a,
+                                     const VArray<ColorGeometry4f> &inputs_b,
+                                     VMutableArray<ColorGeometry4f> &results)
 {
   const int size = results.size();
-  parallel_for(IndexRange(size), 512, [&](IndexRange range) {
+  threading::parallel_for(IndexRange(size), 512, [&](IndexRange range) {
     for (const int i : range) {
       const float factor = factors[i];
-      Color4f a = inputs_a[i];
-      const Color4f b = inputs_b[i];
+      ColorGeometry4f a = inputs_a[i];
+      const ColorGeometry4f b = inputs_b[i];
       ramp_blend(blend_mode, a, factor, b);
       results.set(i, a);
     }
@@ -160,9 +160,9 @@ static void do_mix_operation(const CustomDataType result_type,
   else if (result_type == CD_PROP_COLOR) {
     do_mix_operation_color4f(blend_mode,
                              attribute_factor,
-                             attribute_a.typed<Color4f>(),
-                             attribute_b.typed<Color4f>(),
-                             attribute_result.typed<Color4f>());
+                             attribute_a.typed<ColorGeometry4f>(),
+                             attribute_b.typed<ColorGeometry4f>(),
+                             attribute_result.typed<ColorGeometry4f>());
   }
 }
 
@@ -243,12 +243,12 @@ static void geo_node_attribute_mix_exec(GeoNodeExecParams params)
 void register_node_type_geo_attribute_mix()
 {
   static bNodeType ntype;
-
-  geo_node_type_base(&ntype, GEO_NODE_ATTRIBUTE_MIX, "Attribute Mix", NODE_CLASS_ATTRIBUTE, 0);
-  node_type_socket_templates(&ntype, geo_node_attribute_mix_in, geo_node_mix_attribute_out);
+  geo_node_type_base(
+      &ntype, GEO_NODE_LEGACY_ATTRIBUTE_MIX, "Attribute Mix", NODE_CLASS_ATTRIBUTE, 0);
   node_type_init(&ntype, blender::nodes::geo_node_attribute_mix_init);
   node_type_update(&ntype, blender::nodes::geo_node_attribute_mix_update);
-  ntype.draw_buttons = geo_node_attribute_mix_layout;
+  ntype.declare = blender::nodes::geo_node_mix_attribute_declare;
+  ntype.draw_buttons = blender::nodes::geo_node_attribute_mix_layout;
   node_type_storage(
       &ntype, "NodeAttributeMix", node_free_standard_storage, node_copy_standard_storage);
   ntype.geometry_node_execute = blender::nodes::geo_node_attribute_mix_exec;

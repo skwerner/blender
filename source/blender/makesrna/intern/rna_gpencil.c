@@ -1625,7 +1625,7 @@ static void rna_def_gpencil_stroke(BlenderRNA *brna)
   /* Material Index */
   prop = RNA_def_property(srna, "material_index", PROP_INT, PROP_NONE);
   RNA_def_property_int_sdna(prop, NULL, "mat_nr");
-  RNA_def_property_ui_text(prop, "Material Index", "Index of material used in this stroke");
+  RNA_def_property_ui_text(prop, "Material Index", "Material slot index of this stroke");
   RNA_def_property_update(prop, NC_GPENCIL | ND_DATA, "rna_GPencil_update");
 
   /* Settings */
@@ -1808,7 +1808,7 @@ static void rna_def_gpencil_frame(BlenderRNA *brna)
   /* Frame Number */
   prop = RNA_def_property(srna, "frame_number", PROP_INT, PROP_NONE);
   RNA_def_property_int_sdna(prop, NULL, "framenum");
-  /* XXX note: this cannot occur on the same frame as another sketch */
+  /* XXX NOTE: this cannot occur on the same frame as another sketch. */
   RNA_def_property_range(prop, -MAXFRAME, MAXFRAME);
   RNA_def_property_ui_text(prop, "Frame Number", "The frame on which this sketch appears");
 
@@ -1995,7 +1995,7 @@ static void rna_def_gpencil_layer(BlenderRNA *brna)
   RNA_def_property_ui_text(prop, "Opacity", "Layer Opacity");
   RNA_def_property_update(prop, NC_GPENCIL | ND_DATA, "rna_GPencil_update");
 
-  /* layer channel color (grease pencil)  */
+  /* Layer channel color (grease pencil). */
   prop = RNA_def_property(srna, "channel_color", PROP_FLOAT, PROP_COLOR_GAMMA);
   RNA_def_property_float_sdna(prop, NULL, "color");
   RNA_def_property_array(prop, 3);
@@ -2003,6 +2003,14 @@ static void rna_def_gpencil_layer(BlenderRNA *brna)
   RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
   RNA_def_property_ui_text(
       prop, "Custom Channel Color", "Custom color for animation channel in Dopesheet");
+  RNA_def_property_update(prop, NC_GPENCIL | ND_DATA, "rna_GPencil_update");
+
+  /* Layer Opacity (Annotations). */
+  prop = RNA_def_property(srna, "annotation_opacity", PROP_FLOAT, PROP_NONE);
+  RNA_def_property_float_sdna(prop, NULL, "opacity");
+  RNA_def_property_range(prop, 0.0, 1.0f);
+  RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+  RNA_def_property_ui_text(prop, "Opacity", "Annotation Layer Opacity");
   RNA_def_property_update(prop, NC_GPENCIL | ND_DATA, "rna_GPencil_update");
 
   /* Stroke Drawing Color (Annotations) */
@@ -2113,6 +2121,12 @@ static void rna_def_gpencil_layer(BlenderRNA *brna)
       prop,
       "ViewLayer",
       "Only include Layer in this View Layer render output (leave blank to include always)");
+
+  prop = RNA_def_property(srna, "use_viewlayer_masks", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_negative_sdna(prop, NULL, "flag", GP_LAYER_DISABLE_MASKS_IN_VIEWLAYER);
+  RNA_def_property_ui_text(
+      prop, "Use Masks in Render", "Include the mask layers when rendering the view-layer");
+  RNA_def_property_update(prop, NC_GPENCIL | ND_DATA, "rna_GPencil_update");
 
   /* blend mode */
   prop = RNA_def_property(srna, "blend_mode", PROP_ENUM, PROP_NONE);

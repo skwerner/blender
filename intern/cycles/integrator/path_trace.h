@@ -17,7 +17,9 @@
 #pragma once
 
 #include "integrator/denoiser.h"
+#include "integrator/pass_accessor.h"
 #include "integrator/path_trace_work.h"
+#include "integrator/work_balancer.h"
 #include "render/buffers.h"
 #include "util/util_function.h"
 #include "util/util_thread.h"
@@ -29,12 +31,13 @@ CCL_NAMESPACE_BEGIN
 class AdaptiveSampling;
 class Device;
 class DeviceScene;
+class Film;
 class RenderBuffers;
 class RenderScheduler;
 class RenderWork;
-class PassAccessor;
 class Progress;
 class GPUDisplay;
+class TileManager;
 
 /* PathTrace class takes care of kernel graph and scheduling on a (multi)device. It takes care of
  * all the common steps of path tracing which are not device-specific. The list of tasks includes
@@ -47,21 +50,27 @@ class PathTrace {
  public:
   /* Render scheduler is used to report timing information and access things like start/finish
    * sample. */
-  PathTrace(Device *device, DeviceScene *device_scene, RenderScheduler &render_scheduler);
+  PathTrace(Device *device,
+            Film *film,
+            DeviceScene *device_scene,
+            RenderScheduler &render_scheduler,
+            TileManager &tile_manager);
+  ~PathTrace();
 
   /* Create devices and load kernels which are created on-demand (for example, denoising devices).
    * The progress is reported to the currently configure progress object (via `set_progress`). */
   void load_kernels();
+
+  /* Allocate working memory. This runs before allocating scene memory so that we can estimate
+   * more accurately which scene device memory may need to allocated on the host. */
+  void alloc_work_memory();
 
   /* Check whether now it is a good time to reset rendering.
    * Used to avoid very often resets in the viewport, giving it a chance to draw intermediate
    * render result. */
   bool ready_to_reset();
 
-  /* `full_buffer_params` denotes parameters of the entire big tile which is to be path traced.
-   *
-   * TODO(sergey): Streamline terminology. Maybe it should be `big_tile_buffer_params`? */
-  void reset(const BufferParams &full_buffer_params);
+  void reset(const BufferParams &full_params, const BufferParams &big_tile_params);
 
   /* Set progress tracker.
    * Used to communicate details about the progress to the outer world, check whether rendering is
@@ -100,26 +109,61 @@ class PathTrace {
    */
   void cancel();
 
+  /* Copy an entire render buffer to/from the path trace.  */
+
+  /* Copy happens via CPU side buffer: data will be copied from every device of the path trace, and
+   * the data will be copied to the device of the given render buffers. */
+  void copy_to_render_buffers(RenderBuffers *render_buffers);
+
+  /* Copy happens via CPU side buffer: data will be copied from the device of the given rendetr
+   * buffers and will be copied to all devices of the path trace. */
+  void copy_from_render_buffers(RenderBuffers *render_buffers);
+
+  /* Copy render buffers of the big tile from the device to hsot.
+   * Return true if all copies are successful. */
+  bool copy_render_tile_from_device();
+
+  /* Get number of samples in the current big tile render buffers. */
+  int get_num_render_tile_samples() const;
+
   /* Get pass data of the entire big tile.
    * This call puts pass render result from all devices into the final pixels storage.
    *
+   * NOTE: Expects buffers to be copied to the host using `copy_render_tile_from_device()`.
+   *
    * Returns false if any of the accessor's `get_render_tile_pixels()` returned false. */
-  bool get_render_tile_pixels(PassAccessor &pass_accessor, float *pixels);
+  bool get_render_tile_pixels(const PassAccessor &pass_accessor,
+                              const PassAccessor::Destination &destination);
+
+  /* Set pass data for baking. */
+  bool set_render_tile_pixels(PassAccessor &pass_accessor, const PassAccessor::Source &source);
+
+  /* Check whether denoiser was run and denoised passes are available. */
+  bool has_denoised_result() const;
+
+  /* Get size and offset (relative to the buffer's full x/y) of the currently rendering tile.
+   * In the case of tiled rendering this will return full-frame after all tiles has been rendered.
+   */
+  int2 get_render_tile_size() const;
+  int2 get_render_tile_offset() const;
+
+  bool get_render_tile_done() const;
 
   /* Generate full multi-line report of the rendering process, including rendering parameters,
    * times, and so on. */
   string full_report() const;
 
-  /* Callback which communicates an updates state of the render buffer.
-   * Is called during path tracing to communicate work-in-progress state of the final buffer.
-   *
-   * The samples indicates how many samples the buffer contains. */
-  function<void(void)> buffer_update_cb;
+  /* Callback which communicates an updates state of the render buffer of the current big tile.
+   * Is called during path tracing to communicate work-in-progress state of the final buffer. */
+  function<void(void)> tile_buffer_update_cb;
 
-  /* Callback which communicates final rendered buffer. Is called after pathtracing is done.
+  /* Callback which communicates final rendered buffer. Is called after pathtracing is done. */
+  function<void(void)> tile_buffer_write_cb;
+
+  /* Callback which initializes rendered buffer. Is called before pathtracing starts.
    *
-   * The samples indicates how many samples the buffer contains. */
-  function<void(void)> buffer_write_cb;
+   * This is used for baking. */
+  function<bool(void)> tile_buffer_read_cb;
 
   /* Callback which is called to report current rendering progress.
    *
@@ -139,17 +183,26 @@ class PathTrace {
   /* Initialize kernel execution on all integrator queues. */
   void render_init_kernel_execution();
 
-  /* Update the render state to possibly changed resolution divider. */
-  void render_update_resolution_divider(int resolution_divider);
+  /* Make sure both allocated and effective buffer parameters of path tracer works are up to date
+   * with the current big tile parameters, performance-dependent slicing, and resolution divider.
+   */
+  void update_work_buffer_params_if_needed(const RenderWork &render_work);
+  void update_allocated_work_buffer_params();
+  void update_effective_work_buffer_params(const RenderWork &render_work);
 
   /* Perform various steps of the render work.
    *
    * Note that some steps might modify the work, forcing some steps to happen within this iteration
    * of rendering. */
+  void init_render_buffers(const RenderWork &render_work);
   void path_trace(RenderWork &render_work);
   void adaptive_sample(RenderWork &render_work);
   void denoise(const RenderWork &render_work);
+  void cryptomatte_postprocess(const RenderWork &render_work);
   void update_display(const RenderWork &render_work);
+  void rebalance(const RenderWork &render_work);
+  void write_tile_buffer(const RenderWork &render_work);
+  void process_full_buffer_from_disk(const RenderWork &render_work);
 
   /* Get number of samples in the current state of the render buffers. */
   int get_num_samples_in_buffer();
@@ -159,16 +212,31 @@ class PathTrace {
   bool is_cancel_requested();
 
   /* Write the big tile render buffer via the write callback. */
-  void buffer_write();
+  void tile_buffer_write();
+
+  /* Read the big tile render buffer via the read callback. */
+  void tile_buffer_read();
+
+  /* Write current tile into the file on disk. */
+  void tile_buffer_write_to_disk();
+
+  /* Read full-frame render result from a file on disk. */
+  void read_full_buffer_from_disk();
 
   /* Run the progress_update_cb callback if it is needed. */
   void progress_update_if_needed();
 
-  /* Pointer to a device which is configured to be used for path tracing. If multiple devices are
-   * configured this is a `MultiDevice`. */
+  /* Pointer to a device which is configured to be used for path tracing. If multiple devices
+   * are configured this is a `MultiDevice`. */
   Device *device_ = nullptr;
 
+  /* CPU device for creating temporary render buffers on the CPU side. */
+  unique_ptr<Device> cpu_device_;
+
+  DeviceScene *device_scene_;
+
   RenderScheduler &render_scheduler_;
+  TileManager &tile_manager_;
 
   unique_ptr<GPUDisplay> gpu_display_;
 
@@ -176,13 +244,12 @@ class PathTrace {
    * device. */
   vector<unique_ptr<PathTraceWork>> path_trace_works_;
 
-  /* Render buffer which corresponds to the big tile.
-   * It is used to accumulate work from all rendering devices, and to communicate render result
-   * to the render session.
-   *
-   * TODO(sergey): This is actually a subject for reconsideration when multi-device support will be
-   * added. */
-  unique_ptr<RenderBuffers> full_render_buffers_;
+  /* Per-path trace work information needed for multi-device balancing. */
+  vector<WorkBalanceInfo> work_balance_infos_;
+
+  /* Render buffer parameters of the full frame and current big tile. */
+  BufferParams full_params_;
+  BufferParams big_tile_params_;
 
   /* Denoiser which takes care of denoising the big tile. */
   unique_ptr<Denoiser> denoiser_;
@@ -191,6 +258,10 @@ class PathTrace {
    * Is brought up to date in the `render()` call and is accessed from all the steps involved into
    * rendering the work. */
   struct {
+    /* Denotes whether render buffers parameters of path trace works are to be reset for the new
+     * value of the big tile parameters. */
+    bool need_reset_params = false;
+
     /* Divider of the resolution for faster previews.
      *
      * Allows to re-use same render buffer, but have less pixels rendered into in it. The way to
@@ -198,9 +269,15 @@ class PathTrace {
      * affects both resolution and stride as visible by the integrator kernels. */
     int resolution_divider = 0;
 
-    /* Parameters of render buffers which corresponds to full render buffers divided by the
-     * resolution divider. */
-    BufferParams scaled_render_buffer_params;
+    /* Paramaters of the big tile with the current resolution divider applied. */
+    BufferParams effective_big_tile_params;
+
+    /* Denosier was run and there are denoised versions of the passes in the render buffers. */
+    bool has_denoised_result = false;
+
+    /* Current tile has been written (to either disk or callback.
+     * Indicates that no more work will be done on this tile. */
+    bool tile_written = false;
   } render_state_;
 
   /* Progress object which is used to communicate sample progress. */
@@ -223,6 +300,8 @@ class PathTrace {
   /* Indicates whether a render result was drawn after latest session reset.
    * Used by `ready_to_reset()` to implement logic which feels the most interactive. */
   bool did_draw_after_reset_ = true;
+
+  unique_ptr<RenderBuffers> full_frame_buffers_;
 };
 
 CCL_NAMESPACE_END

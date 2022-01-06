@@ -246,7 +246,7 @@ static PanelType *fmodifier_subpanel_register(ARegionType *region_type,
 #define B_REDR 1
 #define B_FMODIFIER_REDRAW 20
 
-/* callback to remove the given modifier  */
+/* Callback to remove the given modifier. */
 typedef struct FModifierDeleteContext {
   ID *owner_id;
   ListBase *modifiers;
@@ -672,10 +672,7 @@ static void fmod_envelope_deletepoint_cb(bContext *UNUSED(C), void *fcm_dv, void
   }
   else {
     /* just free array, since the only vert was deleted */
-    if (env->data) {
-      MEM_freeN(env->data);
-      env->data = NULL;
-    }
+    MEM_SAFE_FREE(env->data);
     env->totvert = 0;
   }
 }

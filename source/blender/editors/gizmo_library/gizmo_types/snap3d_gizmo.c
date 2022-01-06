@@ -17,8 +17,8 @@
  * All rights reserved.
  */
 
-/** \file snap3d_gizmo.c
- *  \ingroup edgizmolib
+/** \file
+ * \ingroup edgizmolib
  *
  * \name Snap Gizmo
  *
@@ -319,9 +319,9 @@ bool ED_gizmotypes_snap_3d_invert_snap_get(struct wmGizmo *gz)
 #endif
 }
 
-bool ED_gizmotypes_snap_3d_is_enabled(wmGizmo *gz)
+bool ED_gizmotypes_snap_3d_is_enabled(const wmGizmo *gz)
 {
-  SnapGizmo3D *snap_gizmo = (SnapGizmo3D *)gz;
+  const SnapGizmo3D *snap_gizmo = (const SnapGizmo3D *)gz;
   return snap_gizmo->is_enabled;
 }
 
@@ -374,7 +374,7 @@ short ED_gizmotypes_snap_3d_update(wmGizmo *gz,
 
     eSnapEditType edit_mode_type = (snap_gizmo->flag & ED_SNAPGIZMO_SNAP_EDIT_GEOM_FINAL) ?
                                        SNAP_GEOM_FINAL :
-                                       (snap_gizmo->flag & ED_SNAPGIZMO_SNAP_EDIT_GEOM_CAGE) ?
+                                   (snap_gizmo->flag & ED_SNAPGIZMO_SNAP_EDIT_GEOM_CAGE) ?
                                        SNAP_GEOM_CAGE :
                                        SNAP_GEOM_EDIT;
 

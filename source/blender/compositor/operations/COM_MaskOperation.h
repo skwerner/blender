@@ -19,7 +19,7 @@
 #pragma once
 
 #include "BLI_listbase.h"
-#include "COM_NodeOperation.h"
+#include "COM_MultiThreadedOperation.h"
 #include "DNA_mask_types.h"
 #include "IMB_imbuf_types.h"
 
@@ -31,16 +31,16 @@ namespace blender::compositor {
 /**
  * Class with implementation of mask rasterization
  */
-class MaskOperation : public NodeOperation {
+class MaskOperation : public MultiThreadedOperation {
  protected:
   Mask *m_mask;
 
-  /* note, these are used more like aspect,
+  /* NOTE: these are used more like aspect,
    * but they _do_ impact on mask detail */
   int m_maskWidth;
   int m_maskHeight;
-  float m_maskWidthInv;  /* 1 / m_maskWidth  */
-  float m_maskHeightInv; /* 1 / m_maskHeight */
+  float m_maskWidthInv;  /* `1 / m_maskWidth` */
+  float m_maskHeightInv; /* `1 / m_maskHeight` */
   float m_mask_px_ofs[2];
 
   float m_frame_shutter;
@@ -98,6 +98,13 @@ class MaskOperation : public NodeOperation {
   }
 
   void executePixelSampled(float output[4], float x, float y, PixelSampler sampler) override;
+
+  void update_memory_buffer_partial(MemoryBuffer *output,
+                                    const rcti &area,
+                                    Span<MemoryBuffer *> inputs) override;
+
+ private:
+  Vector<MaskRasterHandle *> get_non_null_handles() const;
 };
 
 }  // namespace blender::compositor

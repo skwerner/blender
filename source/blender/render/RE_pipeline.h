@@ -141,9 +141,6 @@ typedef struct RenderResult {
   volatile rcti renrect;
   volatile RenderLayer *renlay;
 
-  /* optional saved endresult on disk */
-  int do_exr_tile;
-
   /* for render results in Image, verify validity for sequences */
   int framenr;
 
@@ -155,6 +152,8 @@ typedef struct RenderResult {
   char *error;
 
   struct StampData *stamp_data;
+
+  bool passes_allocated;
 } RenderResult;
 
 typedef struct RenderStats {

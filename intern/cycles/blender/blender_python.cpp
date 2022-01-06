@@ -46,10 +46,6 @@
 #  include <OSL/oslquery.h>
 #endif
 
-#ifdef WITH_OPENCL
-#  include "device/opencl/device_opencl.h"
-#endif
-
 CCL_NAMESPACE_BEGIN
 
 namespace {
@@ -73,12 +69,10 @@ PyObject *pyunicode_from_string(const char *str)
 /* Synchronize debug flags from a given Blender scene.
  * Return truth when device list needs invalidation.
  */
-bool debug_flags_sync_from_scene(BL::Scene b_scene)
+static void debug_flags_sync_from_scene(BL::Scene b_scene)
 {
   DebugFlagsRef flags = DebugFlags();
   PointerRNA cscene = RNA_pointer_get(&b_scene.ptr, "cycles");
-  /* Backup some settings for comparison. */
-  DebugFlags::OpenCL::DeviceType opencl_device_type = flags.opencl.device_type;
   /* Synchronize shared flags. */
   flags.viewport_static_bvh = get_enum(cscene, "debug_bvh_type");
   /* Synchronize CPU flags. */
@@ -91,44 +85,16 @@ bool debug_flags_sync_from_scene(BL::Scene b_scene)
   /* Synchronize CUDA flags. */
   flags.cuda.adaptive_compile = get_boolean(cscene, "debug_use_cuda_adaptive_compile");
   /* Synchronize OptiX flags. */
-  flags.optix.curves_api = get_boolean(cscene, "debug_optix_curves_api");
-  /* Synchronize OpenCL device type. */
-  switch (get_enum(cscene, "debug_opencl_device_type")) {
-    case 0:
-      flags.opencl.device_type = DebugFlags::OpenCL::DEVICE_NONE;
-      break;
-    case 1:
-      flags.opencl.device_type = DebugFlags::OpenCL::DEVICE_ALL;
-      break;
-    case 2:
-      flags.opencl.device_type = DebugFlags::OpenCL::DEVICE_DEFAULT;
-      break;
-    case 3:
-      flags.opencl.device_type = DebugFlags::OpenCL::DEVICE_CPU;
-      break;
-    case 4:
-      flags.opencl.device_type = DebugFlags::OpenCL::DEVICE_GPU;
-      break;
-    case 5:
-      flags.opencl.device_type = DebugFlags::OpenCL::DEVICE_ACCELERATOR;
-      break;
-  }
-  /* Synchronize other OpenCL flags. */
-  flags.opencl.debug = get_boolean(cscene, "debug_use_opencl_debug");
-  flags.opencl.mem_limit = ((size_t)get_int(cscene, "debug_opencl_mem_limit")) * 1024 * 1024;
-  return flags.opencl.device_type != opencl_device_type;
+  flags.optix.use_debug = get_boolean(cscene, "debug_use_optix_debug");
 }
 
 /* Reset debug flags to default values.
  * Return truth when device list needs invalidation.
  */
-bool debug_flags_reset()
+static void debug_flags_reset()
 {
   DebugFlagsRef flags = DebugFlags();
-  /* Backup some settings for comparison. */
-  DebugFlags::OpenCL::DeviceType opencl_device_type = flags.opencl.device_type;
   flags.reset();
-  return flags.opencl.device_type != opencl_device_type;
 }
 
 } /* namespace */
@@ -173,18 +139,20 @@ static const char *PyC_UnicodeAsByte(PyObject *py_str, PyObject **coerce)
 
 static PyObject *init_func(PyObject * /*self*/, PyObject *args)
 {
-  PyObject *path, *user_path;
+  PyObject *path, *user_path, *temp_path;
   int headless;
 
-  if (!PyArg_ParseTuple(args, "OOi", &path, &user_path, &headless)) {
-    return NULL;
+  if (!PyArg_ParseTuple(args, "OOOi", &path, &user_path, &temp_path, &headless)) {
+    return nullptr;
   }
 
-  PyObject *path_coerce = NULL, *user_path_coerce = NULL;
+  PyObject *path_coerce = nullptr, *user_path_coerce = nullptr, *temp_path_coerce = nullptr;
   path_init(PyC_UnicodeAsByte(path, &path_coerce),
-            PyC_UnicodeAsByte(user_path, &user_path_coerce));
+            PyC_UnicodeAsByte(user_path, &user_path_coerce),
+            PyC_UnicodeAsByte(temp_path, &temp_path_coerce));
   Py_XDECREF(path_coerce);
   Py_XDECREF(user_path_coerce);
+  Py_XDECREF(temp_path_coerce);
 
   BlenderSession::headless = headless;
 
@@ -287,13 +255,36 @@ static PyObject *render_func(PyObject * /*self*/, PyObject *args)
   RNA_pointer_create(NULL, &RNA_Depsgraph, (ID *)PyLong_AsVoidPtr(pydepsgraph), &depsgraphptr);
   BL::Depsgraph b_depsgraph(depsgraphptr);
 
-  /* Allow Blender to execute other Python scripts, and isolate TBB tasks so we
-   * don't get deadlocks with Blender threads accessing shared data like images. */
+  /* Allow Blender to execute other Python scripts. */
   python_thread_state_save(&session->python_thread_state);
 
-  tbb::this_task_arena::isolate([&] { session->render(b_depsgraph); });
+  session->render(b_depsgraph);
 
   python_thread_state_restore(&session->python_thread_state);
+
+  Py_RETURN_NONE;
+}
+
+static PyObject *draw_func(PyObject * /*self*/, PyObject *args)
+{
+  PyObject *py_session, *py_graph, *py_screen, *py_space_image;
+
+  if (!PyArg_ParseTuple(args, "OOOO", &py_session, &py_graph, &py_screen, &py_space_image)) {
+    return nullptr;
+  }
+
+  BlenderSession *session = (BlenderSession *)PyLong_AsVoidPtr(py_session);
+
+  ID *b_screen = (ID *)PyLong_AsVoidPtr(py_screen);
+
+  PointerRNA b_space_image_ptr;
+  RNA_pointer_create(b_screen,
+                     &RNA_SpaceImageEditor,
+                     pylong_as_voidptr_typesafe(py_space_image),
+                     &b_space_image_ptr);
+  BL::SpaceImageEditor b_space_image(b_space_image_ptr);
+
+  session->draw(b_space_image);
 
   Py_RETURN_NONE;
 }
@@ -328,15 +319,14 @@ static PyObject *bake_func(PyObject * /*self*/, PyObject *args)
 
   python_thread_state_save(&session->python_thread_state);
 
-  tbb::this_task_arena::isolate(
-      [&] { session->bake(b_depsgraph, b_object, pass_type, pass_filter, width, height); });
+  session->bake(b_depsgraph, b_object, pass_type, pass_filter, width, height);
 
   python_thread_state_restore(&session->python_thread_state);
 
   Py_RETURN_NONE;
 }
 
-static PyObject *draw_func(PyObject * /*self*/, PyObject *args)
+static PyObject *view_draw_func(PyObject * /*self*/, PyObject *args)
 {
   PyObject *pysession, *pygraph, *pyv3d, *pyrv3d;
 
@@ -350,7 +340,7 @@ static PyObject *draw_func(PyObject * /*self*/, PyObject *args)
     int viewport[4];
     glGetIntegerv(GL_VIEWPORT, viewport);
 
-    session->draw(viewport[2], viewport[3]);
+    session->view_draw(viewport[2], viewport[3]);
   }
 
   Py_RETURN_NONE;
@@ -375,7 +365,7 @@ static PyObject *reset_func(PyObject * /*self*/, PyObject *args)
 
   python_thread_state_save(&session->python_thread_state);
 
-  tbb::this_task_arena::isolate([&] { session->reset_session(b_data, b_depsgraph); });
+  session->reset_session(b_data, b_depsgraph);
 
   python_thread_state_restore(&session->python_thread_state);
 
@@ -397,7 +387,7 @@ static PyObject *sync_func(PyObject * /*self*/, PyObject *args)
 
   python_thread_state_save(&session->python_thread_state);
 
-  tbb::this_task_arena::isolate([&] { session->synchronize(b_depsgraph); });
+  session->synchronize(b_depsgraph);
 
   python_thread_state_restore(&session->python_thread_state);
 
@@ -487,6 +477,24 @@ static PyObject *osl_update_node_func(PyObject * /*self*/, PyObject *args)
     if (param->varlenarray || param->isstruct || param->type.arraylen > 1)
       continue;
 
+    /* Read metadata. */
+    bool is_bool_param = false;
+    ustring param_label = param->name;
+
+    for (const OSL::OSLQuery::Parameter &metadata : param->metadata) {
+      if (metadata.type == TypeDesc::STRING) {
+        if (metadata.name == "widget") {
+          /* Boolean socket. */
+          if (metadata.sdefault[0] == "boolean" || metadata.sdefault[0] == "checkBox") {
+            is_bool_param = true;
+          }
+        }
+        else if (metadata.name == "label") {
+          /* Socket label. */
+          param_label = metadata.sdefault[0];
+        }
+      }
+    }
     /* determine socket type */
     string socket_type;
     BL::NodeSocket::type_enum data_type = BL::NodeSocket::type_VALUE;
@@ -494,6 +502,7 @@ static PyObject *osl_update_node_func(PyObject * /*self*/, PyObject *args)
     float default_float = 0.0f;
     int default_int = 0;
     string default_string = "";
+    bool default_boolean = false;
 
     if (param->isclosure) {
       socket_type = "NodeSocketShader";
@@ -523,10 +532,19 @@ static PyObject *osl_update_node_func(PyObject * /*self*/, PyObject *args)
     }
     else if (param->type.aggregate == TypeDesc::SCALAR) {
       if (param->type.basetype == TypeDesc::INT) {
-        socket_type = "NodeSocketInt";
-        data_type = BL::NodeSocket::type_INT;
-        if (param->validdefault)
-          default_int = param->idefault[0];
+        if (is_bool_param) {
+          socket_type = "NodeSocketBool";
+          data_type = BL::NodeSocket::type_BOOLEAN;
+          if (param->validdefault) {
+            default_boolean = (bool)param->idefault[0];
+          }
+        }
+        else {
+          socket_type = "NodeSocketInt";
+          data_type = BL::NodeSocket::type_INT;
+          if (param->validdefault)
+            default_int = param->idefault[0];
+        }
       }
       else if (param->type.basetype == TypeDesc::FLOAT) {
         socket_type = "NodeSocketFloat";
@@ -546,33 +564,57 @@ static PyObject *osl_update_node_func(PyObject * /*self*/, PyObject *args)
     else
       continue;
 
-    /* find socket socket */
-    BL::NodeSocket b_sock(PointerRNA_NULL);
+    /* Update existing socket. */
+    bool found_existing = false;
     if (param->isoutput) {
-      b_sock = b_node.outputs[param->name.string()];
-      /* remove if type no longer matches */
-      if (b_sock && b_sock.bl_idname() != socket_type) {
-        b_node.outputs.remove(b_data, b_sock);
-        b_sock = BL::NodeSocket(PointerRNA_NULL);
+      for (BL::NodeSocket &b_sock : b_node.outputs) {
+        if (b_sock.identifier() == param->name) {
+          if (b_sock.bl_idname() != socket_type) {
+            /* Remove if type no longer matches. */
+            b_node.outputs.remove(b_data, b_sock);
+          }
+          else {
+            /* Reuse and update label. */
+            if (b_sock.name() != param_label) {
+              b_sock.name(param_label.string());
+            }
+            used_sockets.insert(b_sock.ptr.data);
+            found_existing = true;
+          }
+          break;
+        }
       }
     }
     else {
-      b_sock = b_node.inputs[param->name.string()];
-      /* remove if type no longer matches */
-      if (b_sock && b_sock.bl_idname() != socket_type) {
-        b_node.inputs.remove(b_data, b_sock);
-        b_sock = BL::NodeSocket(PointerRNA_NULL);
+      for (BL::NodeSocket &b_sock : b_node.inputs) {
+        if (b_sock.identifier() == param->name) {
+          if (b_sock.bl_idname() != socket_type) {
+            /* Remove if type no longer matches. */
+            b_node.inputs.remove(b_data, b_sock);
+          }
+          else {
+            /* Reuse and update label. */
+            if (b_sock.name() != param_label) {
+              b_sock.name(param_label.string());
+            }
+            used_sockets.insert(b_sock.ptr.data);
+            found_existing = true;
+          }
+          break;
+        }
       }
     }
 
-    if (!b_sock) {
-      /* create new socket */
-      if (param->isoutput)
-        b_sock = b_node.outputs.create(
-            b_data, socket_type.c_str(), param->name.c_str(), param->name.c_str());
-      else
-        b_sock = b_node.inputs.create(
-            b_data, socket_type.c_str(), param->name.c_str(), param->name.c_str());
+    if (!found_existing) {
+      /* Create new socket. */
+      BL::NodeSocket b_sock = (param->isoutput) ? b_node.outputs.create(b_data,
+                                                                        socket_type.c_str(),
+                                                                        param_label.c_str(),
+                                                                        param->name.c_str()) :
+                                                  b_node.inputs.create(b_data,
+                                                                       socket_type.c_str(),
+                                                                       param_label.c_str(),
+                                                                       param->name.c_str());
 
       /* set default value */
       if (data_type == BL::NodeSocket::type_VALUE) {
@@ -590,9 +632,12 @@ static PyObject *osl_update_node_func(PyObject * /*self*/, PyObject *args)
       else if (data_type == BL::NodeSocket::type_STRING) {
         set_string(b_sock.ptr, "default_value", default_string);
       }
-    }
+      else if (data_type == BL::NodeSocket::type_BOOLEAN) {
+        set_boolean(b_sock.ptr, "default_value", default_boolean);
+      }
 
-    used_sockets.insert(b_sock.ptr.data);
+      used_sockets.insert(b_sock.ptr.data);
+    }
   }
 
   /* remove unused parameters */
@@ -657,40 +702,6 @@ static PyObject *system_info_func(PyObject * /*self*/, PyObject * /*value*/)
   string system_info = Device::device_capabilities();
   return pyunicode_from_string(system_info.c_str());
 }
-
-#ifdef WITH_OPENCL
-static PyObject *opencl_disable_func(PyObject * /*self*/, PyObject * /*value*/)
-{
-  VLOG(2) << "Disabling OpenCL platform.";
-  DebugFlags().opencl.device_type = DebugFlags::OpenCL::DEVICE_NONE;
-  Py_RETURN_NONE;
-}
-
-static PyObject *opencl_compile_func(PyObject * /*self*/, PyObject *args)
-{
-  PyObject *sequence = PySequence_Fast(args, "Arguments must be a sequence");
-  if (sequence == NULL) {
-    Py_RETURN_FALSE;
-  }
-
-  vector<string> parameters;
-  for (Py_ssize_t i = 0; i < PySequence_Fast_GET_SIZE(sequence); i++) {
-    PyObject *item = PySequence_Fast_GET_ITEM(sequence, i);
-    PyObject *item_as_string = PyObject_Str(item);
-    const char *parameter_string = PyUnicode_AsUTF8(item_as_string);
-    parameters.push_back(parameter_string);
-    Py_DECREF(item_as_string);
-  }
-  Py_DECREF(sequence);
-
-  if (device_opencl_compile_kernel(parameters)) {
-    Py_RETURN_TRUE;
-  }
-  else {
-    Py_RETURN_FALSE;
-  }
-}
-#endif
 
 static bool image_parse_filepaths(PyObject *pyfilepaths, vector<string> &filepaths)
 {
@@ -869,10 +880,7 @@ static PyObject *debug_flags_update_func(PyObject * /*self*/, PyObject *args)
   RNA_id_pointer_create((ID *)PyLong_AsVoidPtr(pyscene), &sceneptr);
   BL::Scene b_scene(sceneptr);
 
-  if (debug_flags_sync_from_scene(b_scene)) {
-    VLOG(2) << "Tagging device list for update.";
-    Device::tag_update();
-  }
+  debug_flags_sync_from_scene(b_scene);
 
   VLOG(2) << "Debug flags set to:\n" << DebugFlags();
 
@@ -883,10 +891,7 @@ static PyObject *debug_flags_update_func(PyObject * /*self*/, PyObject *args)
 
 static PyObject *debug_flags_reset_func(PyObject * /*self*/, PyObject * /*args*/)
 {
-  if (debug_flags_reset()) {
-    VLOG(2) << "Tagging device list for update.";
-    Device::tag_update();
-  }
+  debug_flags_reset();
   if (debug_flags_set) {
     VLOG(2) << "Debug flags reset to:\n" << DebugFlags();
     debug_flags_set = false;
@@ -981,16 +986,14 @@ static PyObject *enable_print_stats_func(PyObject * /*self*/, PyObject * /*args*
 static PyObject *get_device_types_func(PyObject * /*self*/, PyObject * /*args*/)
 {
   vector<DeviceType> device_types = Device::available_types();
-  bool has_cuda = false, has_optix = false, has_opencl = false;
+  bool has_cuda = false, has_optix = false;
   foreach (DeviceType device_type, device_types) {
     has_cuda |= (device_type == DEVICE_CUDA);
     has_optix |= (device_type == DEVICE_OPTIX);
-    has_opencl |= (device_type == DEVICE_OPENCL);
   }
-  PyObject *list = PyTuple_New(3);
+  PyObject *list = PyTuple_New(2);
   PyTuple_SET_ITEM(list, 0, PyBool_FromLong(has_cuda));
   PyTuple_SET_ITEM(list, 1, PyBool_FromLong(has_optix));
-  PyTuple_SET_ITEM(list, 2, PyBool_FromLong(has_opencl));
   return list;
 }
 
@@ -1009,9 +1012,6 @@ static PyObject *set_device_override_func(PyObject * /*self*/, PyObject *arg)
 
   if (override == "CPU") {
     BlenderSession::device_override = DEVICE_MASK_CPU;
-  }
-  else if (override == "OPENCL") {
-    BlenderSession::device_override = DEVICE_MASK_OPENCL;
   }
   else if (override == "CUDA") {
     BlenderSession::device_override = DEVICE_MASK_CUDA;
@@ -1038,8 +1038,9 @@ static PyMethodDef methods[] = {
     {"create", create_func, METH_VARARGS, ""},
     {"free", free_func, METH_O, ""},
     {"render", render_func, METH_VARARGS, ""},
-    {"bake", bake_func, METH_VARARGS, ""},
     {"draw", draw_func, METH_VARARGS, ""},
+    {"bake", bake_func, METH_VARARGS, ""},
+    {"view_draw", view_draw_func, METH_VARARGS, ""},
     {"sync", sync_func, METH_VARARGS, ""},
     {"reset", reset_func, METH_VARARGS, ""},
 #ifdef WITH_OSL
@@ -1049,10 +1050,6 @@ static PyMethodDef methods[] = {
     {"oiio_make_tx", oiio_make_tx, METH_VARARGS, ""},
     {"available_devices", available_devices_func, METH_VARARGS, ""},
     {"system_info", system_info_func, METH_NOARGS, ""},
-#ifdef WITH_OPENCL
-    {"opencl_disable", opencl_disable_func, METH_NOARGS, ""},
-    {"opencl_compile", opencl_compile_func, METH_VARARGS, ""},
-#endif
 
     /* Standalone denoising */
     {"denoise", (PyCFunction)denoise_func, METH_VARARGS | METH_KEYWORDS, ""},
@@ -1118,14 +1115,6 @@ void *CCL_python_module_init()
   Py_INCREF(Py_False);
   PyModule_AddStringConstant(mod, "osl_version", "unknown");
   PyModule_AddStringConstant(mod, "osl_version_string", "unknown");
-#endif
-
-#ifdef WITH_CYCLES_DEBUG
-  PyModule_AddObject(mod, "with_cycles_debug", Py_True);
-  Py_INCREF(Py_True);
-#else
-  PyModule_AddObject(mod, "with_cycles_debug", Py_False);
-  Py_INCREF(Py_False);
 #endif
 
 #ifdef WITH_EMBREE

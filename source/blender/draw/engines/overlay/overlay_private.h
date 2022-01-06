@@ -107,6 +107,7 @@ typedef struct OVERLAY_PassList {
   DRWPass *gpencil_canvas_ps;
   DRWPass *facing_ps[2];
   DRWPass *fade_ps[2];
+  DRWPass *mode_transfer_ps[2];
   DRWPass *grid_ps;
   DRWPass *image_background_ps;
   DRWPass *image_background_scene_ps;
@@ -282,6 +283,7 @@ typedef struct OVERLAY_PrivateData {
   DRWShadingGroup *extra_grid_grp;
   DRWShadingGroup *facing_grp[2];
   DRWShadingGroup *fade_grp[2];
+  DRWShadingGroup *flash_grp[2];
   DRWShadingGroup *motion_path_lines_grp;
   DRWShadingGroup *motion_path_points_grp;
   DRWShadingGroup *outlines_grp;
@@ -312,7 +314,7 @@ typedef struct OVERLAY_PrivateData {
   DRWView *view_edit_text;
   DRWView *view_reference_images;
 
-  /** TODO get rid of this. */
+  /** TODO: get rid of this. */
   ListBase smoke_domains;
   ListBase bg_movie_clips;
 
@@ -331,8 +333,8 @@ typedef struct OVERLAY_PrivateData {
   bool xray_enabled;
   bool xray_enabled_and_not_wire;
   float xray_opacity;
-  short v3d_flag;     /* TODO move to View3DOverlay */
-  short v3d_gridflag; /* TODO move to View3DOverlay */
+  short v3d_flag;     /* TODO: move to #View3DOverlay. */
+  short v3d_gridflag; /* TODO: move to #View3DOverlay. */
   int cfra;
   DRWState clipping_state;
   OVERLAY_ShadingData shdata;
@@ -356,7 +358,7 @@ typedef struct OVERLAY_PrivateData {
     bool select_vert;
     bool select_face;
     bool select_edge;
-    int flag; /** Copy of v3d->overlay.edit_flag.  */
+    int flag; /** Copy of #v3d->overlay.edit_flag. */
   } edit_mesh;
   struct {
     bool use_weight;
@@ -414,6 +416,10 @@ typedef struct OVERLAY_PrivateData {
   struct {
     DRWCallBuffer *handle[2];
   } mball;
+  struct {
+    double time;
+    bool any_animated;
+  } mode_transfer;
 } OVERLAY_PrivateData; /* Transient data */
 
 typedef struct OVERLAY_StorageList {
@@ -607,6 +613,12 @@ void OVERLAY_fade_cache_populate(OVERLAY_Data *vedata, Object *ob);
 void OVERLAY_fade_draw(OVERLAY_Data *vedata);
 void OVERLAY_fade_infront_draw(OVERLAY_Data *vedata);
 
+void OVERLAY_mode_transfer_cache_init(OVERLAY_Data *vedata);
+void OVERLAY_mode_transfer_cache_populate(OVERLAY_Data *vedata, Object *ob);
+void OVERLAY_mode_transfer_draw(OVERLAY_Data *vedata);
+void OVERLAY_mode_transfer_infront_draw(OVERLAY_Data *vedata);
+void OVERLAY_mode_transfer_cache_finish(OVERLAY_Data *vedata);
+
 void OVERLAY_grid_init(OVERLAY_Data *vedata);
 void OVERLAY_grid_cache_init(OVERLAY_Data *vedata);
 void OVERLAY_grid_draw(OVERLAY_Data *vedata);
@@ -710,6 +722,7 @@ GPUShader *OVERLAY_shader_extra_point(void);
 GPUShader *OVERLAY_shader_facing(void);
 GPUShader *OVERLAY_shader_gpencil_canvas(void);
 GPUShader *OVERLAY_shader_grid(void);
+GPUShader *OVERLAY_shader_grid_background(void);
 GPUShader *OVERLAY_shader_grid_image(void);
 GPUShader *OVERLAY_shader_image(void);
 GPUShader *OVERLAY_shader_motion_path_line(void);
@@ -724,7 +737,7 @@ GPUShader *OVERLAY_shader_paint_face(void);
 GPUShader *OVERLAY_shader_paint_point(void);
 GPUShader *OVERLAY_shader_paint_texture(void);
 GPUShader *OVERLAY_shader_paint_vertcol(void);
-GPUShader *OVERLAY_shader_paint_weight(void);
+GPUShader *OVERLAY_shader_paint_weight(bool shading);
 GPUShader *OVERLAY_shader_paint_wire(void);
 GPUShader *OVERLAY_shader_particle_dot(void);
 GPUShader *OVERLAY_shader_particle_shape(void);

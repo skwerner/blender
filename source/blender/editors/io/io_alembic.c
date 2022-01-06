@@ -63,9 +63,25 @@
 #  include "WM_api.h"
 #  include "WM_types.h"
 
+#  include "DEG_depsgraph.h"
+
 #  include "io_alembic.h"
 
 #  include "ABC_alembic.h"
+
+const EnumPropertyItem rna_enum_abc_export_evaluation_mode_items[] = {
+    {DAG_EVAL_RENDER,
+     "RENDER",
+     0,
+     "Render",
+     "Use Render settings for object visibility, modifier settings, etc"},
+    {DAG_EVAL_VIEWPORT,
+     "VIEWPORT",
+     0,
+     "Viewport",
+     "Use Viewport settings for object visibility, modifier settings, etc"},
+    {0, NULL, 0, NULL, NULL},
+};
 
 static int wm_alembic_export_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
@@ -126,7 +142,6 @@ static int wm_alembic_export_exec(bContext *C, wmOperator *op)
       .curves_as_mesh = RNA_boolean_get(op->ptr, "curves_as_mesh"),
       .flatten_hierarchy = RNA_boolean_get(op->ptr, "flatten"),
       .visible_objects_only = RNA_boolean_get(op->ptr, "visible_objects_only"),
-      .renderable_only = RNA_boolean_get(op->ptr, "renderable_only"),
       .face_sets = RNA_boolean_get(op->ptr, "face_sets"),
       .use_subdiv_schema = RNA_boolean_get(op->ptr, "subdiv_schema"),
       .export_hair = RNA_boolean_get(op->ptr, "export_hair"),
@@ -137,6 +152,7 @@ static int wm_alembic_export_exec(bContext *C, wmOperator *op)
       .triangulate = RNA_boolean_get(op->ptr, "triangulate"),
       .quad_method = RNA_enum_get(op->ptr, "quad_method"),
       .ngon_method = RNA_enum_get(op->ptr, "ngon_method"),
+      .evaluation_mode = RNA_enum_get(op->ptr, "evaluation_mode"),
 
       .global_scale = RNA_float_get(op->ptr, "global_scale"),
   };
@@ -194,8 +210,10 @@ static void ui_alembic_export_settings(uiLayout *layout, PointerRNA *imfptr)
 
   sub = uiLayoutColumnWithHeading(col, true, IFACE_("Only"));
   uiItemR(sub, imfptr, "selected", 0, IFACE_("Selected Objects"), ICON_NONE);
-  uiItemR(sub, imfptr, "renderable_only", 0, IFACE_("Renderable Objects"), ICON_NONE);
   uiItemR(sub, imfptr, "visible_objects_only", 0, IFACE_("Visible Objects"), ICON_NONE);
+
+  col = uiLayoutColumn(box, true);
+  uiItemR(col, imfptr, "evaluation_mode", 0, NULL, ICON_NONE);
 
   /* Object Data */
   box = uiLayoutBox(layout);
@@ -355,12 +373,6 @@ void WM_OT_alembic_export(wmOperatorType *ot)
       ot->srna, "selected", 0, "Selected Objects Only", "Export only selected objects");
 
   RNA_def_boolean(ot->srna,
-                  "renderable_only",
-                  1,
-                  "Renderable Objects Only",
-                  "Export only objects marked renderable in the outliner");
-
-  RNA_def_boolean(ot->srna,
                   "visible_objects_only",
                   0,
                   "Visible Objects Only",
@@ -467,6 +479,14 @@ void WM_OT_alembic_export(wmOperatorType *ot)
       "Enable this to run the import in the background, disable to block Blender while importing. "
       "This option is deprecated; EXECUTE this operator to run in the foreground, and INVOKE it "
       "to run as a background job");
+
+  RNA_def_enum(ot->srna,
+               "evaluation_mode",
+               rna_enum_abc_export_evaluation_mode_items,
+               DAG_EVAL_RENDER,
+               "Use Settings for",
+               "Determines visibility of objects, modifier settings, and other areas where there "
+               "are different settings for viewport and rendering");
 
   /* This dummy prop is used to check whether we need to init the start and
    * end frame values to that of the scene's, otherwise they are reset at
@@ -595,6 +615,7 @@ static void ui_alembic_import_settings(uiLayout *layout, PointerRNA *imfptr)
   uiItemR(col, imfptr, "set_frame_range", 0, NULL, ICON_NONE);
   uiItemR(col, imfptr, "is_sequence", 0, NULL, ICON_NONE);
   uiItemR(col, imfptr, "validate_meshes", 0, NULL, ICON_NONE);
+  uiItemR(col, imfptr, "always_add_cache_reader", 0, NULL, ICON_NONE);
 }
 
 static void wm_alembic_import_draw(bContext *UNUSED(C), wmOperator *op)
@@ -625,6 +646,7 @@ static int wm_alembic_import_exec(bContext *C, wmOperator *op)
   const bool is_sequence = RNA_boolean_get(op->ptr, "is_sequence");
   const bool set_frame_range = RNA_boolean_get(op->ptr, "set_frame_range");
   const bool validate_meshes = RNA_boolean_get(op->ptr, "validate_meshes");
+  const bool always_add_cache_reader = RNA_boolean_get(op->ptr, "always_add_cache_reader");
   const bool as_background_job = RNA_boolean_get(op->ptr, "as_background_job");
 
   int offset = 0;
@@ -652,6 +674,7 @@ static int wm_alembic_import_exec(bContext *C, wmOperator *op)
                        sequence_len,
                        offset,
                        validate_meshes,
+                       always_add_cache_reader,
                        as_background_job);
 
   return as_background_job || ok ? OPERATOR_FINISHED : OPERATOR_CANCELLED;
@@ -700,6 +723,13 @@ void WM_OT_alembic_import(wmOperatorType *ot)
                   0,
                   "Validate Meshes",
                   "Check imported mesh objects for invalid data (slow)");
+
+  RNA_def_boolean(ot->srna,
+                  "always_add_cache_reader",
+                  false,
+                  "Always Add Cache Reader",
+                  "Add cache modifiers and constraints to imported objects even if they are not "
+                  "animated so that they can be updated when reloading the Alembic archive");
 
   RNA_def_boolean(ot->srna,
                   "is_sequence",

@@ -161,6 +161,12 @@ void ED_region_do_listen(wmRegionListenerParams *params)
   if (region->type && region->type->listener) {
     region->type->listener(params);
   }
+
+  LISTBASE_FOREACH (uiList *, list, &region->ui_lists) {
+    if (list->type && list->type->listener) {
+      list->type->listener(list, params);
+    }
+  }
 }
 
 /* only exported for WM */
@@ -828,9 +834,8 @@ void ED_area_status_text(ScrArea *area, const char *str)
         BLI_strncpy(region->headerstr, str, UI_MAX_DRAW_STR);
         BLI_str_rstrip(region->headerstr);
       }
-      else if (region->headerstr) {
-        MEM_freeN(region->headerstr);
-        region->headerstr = NULL;
+      else {
+        MEM_SAFE_FREE(region->headerstr);
       }
       ED_region_tag_redraw(region);
     }
@@ -853,9 +858,8 @@ void ED_workspace_status_text(bContext *C, const char *str)
     }
     BLI_strncpy(workspace->status_text, str, UI_MAX_DRAW_STR);
   }
-  else if (workspace->status_text) {
-    MEM_freeN(workspace->status_text);
-    workspace->status_text = NULL;
+  else {
+    MEM_SAFE_FREE(workspace->status_text);
   }
 
   /* Redraw status bar. */
@@ -1385,7 +1389,7 @@ static void region_rect_recursive(
       region->flag |= RGN_FLAG_SIZE_CLAMP_Y;
     }
 
-    /* We need to use a test that wont have been previously clamped. */
+    /* We need to use a test that won't have been previously clamped. */
     rcti winrct_test = {
         .xmin = region->winrct.xmin,
         .ymin = region->winrct.ymin,
@@ -1461,7 +1465,7 @@ static void region_rect_recursive(
     }
   }
   else if (ELEM(alignment, RGN_ALIGN_VSPLIT, RGN_ALIGN_HSPLIT)) {
-    /* percentage subdiv*/
+    /* Percentage subdiv. */
     region->winrct = *remainder;
 
     if (alignment == RGN_ALIGN_HSPLIT) {
@@ -1527,8 +1531,8 @@ static void region_rect_recursive(
         BLI_rcti_init(remainder, 0, 0, 0, 0);
       }
 
-      /* Fix any negative dimensions. This can happen when a quad split 3d view gets to small. (see
-       * T72200). */
+      /* Fix any negative dimensions. This can happen when a quad split 3d view gets too small.
+       * (see T72200). */
       BLI_rcti_sanitize(&region->winrct);
 
       quad++;
@@ -1539,8 +1543,8 @@ static void region_rect_recursive(
   region->winx = BLI_rcti_size_x(&region->winrct) + 1;
   region->winy = BLI_rcti_size_y(&region->winrct) + 1;
 
-  /* if region opened normally, we store this for hide/reveal usage */
-  /* prevent rounding errors for UI_DPI_FAC mult and divide */
+  /* If region opened normally, we store this for hide/reveal usage. */
+  /* Prevent rounding errors for UI_DPI_FAC multiply and divide. */
   if (region->winx > 1) {
     region->sizex = (region->winx + 0.5f) / UI_DPI_FAC;
   }
@@ -1680,7 +1684,7 @@ static void ed_default_handlers(
 {
   BLI_assert(region ? (&region->handlers == handlers) : (&area->handlers == handlers));
 
-  /* note, add-handler checks if it already exists */
+  /* NOTE: add-handler checks if it already exists. */
 
   /* XXX it would be good to have boundbox checks for some of these... */
   if (flag & ED_KEYMAP_UI) {
@@ -2081,7 +2085,7 @@ void ED_area_data_copy(ScrArea *area_dst, ScrArea *area_src, const bool do_free)
   }
   BKE_spacedata_copylist(&area_dst->spacedata, &area_src->spacedata);
 
-  /* Note; SPACE_EMPTY is possible on new screens */
+  /* NOTE: SPACE_EMPTY is possible on new screens. */
 
   /* regions */
   if (do_free) {
@@ -2387,7 +2391,7 @@ void ED_area_newspace(bContext *C, ScrArea *area, int type, const bool skip_regi
      * However, add-on install for example, forces the header to the top which shouldn't
      * be applied back to the previous space type when closing - see: T57724
      *
-     * Newly created windows wont have any space data, use the alignment
+     * Newly-created windows won't have any space data, use the alignment
      * the space type defaults to in this case instead
      * (needed for preferences to have space-type on bottom).
      */
@@ -3018,6 +3022,8 @@ void ED_region_panels_layout_ex(const bContext *C,
     y = -y;
   }
 
+  UI_blocklist_update_view_for_buttons(C, &region->uiblocks);
+
   if (update_tot_size) {
     /* this also changes the 'cur' */
     UI_view2d_totRect_set(v2d, x, y);
@@ -3325,10 +3331,10 @@ void ED_region_header_layout(const bContext *C, ARegion *region)
     maxco += UI_HEADER_OFFSET;
   }
 
-  /* always as last  */
+  /* Always as last. */
   UI_view2d_totRect_set(&region->v2d, maxco, region->winy);
 
-  /* restore view matrix */
+  /* Restore view matrix. */
   UI_view2d_view_restore(C);
 }
 
@@ -3672,7 +3678,7 @@ static void region_visible_rect_calc(ARegion *region, rcti *rect)
           /* Skip floating. */
         }
         else {
-          BLI_assert(!"Region overlap with unknown alignment");
+          BLI_assert_msg(0, "Region overlap with unknown alignment");
         }
       }
     }

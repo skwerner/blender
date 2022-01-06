@@ -23,23 +23,21 @@
 
 #include "node_geometry_util.hh"
 
-static bNodeSocketTemplate geo_node_attribute_randomize_in[] = {
-    {SOCK_GEOMETRY, N_("Geometry")},
-    {SOCK_STRING, N_("Attribute")},
-    {SOCK_VECTOR, N_("Min"), 0.0f, 0.0f, 0.0f, 0.0f, -FLT_MAX, FLT_MAX},
-    {SOCK_VECTOR, N_("Max"), 1.0f, 1.0f, 1.0f, 0.0f, -FLT_MAX, FLT_MAX},
-    {SOCK_FLOAT, N_("Min"), 0.0f, 0.0f, 0.0f, 0.0f, -FLT_MAX, FLT_MAX},
-    {SOCK_FLOAT, N_("Max"), 1.0f, 0.0f, 0.0f, 0.0f, -FLT_MAX, FLT_MAX},
-    {SOCK_INT, N_("Min"), 0.0f, 0.0f, 0.0f, 0.0f, -100000, 100000},
-    {SOCK_INT, N_("Max"), 100.0f, 0.0f, 0.0f, 0.0f, -100000, 100000},
-    {SOCK_INT, N_("Seed"), 0, 0, 0, 0, -10000, 10000},
-    {-1, ""},
-};
+namespace blender::nodes {
 
-static bNodeSocketTemplate geo_node_attribute_randomize_out[] = {
-    {SOCK_GEOMETRY, N_("Geometry")},
-    {-1, ""},
-};
+static void geo_node_attribute_randomize_declare(NodeDeclarationBuilder &b)
+{
+  b.add_input<decl::Geometry>("Geometry");
+  b.add_input<decl::String>("Attribute");
+  b.add_input<decl::Vector>("Min");
+  b.add_input<decl::Vector>("Max").default_value({1.0f, 1.0f, 1.0f});
+  b.add_input<decl::Float>("Min", "Min_001");
+  b.add_input<decl::Float>("Max", "Max_001").default_value(1.0f);
+  b.add_input<decl::Int>("Min", "Min_002").min(-100000).max(100000);
+  b.add_input<decl::Int>("Max", "Max_002").default_value(100).min(-100000).max(100000);
+  b.add_input<decl::Int>("Seed").min(-10000).max(10000);
+  b.add_output<decl::Geometry>("Geometry");
+}
 
 static void geo_node_attribute_random_layout(uiLayout *layout,
                                              bContext *UNUSED(C),
@@ -77,8 +75,6 @@ static void geo_node_attribute_randomize_update(bNodeTree *UNUSED(ntree), bNode 
   nodeSetSocketAvailability(sock_min_int, data_type == CD_PROP_INT32);
   nodeSetSocketAvailability(sock_max_int, data_type == CD_PROP_INT32);
 }
-
-namespace blender::nodes {
 
 template<typename T>
 T random_value_in_range(const uint32_t id, const uint32_t seed, const T min, const T max);
@@ -126,7 +122,7 @@ static void randomize_attribute(MutableSpan<T> span,
   /* The operations could be templated too, but it doesn't make the code much shorter. */
   switch (operation) {
     case GEO_NODE_ATTRIBUTE_RANDOMIZE_REPLACE_CREATE:
-      parallel_for(span.index_range(), 512, [&](IndexRange range) {
+      threading::parallel_for(span.index_range(), 512, [&](IndexRange range) {
         for (const int i : range) {
           const T random_value = random_value_in_range<T>(ids[i], seed, min, max);
           span[i] = random_value;
@@ -134,7 +130,7 @@ static void randomize_attribute(MutableSpan<T> span,
       });
       break;
     case GEO_NODE_ATTRIBUTE_RANDOMIZE_ADD:
-      parallel_for(span.index_range(), 512, [&](IndexRange range) {
+      threading::parallel_for(span.index_range(), 512, [&](IndexRange range) {
         for (const int i : range) {
           const T random_value = random_value_in_range<T>(ids[i], seed, min, max);
           span[i] = span[i] + random_value;
@@ -142,7 +138,7 @@ static void randomize_attribute(MutableSpan<T> span,
       });
       break;
     case GEO_NODE_ATTRIBUTE_RANDOMIZE_SUBTRACT:
-      parallel_for(span.index_range(), 512, [&](IndexRange range) {
+      threading::parallel_for(span.index_range(), 512, [&](IndexRange range) {
         for (const int i : range) {
           const T random_value = random_value_in_range<T>(ids[i], seed, min, max);
           span[i] = span[i] - random_value;
@@ -150,7 +146,7 @@ static void randomize_attribute(MutableSpan<T> span,
       });
       break;
     case GEO_NODE_ATTRIBUTE_RANDOMIZE_MULTIPLY:
-      parallel_for(span.index_range(), 512, [&](IndexRange range) {
+      threading::parallel_for(span.index_range(), 512, [&](IndexRange range) {
         for (const int i : range) {
           const T random_value = random_value_in_range<T>(ids[i], seed, min, max);
           span[i] = span[i] * random_value;
@@ -170,7 +166,7 @@ static void randomize_attribute_bool(MutableSpan<bool> span,
 {
   BLI_assert(operation == GEO_NODE_ATTRIBUTE_RANDOMIZE_REPLACE_CREATE);
   UNUSED_VARS_NDEBUG(operation);
-  parallel_for(span.index_range(), 512, [&](IndexRange range) {
+  threading::parallel_for(span.index_range(), 512, [&](IndexRange range) {
     for (const int i : range) {
       const bool random_value = BLI_hash_int_2d_to_float(ids[i], seed) > 0.5f;
       span[i] = random_value;
@@ -189,8 +185,9 @@ Array<uint32_t> get_geometry_element_ids_as_uints(const GeometryComponent &compo
   if (hash_attribute) {
     BLI_assert(hashes.size() == hash_attribute->size());
     const CPPType &cpp_type = hash_attribute->type();
+    BLI_assert(cpp_type.is_hashable());
     GVArray_GSpan items{*hash_attribute};
-    parallel_for(hashes.index_range(), 512, [&](IndexRange range) {
+    threading::parallel_for(hashes.index_range(), 512, [&](IndexRange range) {
       for (const int i : range) {
         hashes[i] = cpp_type.hash(items[i]);
       }
@@ -334,13 +331,13 @@ void register_node_type_geo_attribute_randomize()
   static bNodeType ntype;
 
   geo_node_type_base(
-      &ntype, GEO_NODE_ATTRIBUTE_RANDOMIZE, "Attribute Randomize", NODE_CLASS_ATTRIBUTE, 0);
-  node_type_socket_templates(
-      &ntype, geo_node_attribute_randomize_in, geo_node_attribute_randomize_out);
-  node_type_init(&ntype, geo_node_attribute_randomize_init);
-  node_type_update(&ntype, geo_node_attribute_randomize_update);
+      &ntype, GEO_NODE_LEGACY_ATTRIBUTE_RANDOMIZE, "Attribute Randomize", NODE_CLASS_ATTRIBUTE, 0);
+  node_type_init(&ntype, blender::nodes::geo_node_attribute_randomize_init);
+  node_type_update(&ntype, blender::nodes::geo_node_attribute_randomize_update);
+
+  ntype.declare = blender::nodes::geo_node_attribute_randomize_declare;
   ntype.geometry_node_execute = blender::nodes::geo_node_random_attribute_exec;
-  ntype.draw_buttons = geo_node_attribute_random_layout;
+  ntype.draw_buttons = blender::nodes::geo_node_attribute_random_layout;
   node_type_storage(
       &ntype, "NodeAttributeRandomize", node_free_standard_storage, node_copy_standard_storage);
   nodeRegisterType(&ntype);

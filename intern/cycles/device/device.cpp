@@ -26,7 +26,6 @@
 #include "device/cuda/device.h"
 #include "device/dummy/device.h"
 #include "device/multi/device.h"
-#include "device/opencl/device.h"
 #include "device/optix/device.h"
 
 #include "util/util_foreach.h"
@@ -45,41 +44,10 @@ CCL_NAMESPACE_BEGIN
 bool Device::need_types_update = true;
 bool Device::need_devices_update = true;
 thread_mutex Device::device_mutex;
-vector<DeviceInfo> Device::opencl_devices;
 vector<DeviceInfo> Device::cuda_devices;
 vector<DeviceInfo> Device::optix_devices;
 vector<DeviceInfo> Device::cpu_devices;
 uint Device::devices_initialized_mask = 0;
-
-/* Device Requested Features */
-
-std::ostream &operator<<(std::ostream &os, const DeviceRequestedFeatures &requested_features)
-{
-  os << "Experimental features: " << (requested_features.experimental ? "On" : "Off") << std::endl;
-  os << "Max nodes group: " << requested_features.max_nodes_group << std::endl;
-  /* TODO(sergey): Decode bitflag into list of names. */
-  os << "Nodes features: " << requested_features.nodes_features << std::endl;
-  os << "Use Hair: " << string_from_bool(requested_features.use_hair) << std::endl;
-  os << "Use Object Motion: " << string_from_bool(requested_features.use_object_motion)
-     << std::endl;
-  os << "Use Camera Motion: " << string_from_bool(requested_features.use_camera_motion)
-     << std::endl;
-  os << "Use Baking: " << string_from_bool(requested_features.use_baking) << std::endl;
-  os << "Use Subsurface: " << string_from_bool(requested_features.use_subsurface) << std::endl;
-  os << "Use Volume: " << string_from_bool(requested_features.use_volume) << std::endl;
-  os << "Use Patch Evaluation: " << string_from_bool(requested_features.use_patch_evaluation)
-     << std::endl;
-  os << "Use Transparent Shadows: " << string_from_bool(requested_features.use_transparent)
-     << std::endl;
-  os << "Use Principled BSDF: " << string_from_bool(requested_features.use_principled)
-     << std::endl;
-  os << "Use Denoising: " << string_from_bool(requested_features.use_denoising) << std::endl;
-  os << "Use Displacement: " << string_from_bool(requested_features.use_true_displacement)
-     << std::endl;
-  os << "Use Background Light: " << string_from_bool(requested_features.use_background_light)
-     << std::endl;
-  return os;
-}
 
 /* Device */
 
@@ -129,12 +97,6 @@ Device *Device::create(const DeviceInfo &info, Stats &stats, Profiler &profiler)
         device = device_optix_create(info, stats, profiler);
       break;
 #endif
-#ifdef WITH_OPENCL
-    case DEVICE_OPENCL:
-      if (device_opencl_init())
-        device = device_opencl_create(info, stats, profiler);
-      break;
-#endif
     default:
       break;
   }
@@ -154,8 +116,6 @@ DeviceType Device::type_from_string(const char *name)
     return DEVICE_CUDA;
   else if (strcmp(name, "OPTIX") == 0)
     return DEVICE_OPTIX;
-  else if (strcmp(name, "OPENCL") == 0)
-    return DEVICE_OPENCL;
   else if (strcmp(name, "MULTI") == 0)
     return DEVICE_MULTI;
 
@@ -170,8 +130,6 @@ string Device::string_from_type(DeviceType type)
     return "CUDA";
   else if (type == DEVICE_OPTIX)
     return "OPTIX";
-  else if (type == DEVICE_OPENCL)
-    return "OPENCL";
   else if (type == DEVICE_MULTI)
     return "MULTI";
 
@@ -188,9 +146,6 @@ vector<DeviceType> Device::available_types()
 #ifdef WITH_OPTIX
   types.push_back(DEVICE_OPTIX);
 #endif
-#ifdef WITH_OPENCL
-  types.push_back(DEVICE_OPENCL);
-#endif
   return types;
 }
 
@@ -201,20 +156,6 @@ vector<DeviceInfo> Device::available_devices(uint mask)
    * we don't want to do any initialization until the user chooses to. */
   thread_scoped_lock lock(device_mutex);
   vector<DeviceInfo> devices;
-
-#ifdef WITH_OPENCL
-  if (mask & DEVICE_MASK_OPENCL) {
-    if (!(devices_initialized_mask & DEVICE_MASK_OPENCL)) {
-      if (device_opencl_init()) {
-        device_opencl_info(opencl_devices);
-      }
-      devices_initialized_mask |= DEVICE_MASK_OPENCL;
-    }
-    foreach (DeviceInfo &info, opencl_devices) {
-      devices.push_back(info);
-    }
-  }
-#endif
 
 #if defined(WITH_CUDA) || defined(WITH_OPTIX)
   if (mask & (DEVICE_MASK_CUDA | DEVICE_MASK_OPTIX)) {
@@ -277,15 +218,6 @@ string Device::device_capabilities(uint mask)
     capabilities += device_cpu_capabilities() + "\n";
   }
 
-#ifdef WITH_OPENCL
-  if (mask & DEVICE_MASK_OPENCL) {
-    if (device_opencl_init()) {
-      capabilities += "\nOpenCL device capabilities:\n";
-      capabilities += device_opencl_capabilities();
-    }
-  }
-#endif
-
 #ifdef WITH_CUDA
   if (mask & DEVICE_MASK_CUDA) {
     if (device_cuda_init()) {
@@ -310,14 +242,13 @@ DeviceInfo Device::get_multi_device(const vector<DeviceInfo> &subdevices,
   }
 
   DeviceInfo info;
-  info.type = subdevices.front().type;
+  info.type = DEVICE_NONE;
   info.id = "MULTI";
   info.description = "Multi Device";
   info.num = 0;
 
   info.has_half_images = true;
   info.has_nanovdb = true;
-  info.has_volume_decoupled = true;
   info.has_osl = true;
   info.has_profiling = true;
   info.has_peer_memory = false;
@@ -355,14 +286,16 @@ DeviceInfo Device::get_multi_device(const vector<DeviceInfo> &subdevices,
     info.id += device.id;
 
     /* Set device type to MULTI if subdevices are not of a common type. */
-    if (device.type != info.type) {
+    if (info.type == DEVICE_NONE) {
+      info.type = device.type;
+    }
+    else if (device.type != info.type) {
       info.type = DEVICE_MULTI;
     }
 
     /* Accumulate device info. */
     info.has_half_images &= device.has_half_images;
     info.has_nanovdb &= device.has_nanovdb;
-    info.has_volume_decoupled &= device.has_volume_decoupled;
     info.has_osl &= device.has_osl;
     info.has_profiling &= device.has_profiling;
     info.has_peer_memory |= device.has_peer_memory;
@@ -382,7 +315,6 @@ void Device::free_memory()
   devices_initialized_mask = 0;
   cuda_devices.free_memory();
   optix_devices.free_memory();
-  opencl_devices.free_memory();
   cpu_devices.free_memory();
 }
 

@@ -19,6 +19,8 @@
 #include "device/cpu/kernel.h"
 #include "device/device.h"
 
+#include "integrator/pass_accessor_cpu.h"
+
 #include "render/buffers.h"
 #include "render/gpu_display.h"
 #include "render/scene.h"
@@ -50,12 +52,11 @@ static inline CPUKernelThreadGlobals *kernel_thread_globals_get(
 }
 
 PathTraceWorkCPU::PathTraceWorkCPU(Device *device,
+                                   Film *film,
                                    DeviceScene *device_scene,
-                                   RenderBuffers *buffers,
                                    bool *cancel_requested_flag)
-    : PathTraceWork(device, device_scene, buffers, cancel_requested_flag),
-      kernels_(*(device->get_cpu_kernels())),
-      render_buffers_(buffers)
+    : PathTraceWork(device, film, device_scene, cancel_requested_flag),
+      kernels_(*(device->get_cpu_kernels()))
 {
   DCHECK_EQ(device->info.type, DEVICE_CPU);
 }
@@ -71,6 +72,10 @@ void PathTraceWorkCPU::render_samples(int start_sample, int samples_num)
   const int64_t image_width = effective_buffer_params_.width;
   const int64_t image_height = effective_buffer_params_.height;
   const int64_t total_pixels_num = image_width * image_height;
+
+  for (CPUKernelThreadGlobals &kernel_globals : kernel_thread_globals_) {
+    kernel_globals.start_profiling();
+  }
 
   tbb::task_arena local_arena = local_tbb_arena_create(device_);
   local_arena.execute([&]() {
@@ -97,6 +102,10 @@ void PathTraceWorkCPU::render_samples(int start_sample, int samples_num)
       render_samples_full_pipeline(kernel_globals, work_tile, samples_num);
     });
   });
+
+  for (CPUKernelThreadGlobals &kernel_globals : kernel_thread_globals_) {
+    kernel_globals.stop_profiling();
+  }
 }
 
 void PathTraceWorkCPU::render_samples_full_pipeline(KernelGlobals *kernel_globals,
@@ -104,23 +113,32 @@ void PathTraceWorkCPU::render_samples_full_pipeline(KernelGlobals *kernel_global
                                                     const int samples_num)
 {
   const bool has_shadow_catcher = device_scene_->data.integrator.has_shadow_catcher;
+  const bool has_bake = device_scene_->data.bake.use;
 
-  IntegratorState integrator_states[2];
+  IntegratorStateCPU integrator_states[2] = {};
 
-  IntegratorState *state = &integrator_states[0];
-  IntegratorState *shadow_catcher_state = &integrator_states[1];
+  IntegratorStateCPU *state = &integrator_states[0];
+  IntegratorStateCPU *shadow_catcher_state = &integrator_states[1];
 
   KernelWorkTile sample_work_tile = work_tile;
-  float *render_buffer = render_buffers_->buffer.data();
+  float *render_buffer = buffers_->buffer.data();
 
   for (int sample = 0; sample < samples_num; ++sample) {
     if (is_cancel_requested()) {
       break;
     }
 
-    if (!kernels_.integrator_init_from_camera(
-            kernel_globals, state, &sample_work_tile, render_buffer)) {
-      break;
+    if (has_bake) {
+      if (!kernels_.integrator_init_from_bake(
+              kernel_globals, state, &sample_work_tile, render_buffer)) {
+        break;
+      }
+    }
+    else {
+      if (!kernels_.integrator_init_from_camera(
+              kernel_globals, state, &sample_work_tile, render_buffer)) {
+        break;
+      }
     }
 
     kernels_.integrator_megakernel(kernel_globals, state, render_buffer);
@@ -133,15 +151,10 @@ void PathTraceWorkCPU::render_samples_full_pipeline(KernelGlobals *kernel_global
   }
 }
 
-void PathTraceWorkCPU::copy_to_gpu_display(GPUDisplay *gpu_display, float sample_scale)
+void PathTraceWorkCPU::copy_to_gpu_display(GPUDisplay *gpu_display,
+                                           PassMode pass_mode,
+                                           int num_samples)
 {
-  const int full_x = effective_buffer_params_.full_x;
-  const int full_y = effective_buffer_params_.full_y;
-  const int width = effective_buffer_params_.width;
-  const int height = effective_buffer_params_.height;
-  const int offset = effective_buffer_params_.offset;
-  const int stride = effective_buffer_params_.stride;
-
   half4 *rgba_half = gpu_display->map_texture_buffer();
   if (!rgba_half) {
     /* TODO(sergey): Look into using copy_to_gpu_display() if mapping failed. Might be needed for
@@ -149,24 +162,42 @@ void PathTraceWorkCPU::copy_to_gpu_display(GPUDisplay *gpu_display, float sample
     return;
   }
 
+  const KernelFilm &kfilm = device_scene_->data.film;
+
+  const PassAccessor::PassAccessInfo pass_access_info = get_display_pass_access_info(pass_mode);
+
+  const PassAccessorCPU pass_accessor(pass_access_info, kfilm.exposure, num_samples);
+
+  PassAccessor::Destination destination = get_gpu_display_destination_template(gpu_display);
+  destination.pixels_half_rgba = rgba_half;
+
   tbb::task_arena local_arena = local_tbb_arena_create(device_);
   local_arena.execute([&]() {
-    tbb::parallel_for(0, height, [&](int y) {
-      CPUKernelThreadGlobals *kernel_globals = kernel_thread_globals_get(kernel_thread_globals_);
-      for (int x = 0; x < width; ++x) {
-        kernels_.convert_to_half_float(kernel_globals,
-                                       reinterpret_cast<uchar4 *>(rgba_half),
-                                       reinterpret_cast<float *>(buffers_->buffer.device_pointer),
-                                       sample_scale,
-                                       full_x + x,
-                                       full_y + y,
-                                       offset,
-                                       stride);
-      }
-    });
+    pass_accessor.get_render_tile_pixels(buffers_.get(), effective_buffer_params_, destination);
   });
 
   gpu_display->unmap_texture_buffer();
+}
+
+void PathTraceWorkCPU::destroy_gpu_resources(GPUDisplay * /*gpu_display*/)
+{
+}
+
+bool PathTraceWorkCPU::copy_render_buffers_from_device()
+{
+  return buffers_->copy_from_device();
+}
+
+bool PathTraceWorkCPU::copy_render_buffers_to_device()
+{
+  buffers_->buffer.copy_to_device();
+  return true;
+}
+
+bool PathTraceWorkCPU::zero_render_buffers()
+{
+  buffers_->zero();
+  return true;
 }
 
 int PathTraceWorkCPU::adaptive_sampling_converge_filter_count_active(float threshold, bool reset)
@@ -178,7 +209,7 @@ int PathTraceWorkCPU::adaptive_sampling_converge_filter_count_active(float thres
   const int offset = effective_buffer_params_.offset;
   const int stride = effective_buffer_params_.stride;
 
-  float *render_buffer = render_buffers_->buffer.data();
+  float *render_buffer = buffers_->buffer.data();
 
   uint num_active_pixels = 0;
 
@@ -219,6 +250,28 @@ int PathTraceWorkCPU::adaptive_sampling_converge_filter_count_active(float thres
   }
 
   return num_active_pixels;
+}
+
+void PathTraceWorkCPU::cryptomatte_postproces()
+{
+  const int width = effective_buffer_params_.width;
+  const int height = effective_buffer_params_.height;
+
+  float *render_buffer = buffers_->buffer.data();
+
+  tbb::task_arena local_arena = local_tbb_arena_create(device_);
+
+  /* Check convergency and do x-filter in a single `parallel_for`, to reduce threading overhead. */
+  local_arena.execute([&]() {
+    tbb::parallel_for(0, height, [&](int y) {
+      CPUKernelThreadGlobals *kernel_globals = &kernel_thread_globals_[0];
+      int pixel_index = y * width;
+
+      for (int x = 0; x < width; ++x, ++pixel_index) {
+        kernels_.cryptomatte_postprocess(kernel_globals, render_buffer, pixel_index);
+      }
+    });
+  });
 }
 
 CCL_NAMESPACE_END

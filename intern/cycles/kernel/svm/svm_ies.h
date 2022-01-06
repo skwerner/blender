@@ -98,8 +98,10 @@ ccl_device_inline float kernel_ies_interp(const KernelGlobals *kg,
   return max(cubic_interp(a, b, c, d, h_frac), 0.0f);
 }
 
-ccl_device void svm_node_ies(
-    const KernelGlobals *kg, ShaderData *sd, float *stack, uint4 node, int *offset)
+ccl_device_noinline void svm_node_ies(const KernelGlobals *kg,
+                                      ShaderData *sd,
+                                      float *stack,
+                                      uint4 node)
 {
   uint vector_offset, strength_offset, fac_offset, slot = node.z;
   svm_unpack_node_uchar3(node.y, &strength_offset, &vector_offset, &fac_offset);

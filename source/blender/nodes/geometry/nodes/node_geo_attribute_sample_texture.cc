@@ -28,20 +28,16 @@
 
 #include "node_geometry_util.hh"
 
-static bNodeSocketTemplate geo_node_attribute_sample_texture_in[] = {
-    {SOCK_GEOMETRY, N_("Geometry")},
-    {SOCK_TEXTURE, N_("Texture")},
-    {SOCK_STRING, N_("Mapping")},
-    {SOCK_STRING, N_("Result")},
-    {-1, ""},
-};
-
-static bNodeSocketTemplate geo_node_attribute_sample_texture_out[] = {
-    {SOCK_GEOMETRY, N_("Geometry")},
-    {-1, ""},
-};
-
 namespace blender::nodes {
+
+static void geo_node_attribute_sample_texture_declare(NodeDeclarationBuilder &b)
+{
+  b.add_input<decl::Geometry>("Geometry");
+  b.add_input<decl::Texture>("Texture").hide_label(true);
+  b.add_input<decl::String>("Mapping");
+  b.add_input<decl::String>("Result");
+  b.add_output<decl::Geometry>("Geometry");
+}
 
 static AttributeDomain get_result_domain(const GeometryComponent &component,
                                          const StringRef result_name,
@@ -79,8 +75,9 @@ static void execute_on_component(GeometryComponent &component, const GeoNodeExec
   const AttributeDomain result_domain = get_result_domain(
       component, result_attribute_name, mapping_name);
 
-  OutputAttribute_Typed<Color4f> attribute_out =
-      component.attribute_try_get_for_output_only<Color4f>(result_attribute_name, result_domain);
+  OutputAttribute_Typed<ColorGeometry4f> attribute_out =
+      component.attribute_try_get_for_output_only<ColorGeometry4f>(result_attribute_name,
+                                                                   result_domain);
   if (!attribute_out) {
     return;
   }
@@ -88,8 +85,8 @@ static void execute_on_component(GeometryComponent &component, const GeoNodeExec
   GVArray_Typed<float3> mapping_attribute = component.attribute_get_for_read<float3>(
       mapping_name, result_domain, {0, 0, 0});
 
-  MutableSpan<Color4f> colors = attribute_out.as_span();
-  parallel_for(IndexRange(mapping_attribute.size()), 128, [&](IndexRange range) {
+  MutableSpan<ColorGeometry4f> colors = attribute_out.as_span();
+  threading::parallel_for(IndexRange(mapping_attribute.size()), 128, [&](IndexRange range) {
     for (const int i : range) {
       TexResult texture_result = {0};
       const float3 position = mapping_attribute[i];
@@ -129,13 +126,12 @@ void register_node_type_geo_sample_texture()
   static bNodeType ntype;
 
   geo_node_type_base(&ntype,
-                     GEO_NODE_ATTRIBUTE_SAMPLE_TEXTURE,
+                     GEO_NODE_LEGACY_ATTRIBUTE_SAMPLE_TEXTURE,
                      "Attribute Sample Texture",
                      NODE_CLASS_ATTRIBUTE,
                      0);
   node_type_size_preset(&ntype, NODE_SIZE_LARGE);
-  node_type_socket_templates(
-      &ntype, geo_node_attribute_sample_texture_in, geo_node_attribute_sample_texture_out);
+  ntype.declare = blender::nodes::geo_node_attribute_sample_texture_declare;
   ntype.geometry_node_execute = blender::nodes::geo_node_attribute_sample_texture_exec;
   nodeRegisterType(&ntype);
 }

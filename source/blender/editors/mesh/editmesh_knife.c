@@ -157,7 +157,7 @@ typedef struct KnifePosData {
 typedef struct KnifeTool_OpData {
   ARegion *region;   /* region that knifetool was activated in */
   void *draw_handle; /* for drawing preview loop */
-  ViewContext vc;    /* note: _don't_ use 'mval', instead use the one we define below */
+  ViewContext vc;    /* NOTE: _don't_ use 'mval', instead use the one we define below. */
   float mval[2];     /* mouse value with snapping applied */
   // bContext *C;
 
@@ -272,8 +272,7 @@ static void knifetool_draw_angle_snapping(const KnifeTool_OpData *kcd)
   float v1[3], v2[3];
   float planes[4][4];
 
-  planes_from_projmat(
-      (const float(*)[4])kcd->projmat, planes[2], planes[0], planes[3], planes[1], NULL, NULL);
+  planes_from_projmat(kcd->projmat, planes[2], planes[0], planes[1], planes[3], NULL, NULL);
 
   /* ray-cast all planes */
   {
@@ -578,8 +577,8 @@ static void knife_input_ray_segment(KnifeTool_OpData *kcd,
                                     float r_origin_ofs[3])
 {
   /* unproject to find view ray */
-  ED_view3d_unproject(kcd->vc.region, mval[0], mval[1], 0.0f, r_origin);
-  ED_view3d_unproject(kcd->vc.region, mval[0], mval[1], ofs, r_origin_ofs);
+  ED_view3d_unproject_v3(kcd->vc.region, mval[0], mval[1], 0.0f, r_origin);
+  ED_view3d_unproject_v3(kcd->vc.region, mval[0], mval[1], ofs, r_origin_ofs);
 
   /* transform into object space */
   mul_m4_v3(kcd->ob_imat, r_origin);
@@ -938,7 +937,7 @@ static KnifeVert *knife_split_edge(KnifeTool_OpData *kcd,
 static void knife_start_cut(KnifeTool_OpData *kcd)
 {
   kcd->prev = kcd->curr;
-  kcd->curr.is_space = 0; /*TODO: why do we do this? */
+  kcd->curr.is_space = 0; /* TODO: why do we do this? */
 
   if (kcd->prev.vert == NULL && kcd->prev.edge == NULL) {
     float origin[3], origin_ofs[3];
@@ -953,7 +952,7 @@ static void knife_start_cut(KnifeTool_OpData *kcd)
       zero_v3(kcd->prev.cage);
     }
 
-    copy_v3_v3(kcd->prev.co, kcd->prev.cage); /*TODO: do we need this? */
+    copy_v3_v3(kcd->prev.co, kcd->prev.cage); /* TODO: do we need this? */
     copy_v3_v3(kcd->curr.cage, kcd->prev.cage);
     copy_v3_v3(kcd->curr.co, kcd->prev.co);
   }
@@ -1161,7 +1160,7 @@ static void knife_add_single_cut(KnifeTool_OpData *kcd,
   }
   else if (lh1->kfe) {
     kfe->v1 = knife_split_edge(kcd, lh1->kfe, lh1->hit, lh1->cagehit, &kfe2);
-    lh1->v = kfe->v1; /* record the KnifeVert for this hit  */
+    lh1->v = kfe->v1; /* Record the #KnifeVert for this hit. */
   }
   else {
     BLI_assert(lh1->f);
@@ -1169,7 +1168,7 @@ static void knife_add_single_cut(KnifeTool_OpData *kcd,
     kfe->v1->is_cut = true;
     kfe->v1->is_face = true;
     knife_append_list(kcd, &kfe->v1->faces, lh1->f);
-    lh1->v = kfe->v1; /* record the KnifeVert for this hit */
+    lh1->v = kfe->v1; /* Record the #KnifeVert for this hit. */
   }
 
   if (lh2->v) {
@@ -1476,7 +1475,7 @@ static void knife_add_cut(KnifeTool_OpData *kcd)
     }
   }
 
-  /* Note: as following loop progresses, the 'v' fields of
+  /* NOTE: as following loop progresses, the 'v' fields of
    * the linehits will be filled in (as edges are split or
    * in-face verts are made), so it may be true that both
    * the v and the kfe or f fields will be non-NULL. */
@@ -1745,7 +1744,7 @@ static bool point_is_visible(KnifeTool_OpData *kcd,
     float view[3], p_ofs[3];
 
     /* TODO: I think there's a simpler way to get the required raycast ray */
-    ED_view3d_unproject(kcd->vc.region, s[0], s[1], 0.0f, view);
+    ED_view3d_unproject_v3(kcd->vc.region, s[0], s[1], 0.0f, view);
 
     mul_m4_v3(kcd->ob_imat, view);
 
@@ -1761,7 +1760,7 @@ static bool point_is_visible(KnifeTool_OpData *kcd,
 
     if (RV3D_CLIPPING_ENABLED(kcd->vc.v3d, kcd->vc.rv3d)) {
       float view_clip[2][3];
-      /* note: view_clip[0] should never get clipped */
+      /* NOTE: view_clip[0] should never get clipped. */
       copy_v3_v3(view_clip[0], p_ofs);
       madd_v3_v3v3fl(view_clip[1], p_ofs, view, dist);
 
@@ -2140,9 +2139,7 @@ static void knife_find_line_hits(KnifeTool_OpData *kcd)
   BLI_smallhash_release(&faces);
   BLI_smallhash_release(&kfes);
   BLI_smallhash_release(&kfvs);
-  if (results) {
-    MEM_freeN(results);
-  }
+  MEM_freeN(results);
 }
 
 /** \} */
@@ -2633,23 +2630,23 @@ static void knife_init_colors(KnifeColors *colors)
 }
 
 /* called when modal loop selection gets set up... */
-static void knifetool_init(bContext *C,
+static void knifetool_init(ViewContext *vc,
                            KnifeTool_OpData *kcd,
                            const bool only_select,
                            const bool cut_through,
                            const bool is_interactive)
 {
-  Scene *scene = CTX_data_scene(C);
-  Object *obedit = CTX_data_edit_object(C);
+  kcd->vc = *vc;
+
+  Scene *scene = vc->scene;
+  Object *obedit = vc->obedit;
 
   /* assign the drawing handle for drawing preview line... */
   kcd->scene = scene;
   kcd->ob = obedit;
-  kcd->region = CTX_wm_region(C);
+  kcd->region = vc->region;
 
   invert_m4_m4_safe_ortho(kcd->ob_imat, kcd->ob->obmat);
-
-  em_setup_viewcontext(C, &kcd->vc);
 
   kcd->em = BKE_editmesh_from_object(kcd->ob);
 
@@ -2697,14 +2694,14 @@ static void knifetool_init(bContext *C,
 }
 
 /* called when modal loop selection is done... */
-static void knifetool_exit_ex(bContext *C, KnifeTool_OpData *kcd)
+static void knifetool_exit_ex(KnifeTool_OpData *kcd)
 {
   if (!kcd) {
     return;
   }
 
   if (kcd->is_interactive) {
-    WM_cursor_modal_restore(CTX_wm_window(C));
+    WM_cursor_modal_restore(kcd->vc.win);
 
     /* deactivate the extra drawing stuff in 3D-View */
     ED_region_draw_cb_exit(kcd->region->type, kcd->draw_handle);
@@ -2738,10 +2735,10 @@ static void knifetool_exit_ex(bContext *C, KnifeTool_OpData *kcd)
   /* destroy kcd itself */
   MEM_freeN(kcd);
 }
-static void knifetool_exit(bContext *C, wmOperator *op)
+static void knifetool_exit(wmOperator *op)
 {
   KnifeTool_OpData *kcd = op->customdata;
-  knifetool_exit_ex(C, kcd);
+  knifetool_exit_ex(kcd);
   op->customdata = NULL;
 }
 
@@ -2807,8 +2804,12 @@ static void knifetool_finish_ex(KnifeTool_OpData *kcd)
   knife_make_cuts(kcd);
 
   EDBM_selectmode_flush(kcd->em);
-  EDBM_mesh_normals_update(kcd->em);
-  EDBM_update_generic(kcd->ob->data, true, true);
+  EDBM_update(kcd->ob->data,
+              &(const struct EDBMUpdate_Params){
+                  .calc_looptri = true,
+                  .calc_normals = true,
+                  .is_destructive = true,
+              });
 
   /* Re-tessellating makes this invalid, don't use again by accident. */
   knifetool_free_bmbvh(kcd);
@@ -2826,10 +2827,10 @@ static void knifetool_finish(wmOperator *op)
 /** \name Operator (#MESH_OT_knife_tool)
  * \{ */
 
-static void knifetool_cancel(bContext *C, wmOperator *op)
+static void knifetool_cancel(bContext *UNUSED(C), wmOperator *op)
 {
   /* this is just a wrapper around exit() */
-  knifetool_exit(C, op);
+  knifetool_exit(op);
 }
 
 wmKeyMap *knifetool_modal_keymap(wmKeyConfig *keyconf)
@@ -2871,7 +2872,7 @@ static int knifetool_modal(bContext *C, wmOperator *op, const wmEvent *event)
   bool do_refresh = false;
 
   if (!obedit || obedit->type != OB_MESH || BKE_editmesh_from_object(obedit) != kcd->em) {
-    knifetool_exit(C, op);
+    knifetool_exit(op);
     ED_workspace_status_text(C, NULL);
     return OPERATOR_FINISHED;
   }
@@ -2892,7 +2893,7 @@ static int knifetool_modal(bContext *C, wmOperator *op, const wmEvent *event)
         /* finish */
         ED_region_tag_redraw(kcd->region);
 
-        knifetool_exit(C, op);
+        knifetool_exit(op);
         ED_workspace_status_text(C, NULL);
 
         return OPERATOR_CANCELLED;
@@ -2901,7 +2902,7 @@ static int knifetool_modal(bContext *C, wmOperator *op, const wmEvent *event)
         ED_region_tag_redraw(kcd->region);
 
         knifetool_finish(op);
-        knifetool_exit(C, op);
+        knifetool_exit(op);
         ED_workspace_status_text(C, NULL);
 
         return OPERATOR_FINISHED;
@@ -3065,7 +3066,10 @@ static int knifetool_invoke(bContext *C, wmOperator *op, const wmEvent *event)
   const bool cut_through = !RNA_boolean_get(op->ptr, "use_occlude_geometry");
   const bool wait_for_input = RNA_boolean_get(op->ptr, "wait_for_input");
 
+  ViewContext vc;
   KnifeTool_OpData *kcd;
+
+  em_setup_viewcontext(C, &vc);
 
   if (only_select) {
     Object *obedit = CTX_data_edit_object(C);
@@ -3079,7 +3083,7 @@ static int knifetool_invoke(bContext *C, wmOperator *op, const wmEvent *event)
   /* alloc new customdata */
   kcd = op->customdata = MEM_callocN(sizeof(KnifeTool_OpData), __func__);
 
-  knifetool_init(C, kcd, only_select, cut_through, true);
+  knifetool_init(&vc, kcd, only_select, cut_through, true);
 
   op->flag |= OP_IS_MODAL_CURSOR_REGION;
 
@@ -3164,7 +3168,7 @@ static bool edbm_mesh_knife_point_isect(LinkNode *polys, const float cent_ss[2])
 /**
  * \param use_tag: When set, tag all faces inside the polylines.
  */
-void EDBM_mesh_knife(bContext *C, LinkNode *polys, bool use_tag, bool cut_through)
+void EDBM_mesh_knife(ViewContext *vc, LinkNode *polys, bool use_tag, bool cut_through)
 {
   KnifeTool_OpData *kcd;
 
@@ -3175,7 +3179,7 @@ void EDBM_mesh_knife(bContext *C, LinkNode *polys, bool use_tag, bool cut_throug
 
     kcd = MEM_callocN(sizeof(KnifeTool_OpData), __func__);
 
-    knifetool_init(C, kcd, only_select, cut_through, is_interactive);
+    knifetool_init(vc, kcd, only_select, cut_through, is_interactive);
 
     kcd->ignore_edge_snapping = true;
     kcd->ignore_vert_snapping = true;
@@ -3312,7 +3316,7 @@ void EDBM_mesh_knife(bContext *C, LinkNode *polys, bool use_tag, bool cut_throug
 #undef F_ISECT_SET_OUTSIDE
     }
 
-    knifetool_exit_ex(C, kcd);
+    knifetool_exit_ex(kcd);
     kcd = NULL;
   }
 }

@@ -32,7 +32,6 @@ set(SRC
   camera.cpp
   colorspace.cpp
   constant_fold.cpp
-  coverage.cpp
   denoising.cpp
   film.cpp
   geometry.cpp
@@ -56,7 +55,6 @@ set(SRC
   osl.cpp
   particles.cpp
   pass.cpp
-  pass_accessor.cpp
   curves.cpp
   scene.cpp
   session.cpp
@@ -79,7 +77,6 @@ set(SRC_HEADERS
   camera.h
   colorspace.h
   constant_fold.h
-  coverage.h
   denoising.h
   film.h
   geometry.h
@@ -100,7 +97,6 @@ set(SRC_HEADERS
   osl.h
   particles.h
   pass.h
-  pass_accessor.h
   procedural.h
   curves.h
   scene.h

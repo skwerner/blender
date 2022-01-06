@@ -9,7 +9,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
@@ -203,20 +203,6 @@ void gpencil_modifier_curve_panel_draw(const bContext *UNUSED(C), Panel *panel)
   uiTemplateCurveMapping(layout, ptr, "curve", 0, false, false, false, false);
 }
 
-void gpencil_modifier_fading_draw(const bContext *UNUSED(C), Panel *panel)
-{
-  PointerRNA *ptr = gpencil_modifier_panel_get_property_pointers(panel, NULL);
-
-  uiLayout *layout = panel->layout;
-  uiLayoutSetPropSep(layout, true);
-
-  uiItemR(layout, ptr, "object", 0, NULL, ICON_CUBE);
-  uiLayout *sub = uiLayoutColumn(layout, true);
-  uiItemR(sub, ptr, "fading_start", 0, NULL, ICON_NONE);
-  uiItemR(sub, ptr, "fading_end", 0, IFACE_("End"), ICON_NONE);
-  uiItemR(layout, ptr, "fading_end_factor", 0, NULL, ICON_NONE);
-}
-
 /**
  * Draw modifier error message.
  */
@@ -360,7 +346,7 @@ static void gpencil_modifier_panel_header(const bContext *UNUSED(C), Panel *pane
   uiItemMenuF(row, "", ICON_DOWNARROW_HLT, gpencil_modifier_ops_extra_draw, md);
 
   /* Remove button. */
-  sub = uiLayoutRow(row, true);
+  sub = uiLayoutRow(row, false);
   uiLayoutSetEmboss(sub, UI_EMBOSS_NONE);
   uiItemO(sub, "", ICON_X, "OBJECT_OT_gpencil_modifier_remove");
 

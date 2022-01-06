@@ -1,4 +1,4 @@
-/*
+﻿/*
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -32,6 +32,7 @@
 #include "BKE_appdir.h"
 #include "BKE_context.h"
 #include "BKE_global.h"
+#include "BKE_main.h"
 #include "BKE_screen.h"
 
 #include "RNA_access.h"
@@ -175,10 +176,7 @@ static void file_free(SpaceLink *sl)
   MEM_SAFE_FREE(sfile->asset_params);
   MEM_SAFE_FREE(sfile->runtime);
 
-  if (sfile->layout) {
-    MEM_freeN(sfile->layout);
-    sfile->layout = NULL;
-  }
+  MEM_SAFE_FREE(sfile->layout);
 }
 
 /* spacetype; init callback, area size changes, screen set, etc */
@@ -206,7 +204,7 @@ static void file_exit(wmWindowManager *wm, ScrArea *area)
     sfile->previews_timer = NULL;
   }
 
-  ED_fileselect_exit(wm, NULL, sfile);
+  ED_fileselect_exit(wm, sfile);
 }
 
 static SpaceLink *file_duplicate(SpaceLink *sl)
@@ -336,11 +334,17 @@ static void file_refresh(const bContext *C, ScrArea *area)
     sfile->files = filelist_new(params->type);
     params->highlight_file = -1; /* added this so it opens nicer (ton) */
   }
+
+  if (!U.experimental.use_extended_asset_browser && ED_fileselect_is_asset_browser(sfile)) {
+    /* Only poses supported as non-experimental right now. */
+    params->filter_id = FILTER_ID_AC;
+  }
+
   filelist_settype(sfile->files, params->type);
   filelist_setdir(sfile->files, params->dir);
   filelist_setrecursion(sfile->files, params->recursion_level);
   filelist_setsorting(sfile->files, params->sort, params->flag & FILE_SORT_INVERT);
-  filelist_setlibrary(sfile->files, asset_params ? &asset_params->asset_library : NULL);
+  filelist_setlibrary(sfile->files, asset_params ? &asset_params->asset_library_ref : NULL);
   filelist_setfilter_options(
       sfile->files,
       (params->flag & FILE_FILTER) != 0,
@@ -360,13 +364,13 @@ static void file_refresh(const bContext *C, ScrArea *area)
   sfile->recentnr = fsmenu_get_active_indices(fsmenu, FS_CATEGORY_RECENT, params->dir);
 
   if (filelist_needs_force_reset(sfile->files)) {
-    filelist_readjob_stop(wm, CTX_data_scene(C));
+    filelist_readjob_stop(sfile->files, wm);
     filelist_clear(sfile->files);
   }
 
   if (filelist_needs_reading(sfile->files)) {
     if (!filelist_pending(sfile->files)) {
-      filelist_readjob_start(sfile->files, C);
+      filelist_readjob_start(sfile->files, NC_SPACE | ND_SPACE_FILE_LIST, C);
     }
   }
 
@@ -429,10 +433,10 @@ static void file_reset_filelist_showing_main_data(ScrArea *area, SpaceFile *sfil
   }
 }
 
-static void file_listener(const wmSpaceTypeListenerParams *params)
+static void file_listener(const wmSpaceTypeListenerParams *listener_params)
 {
-  ScrArea *area = params->area;
-  wmNotifier *wmn = params->notifier;
+  ScrArea *area = listener_params->area;
+  wmNotifier *wmn = listener_params->notifier;
   SpaceFile *sfile = (SpaceFile *)area->spacedata.first;
 
   /* context changes */
@@ -469,10 +473,19 @@ static void file_listener(const wmSpaceTypeListenerParams *params)
       break;
     case NC_ID: {
       switch (wmn->action) {
-        case NA_RENAME:
+        case NA_RENAME: {
+          const ID *active_file_id = ED_fileselect_active_asset_get(sfile);
+          /* If a renamed ID is active in the file browser, update scrolling to keep it in view. */
+          if (active_file_id && (wmn->reference == active_file_id)) {
+            FileSelectParams *params = ED_fileselect_get_active_params(sfile);
+            params->rename_id = active_file_id;
+            file_params_invoke_rename_postscroll(G_MAIN->wm.first, listener_params->window, sfile);
+          }
+
           /* Force list to update sorting (with a full reset for now). */
           file_reset_filelist_showing_main_data(area, sfile);
           break;
+        }
       }
       break;
     }
@@ -508,10 +521,10 @@ static void file_main_region_init(wmWindowManager *wm, ARegion *region)
   WM_event_add_keymap_handler_v2d_mask(&region->handlers, keymap);
 }
 
-static void file_main_region_listener(const wmRegionListenerParams *params)
+static void file_main_region_listener(const wmRegionListenerParams *listener_params)
 {
-  ARegion *region = params->region;
-  wmNotifier *wmn = params->notifier;
+  ARegion *region = listener_params->region;
+  wmNotifier *wmn = listener_params->notifier;
 
   /* context changes */
   switch (wmn->category) {
@@ -567,6 +580,16 @@ static void file_main_region_message_subscribe(const wmRegionMessageSubscribePar
 
     /* All properties for this space type. */
     WM_msg_subscribe_rna(mbus, &ptr, NULL, &msg_sub_value_area_tag_refresh, __func__);
+  }
+
+  /* Experimental Asset Browser features option. */
+  {
+    PointerRNA ptr;
+    RNA_pointer_create(NULL, &RNA_PreferencesExperimental, &U.experimental, &ptr);
+    PropertyRNA *prop = RNA_struct_find_property(&ptr, "use_extended_asset_browser");
+
+    /* All properties for this space type. */
+    WM_msg_subscribe_rna(mbus, &ptr, prop, &msg_sub_value_area_tag_refresh, __func__);
   }
 }
 
@@ -715,14 +738,14 @@ static void file_tools_region_draw(const bContext *C, ARegion *region)
   ED_region_panels(C, region);
 }
 
-static void file_tools_region_listener(const wmRegionListenerParams *UNUSED(params))
+static void file_tools_region_listener(const wmRegionListenerParams *UNUSED(listener_params))
 {
 }
 
-static void file_tool_props_region_listener(const wmRegionListenerParams *params)
+static void file_tool_props_region_listener(const wmRegionListenerParams *listener_params)
 {
-  const wmNotifier *wmn = params->notifier;
-  ARegion *region = params->region;
+  const wmNotifier *wmn = listener_params->notifier;
+  ARegion *region = listener_params->region;
 
   switch (wmn->category) {
     case NC_ID:
@@ -788,10 +811,10 @@ static void file_execution_region_draw(const bContext *C, ARegion *region)
   ED_region_panels(C, region);
 }
 
-static void file_ui_region_listener(const wmRegionListenerParams *params)
+static void file_ui_region_listener(const wmRegionListenerParams *listener_params)
 {
-  ARegion *region = params->region;
-  wmNotifier *wmn = params->notifier;
+  ARegion *region = listener_params->region;
+  wmNotifier *wmn = listener_params->notifier;
 
   /* context changes */
   switch (wmn->category) {
@@ -805,10 +828,7 @@ static void file_ui_region_listener(const wmRegionListenerParams *params)
   }
 }
 
-static bool filepath_drop_poll(bContext *C,
-                               wmDrag *drag,
-                               const wmEvent *UNUSED(event),
-                               const char **UNUSED(r_tooltip))
+static bool filepath_drop_poll(bContext *C, wmDrag *drag, const wmEvent *UNUSED(event))
 {
   if (drag->type == WM_DRAG_PATH) {
     SpaceFile *sfile = CTX_wm_space_file(C);
@@ -829,7 +849,7 @@ static void file_dropboxes(void)
 {
   ListBase *lb = WM_dropboxmap_find("Window", SPACE_EMPTY, RGN_TYPE_WINDOW);
 
-  WM_dropbox_add(lb, "FILE_OT_filepath_drop", filepath_drop_poll, filepath_drop_copy, NULL);
+  WM_dropbox_add(lb, "FILE_OT_filepath_drop", filepath_drop_poll, filepath_drop_copy, NULL, NULL);
 }
 
 static int file_space_subtype_get(ScrArea *area)
@@ -848,16 +868,16 @@ static void file_space_subtype_item_extend(bContext *UNUSED(C),
                                            EnumPropertyItem **item,
                                            int *totitem)
 {
-  if (U.experimental.use_asset_browser) {
-    RNA_enum_items_add(item, totitem, rna_enum_space_file_browse_mode_items);
-  }
-  else {
-    RNA_enum_items_add_value(
-        item, totitem, rna_enum_space_file_browse_mode_items, FILE_BROWSE_MODE_FILES);
-  }
+  RNA_enum_items_add(item, totitem, rna_enum_space_file_browse_mode_items);
 }
 
-static const char *file_context_dir[] = {"active_file", "id", NULL};
+const char *file_context_dir[] = {
+    "active_file",
+    "selected_files",
+    "asset_library_ref",
+    "id",
+    NULL,
+};
 
 static int /*eContextResult*/ file_context(const bContext *C,
                                            const char *member,
@@ -886,6 +906,30 @@ static int /*eContextResult*/ file_context(const bContext *C,
     }
 
     CTX_data_pointer_set(result, &screen->id, &RNA_FileSelectEntry, file);
+    return CTX_RESULT_OK;
+  }
+  if (CTX_data_equals(member, "selected_files")) {
+    const int num_files_filtered = filelist_files_ensure(sfile->files);
+
+    for (int file_index = 0; file_index < num_files_filtered; file_index++) {
+      if (filelist_entry_is_selected(sfile->files, file_index)) {
+        FileDirEntry *entry = filelist_file(sfile->files, file_index);
+        CTX_data_list_add(result, &screen->id, &RNA_FileSelectEntry, entry);
+      }
+    }
+
+    CTX_data_type_set(result, CTX_DATA_TYPE_COLLECTION);
+    return CTX_RESULT_OK;
+  }
+
+  if (CTX_data_equals(member, "asset_library_ref")) {
+    FileAssetSelectParams *asset_params = ED_fileselect_get_asset_params(sfile);
+    if (!asset_params) {
+      return CTX_RESULT_NO_DATA;
+    }
+
+    CTX_data_pointer_set(
+        result, &screen->id, &RNA_AssetLibraryReference, &asset_params->asset_library_ref);
     return CTX_RESULT_OK;
   }
   if (CTX_data_equals(member, "id")) {

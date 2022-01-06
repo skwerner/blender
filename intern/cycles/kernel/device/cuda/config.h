@@ -26,94 +26,89 @@
 
 /* 3.0 and 3.5 */
 #if __CUDA_ARCH__ == 300 || __CUDA_ARCH__ == 350
-#  define CUDA_MULTIPRESSOR_MAX_REGISTERS 65536
-#  define CUDA_MULTIPROCESSOR_MAX_BLOCKS 16
-#  define CUDA_BLOCK_MAX_THREADS 1024
-#  define CUDA_THREAD_MAX_REGISTERS 63
+#  define GPU_MULTIPRESSOR_MAX_REGISTERS 65536
+#  define GPU_MULTIPROCESSOR_MAX_BLOCKS 16
+#  define GPU_BLOCK_MAX_THREADS 1024
+#  define GPU_THREAD_MAX_REGISTERS 63
 
 /* tunable parameters */
-#  define CUDA_KERNEL_BLOCK_NUM_THREADS 256
-#  define CUDA_KERNEL_MAX_REGISTERS 63
+#  define GPU_KERNEL_BLOCK_NUM_THREADS 256
+#  define GPU_KERNEL_MAX_REGISTERS 63
 
 /* 3.2 */
 #elif __CUDA_ARCH__ == 320
-#  define CUDA_MULTIPRESSOR_MAX_REGISTERS 32768
-#  define CUDA_MULTIPROCESSOR_MAX_BLOCKS 16
-#  define CUDA_BLOCK_MAX_THREADS 1024
-#  define CUDA_THREAD_MAX_REGISTERS 63
+#  define GPU_MULTIPRESSOR_MAX_REGISTERS 32768
+#  define GPU_MULTIPROCESSOR_MAX_BLOCKS 16
+#  define GPU_BLOCK_MAX_THREADS 1024
+#  define GPU_THREAD_MAX_REGISTERS 63
 
 /* tunable parameters */
-#  define CUDA_KERNEL_BLOCK_NUM_THREADS 256
-#  define CUDA_KERNEL_MAX_REGISTERS 63
+#  define GPU_KERNEL_BLOCK_NUM_THREADS 256
+#  define GPU_KERNEL_MAX_REGISTERS 63
 
 /* 3.7 */
 #elif __CUDA_ARCH__ == 370
-#  define CUDA_MULTIPRESSOR_MAX_REGISTERS 65536
-#  define CUDA_MULTIPROCESSOR_MAX_BLOCKS 16
-#  define CUDA_BLOCK_MAX_THREADS 1024
-#  define CUDA_THREAD_MAX_REGISTERS 255
+#  define GPU_MULTIPRESSOR_MAX_REGISTERS 65536
+#  define GPU_MULTIPROCESSOR_MAX_BLOCKS 16
+#  define GPU_BLOCK_MAX_THREADS 1024
+#  define GPU_THREAD_MAX_REGISTERS 255
 
 /* tunable parameters */
-#  define CUDA_KERNEL_BLOCK_NUM_THREADS 256
-#  define CUDA_KERNEL_MAX_REGISTERS 63
+#  define GPU_KERNEL_BLOCK_NUM_THREADS 256
+#  define GPU_KERNEL_MAX_REGISTERS 63
 
 /* 5.x, 6.x */
 #elif __CUDA_ARCH__ <= 699
-#  define CUDA_MULTIPRESSOR_MAX_REGISTERS 65536
-#  define CUDA_MULTIPROCESSOR_MAX_BLOCKS 32
-#  define CUDA_BLOCK_MAX_THREADS 1024
-#  define CUDA_THREAD_MAX_REGISTERS 255
+#  define GPU_MULTIPRESSOR_MAX_REGISTERS 65536
+#  define GPU_MULTIPROCESSOR_MAX_BLOCKS 32
+#  define GPU_BLOCK_MAX_THREADS 1024
+#  define GPU_THREAD_MAX_REGISTERS 255
 
 /* tunable parameters */
-#  define CUDA_KERNEL_BLOCK_NUM_THREADS 256
+#  define GPU_KERNEL_BLOCK_NUM_THREADS 256
 /* CUDA 9.0 seems to cause slowdowns on high-end Pascal cards unless we increase the number of
  * registers */
 #  if __CUDACC_VER_MAJOR__ >= 9 && __CUDA_ARCH__ >= 600
-#    define CUDA_KERNEL_MAX_REGISTERS 64
+#    define GPU_KERNEL_MAX_REGISTERS 64
 #  else
-#    define CUDA_KERNEL_MAX_REGISTERS 48
+#    define GPU_KERNEL_MAX_REGISTERS 48
 #  endif
 
 /* 7.x, 8.x */
 #elif __CUDA_ARCH__ <= 899
-#  define CUDA_MULTIPRESSOR_MAX_REGISTERS 65536
-#  define CUDA_MULTIPROCESSOR_MAX_BLOCKS 32
-#  define CUDA_BLOCK_MAX_THREADS 1024
-#  define CUDA_THREAD_MAX_REGISTERS 255
+#  define GPU_MULTIPRESSOR_MAX_REGISTERS 65536
+#  define GPU_MULTIPROCESSOR_MAX_BLOCKS 32
+#  define GPU_BLOCK_MAX_THREADS 1024
+#  define GPU_THREAD_MAX_REGISTERS 255
 
 /* tunable parameters */
-#  define CUDA_KERNEL_BLOCK_NUM_THREADS 512
-#  define CUDA_KERNEL_MAX_REGISTERS 96
+#  define GPU_KERNEL_BLOCK_NUM_THREADS 512
+#  define GPU_KERNEL_MAX_REGISTERS 96
 
 /* unknown architecture */
 #else
 #  error "Unknown or unsupported CUDA architecture, can't determine launch bounds"
 #endif
 
-/* For split kernel using all registers seems fastest for now, but this
- * is unlikely to be optimal once we resolve other bottlenecks. */
-
-#define CUDA_KERNEL_SPLIT_MAX_REGISTERS CUDA_THREAD_MAX_REGISTERS
-
 /* Compute number of threads per block and minimum blocks per multiprocessor
  * given the maximum number of registers per thread. */
 
-#define CUDA_LAUNCH_BOUNDS(block_num_threads, thread_num_registers) \
-  __launch_bounds__(block_num_threads, \
-                    CUDA_MULTIPRESSOR_MAX_REGISTERS / (block_num_threads * thread_num_registers))
+#define ccl_gpu_kernel(block_num_threads, thread_num_registers) \
+  extern "C" __global__ void __launch_bounds__(block_num_threads, \
+                                               GPU_MULTIPRESSOR_MAX_REGISTERS / \
+                                                   (block_num_threads * thread_num_registers))
 
 /* sanity checks */
 
-#if CUDA_KERNEL_BLOCK_NUM_THREADS > CUDA_BLOCK_MAX_THREADS
+#if GPU_KERNEL_BLOCK_NUM_THREADS > GPU_BLOCK_MAX_THREADS
 #  error "Maximum number of threads per block exceeded"
 #endif
 
-#if CUDA_MULTIPRESSOR_MAX_REGISTERS / \
-        (CUDA_KERNEL_BLOCK_NUM_THREADS * CUDA_KERNEL_MAX_REGISTERS) > \
-    CUDA_MULTIPROCESSOR_MAX_BLOCKS
+#if GPU_MULTIPRESSOR_MAX_REGISTERS / (GPU_KERNEL_BLOCK_NUM_THREADS * GPU_KERNEL_MAX_REGISTERS) > \
+    GPU_MULTIPROCESSOR_MAX_BLOCKS
 #  error "Maximum number of blocks per multiprocessor exceeded"
 #endif
 
-#if CUDA_KERNEL_MAX_REGISTERS > CUDA_THREAD_MAX_REGISTERS
+#if GPU_KERNEL_MAX_REGISTERS > GPU_THREAD_MAX_REGISTERS
 #  error "Maximum number of registers per thread exceeded"
 #endif

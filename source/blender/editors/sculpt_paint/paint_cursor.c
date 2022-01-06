@@ -940,7 +940,7 @@ static void paint_draw_curve_cursor(Brush *brush, ViewContext *vc)
       int j;
       PaintCurvePoint *cp_next = cp + 1;
       float data[(PAINT_CURVE_NUM_SEGMENTS + 1) * 2];
-      /* Use color coding to distinguish handles vs curve segments.  */
+      /* Use color coding to distinguish handles vs curve segments. */
       draw_bezier_handle_lines(pos, selec_col, &cp->bez);
       draw_tri_point(pos, selec_col, pivot_col, &cp->bez.vec[1][0], 10.0f, cp->bez.f2);
       draw_rect_point(
@@ -1039,7 +1039,7 @@ static void cursor_draw_point_screen_space(const uint gpuattr,
   float translation_vertex_cursor[3], location[3];
   copy_v3_v3(location, true_location);
   mul_m4_v3(obmat, location);
-  ED_view3d_project(region, location, translation_vertex_cursor);
+  ED_view3d_project_v3(region, location, translation_vertex_cursor);
   /* Do not draw points behind the view. Z [near, far] is mapped to [-1, 1]. */
   if (translation_vertex_cursor[2] <= 1.0f) {
     imm_draw_circle_fill_3d(

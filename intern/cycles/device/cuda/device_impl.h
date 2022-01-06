@@ -69,14 +69,6 @@ class CUDADevice : public Device {
   CUDAMemMap cuda_mem_map;
   thread_mutex cuda_mem_map_mutex;
 
-  struct PixelMem {
-    GLuint cuPBO;
-    CUgraphicsResource cuPBOresource;
-    GLuint cuTexId;
-    int w, h;
-  };
-  map<device_ptr, PixelMem> pixel_mem_map;
-
   /* Bindless Textures */
   device_vector<TextureInfo> texture_info;
   bool need_texture_info;
@@ -95,23 +87,22 @@ class CUDADevice : public Device {
 
   virtual ~CUDADevice();
 
-  bool support_device(const DeviceRequestedFeatures & /*requested_features*/);
+  bool support_device(const uint /*kernel_features*/);
 
   bool check_peer_access(Device *peer_device) override;
 
   bool use_adaptive_compilation();
 
-  virtual string compile_kernel_get_common_cflags(
-      const DeviceRequestedFeatures &requested_features);
+  virtual string compile_kernel_get_common_cflags(const uint kernel_features);
 
-  string compile_kernel(const DeviceRequestedFeatures &requested_features,
+  string compile_kernel(const uint kernel_features,
                         const char *name,
                         const char *base = "cuda",
                         bool force_ptx = false);
 
-  virtual bool load_kernels(const DeviceRequestedFeatures &requested_features) override;
+  virtual bool load_kernels(const uint kernel_features) override;
 
-  void reserve_local_memory(const DeviceRequestedFeatures &requested_features);
+  void reserve_local_memory(const uint kernel_features);
 
   void init_host_memory();
 
@@ -147,11 +138,16 @@ class CUDADevice : public Device {
 
   void tex_free(device_texture &mem);
 
-  /* Graphics resources interoperability. */
   virtual bool should_use_graphics_interop() override;
-  virtual unique_ptr<DeviceGraphicsInterop> graphics_interop_create() override;
 
   virtual unique_ptr<DeviceQueue> gpu_queue_create() override;
+
+  int get_num_multiprocessors();
+  int get_max_num_threads_per_multiprocessor();
+
+ protected:
+  bool get_device_attribute(CUdevice_attribute attribute, int *value);
+  int get_device_default_attribute(CUdevice_attribute attribute, int default_value);
 };
 
 CCL_NAMESPACE_END

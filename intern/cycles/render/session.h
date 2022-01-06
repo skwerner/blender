@@ -35,7 +35,6 @@ CCL_NAMESPACE_BEGIN
 class BufferParams;
 class Device;
 class DeviceScene;
-class DeviceRequestedFeatures;
 class PathTrace;
 class Progress;
 class GPUDisplay;
@@ -57,7 +56,14 @@ class SessionParams {
   int pixel_size;
   int threads;
 
+  /* Limit in seconds for how long path tracing is allowed to happen.
+   * Zero means no limit is applied. */
+  double time_limit;
+
   bool use_profiling;
+
+  bool use_auto_tile;
+  int tile_size;
 
   ShadingSystem shadingsystem;
 
@@ -72,8 +78,12 @@ class SessionParams {
     samples = 1024;
     pixel_size = 1;
     threads = 0;
+    time_limit = 0.0;
 
     use_profiling = false;
+
+    use_auto_tile = true;
+    tile_size = 2048;
 
     shadingsystem = SHADINGSYSTEM_SVM;
   }
@@ -85,7 +95,8 @@ class SessionParams {
     return !(device == params.device && headless == params.headless &&
              background == params.background && experimental == params.experimental &&
              pixel_size == params.pixel_size && threads == params.threads &&
-             use_profiling == params.use_profiling && shadingsystem == params.shadingsystem);
+             use_profiling == params.use_profiling && shadingsystem == params.shadingsystem &&
+             use_auto_tile == params.use_auto_tile && tile_size == params.tile_size);
   }
 };
 
@@ -105,6 +116,7 @@ class Session {
 
   function<void(void)> write_render_tile_cb;
   function<void(void)> update_render_tile_cb;
+  function<void(void)> read_render_tile_cb;
 
   explicit Session(const SessionParams &params, const SceneParams &scene_params);
   ~Session();
@@ -124,6 +136,7 @@ class Session {
   void set_pause(bool pause);
 
   void set_samples(int samples);
+  void set_time_limit(double time_limit);
 
   void set_gpu_display(unique_ptr<GPUDisplay> gpu_display);
 
@@ -143,7 +156,13 @@ class Session {
   int2 get_render_tile_size() const;
   int2 get_render_tile_offset() const;
 
+  bool get_render_tile_done() const;
+  bool has_multiple_render_tiles() const;
+
+  bool copy_render_tile_from_device();
+
   bool get_render_tile_pixels(const string &pass_name, int num_components, float *pixels);
+  bool set_render_tile_pixels(const string &pass_name, int num_components, const float *pixels);
 
  protected:
   struct DelayedReset {
@@ -151,7 +170,7 @@ class Session {
     bool do_reset;
     BufferParams params;
     int samples;
-  } delayed_reset;
+  } delayed_reset_;
 
   void run();
 
@@ -184,13 +203,18 @@ class Session {
 
   void do_delayed_reset();
 
-  thread *session_thread;
+  int2 get_effective_tile_size() const;
 
-  bool pause;
-  thread_condition_variable pause_cond;
-  thread_mutex pause_mutex;
-  thread_mutex tile_mutex;
-  thread_mutex buffers_mutex;
+  thread *session_thread_;
+
+  bool pause_ = false;
+  bool cancel_ = false;
+  bool new_work_added_ = false;
+
+  thread_condition_variable pause_cond_;
+  thread_mutex pause_mutex_;
+  thread_mutex tile_mutex_;
+  thread_mutex buffers_mutex_;
 
   TileManager tile_manager_;
   BufferParams buffer_params_;

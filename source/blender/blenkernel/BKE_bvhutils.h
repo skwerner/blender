@@ -69,7 +69,7 @@ typedef struct BVHTreeFromMesh {
   BVHTree_NearestPointCallback nearest_callback;
   BVHTree_RayCastCallback raycast_callback;
 
-  /* Vertex array, so that callbacks have instante access to data */
+  /* Vertex array, so that callbacks have instant access to data. */
   const struct MVert *vert;
   const struct MEdge *edge; /* only used for BVHTreeFromMeshEdges */
   const struct MFace *face;
@@ -218,7 +218,7 @@ BVHTree *bvhtree_from_mesh_looptri_ex(struct BVHTreeFromMesh *data,
                                       ThreadMutex *mesh_eval_mutex);
 
 BVHTree *BKE_bvhtree_from_mesh_get(struct BVHTreeFromMesh *data,
-                                   struct Mesh *mesh,
+                                   const struct Mesh *mesh,
                                    const BVHCacheType bvh_cache_type,
                                    const int tree_type);
 

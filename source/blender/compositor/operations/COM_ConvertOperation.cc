@@ -18,6 +18,8 @@
 
 #include "COM_ConvertOperation.h"
 
+#include "BLI_color.hh"
+
 #include "IMB_colormanagement.h"
 
 namespace blender::compositor {
@@ -25,6 +27,7 @@ namespace blender::compositor {
 ConvertBaseOperation::ConvertBaseOperation()
 {
   this->m_inputOperation = nullptr;
+  this->flags.can_be_constant = true;
 }
 
 void ConvertBaseOperation::initExecution()
@@ -35,6 +38,18 @@ void ConvertBaseOperation::initExecution()
 void ConvertBaseOperation::deinitExecution()
 {
   this->m_inputOperation = nullptr;
+}
+
+void ConvertBaseOperation::hash_output_params()
+{
+}
+
+void ConvertBaseOperation::update_memory_buffer_partial(MemoryBuffer *output,
+                                                        const rcti &area,
+                                                        Span<MemoryBuffer *> inputs)
+{
+  BuffersIterator<float> it = output->iterate_with(inputs, area);
+  update_memory_buffer_partial(it);
 }
 
 /* ******** Value to Color ******** */
@@ -56,6 +71,14 @@ void ConvertValueToColorOperation::executePixelSampled(float output[4],
   output[3] = 1.0f;
 }
 
+void ConvertValueToColorOperation::update_memory_buffer_partial(BuffersIterator<float> &it)
+{
+  for (; !it.is_end(); ++it) {
+    it.out[0] = it.out[1] = it.out[2] = *it.in(0);
+    it.out[3] = 1.0f;
+  }
+}
+
 /* ******** Color to Value ******** */
 
 ConvertColorToValueOperation::ConvertColorToValueOperation() : ConvertBaseOperation()
@@ -72,6 +95,14 @@ void ConvertColorToValueOperation::executePixelSampled(float output[4],
   float inputColor[4];
   this->m_inputOperation->readSampled(inputColor, x, y, sampler);
   output[0] = (inputColor[0] + inputColor[1] + inputColor[2]) / 3.0f;
+}
+
+void ConvertColorToValueOperation::update_memory_buffer_partial(BuffersIterator<float> &it)
+{
+  for (; !it.is_end(); ++it) {
+    const float *in = it.in(0);
+    it.out[0] = (in[0] + in[1] + in[2]) / 3.0f;
+  }
 }
 
 /* ******** Color to BW ******** */
@@ -92,6 +123,13 @@ void ConvertColorToBWOperation::executePixelSampled(float output[4],
   output[0] = IMB_colormanagement_get_luminance(inputColor);
 }
 
+void ConvertColorToBWOperation::update_memory_buffer_partial(BuffersIterator<float> &it)
+{
+  for (; !it.is_end(); ++it) {
+    it.out[0] = IMB_colormanagement_get_luminance(it.in(0));
+  }
+}
+
 /* ******** Color to Vector ******** */
 
 ConvertColorToVectorOperation::ConvertColorToVectorOperation() : ConvertBaseOperation()
@@ -108,6 +146,13 @@ void ConvertColorToVectorOperation::executePixelSampled(float output[4],
   float color[4];
   this->m_inputOperation->readSampled(color, x, y, sampler);
   copy_v3_v3(output, color);
+}
+
+void ConvertColorToVectorOperation::update_memory_buffer_partial(BuffersIterator<float> &it)
+{
+  for (; !it.is_end(); ++it) {
+    copy_v3_v3(it.out, it.in(0));
+  }
 }
 
 /* ******** Value to Vector ******** */
@@ -128,6 +173,13 @@ void ConvertValueToVectorOperation::executePixelSampled(float output[4],
   output[0] = output[1] = output[2] = value;
 }
 
+void ConvertValueToVectorOperation::update_memory_buffer_partial(BuffersIterator<float> &it)
+{
+  for (; !it.is_end(); ++it) {
+    it.out[0] = it.out[1] = it.out[2] = *it.in(0);
+  }
+}
+
 /* ******** Vector to Color ******** */
 
 ConvertVectorToColorOperation::ConvertVectorToColorOperation() : ConvertBaseOperation()
@@ -143,6 +195,14 @@ void ConvertVectorToColorOperation::executePixelSampled(float output[4],
 {
   this->m_inputOperation->readSampled(output, x, y, sampler);
   output[3] = 1.0f;
+}
+
+void ConvertVectorToColorOperation::update_memory_buffer_partial(BuffersIterator<float> &it)
+{
+  for (; !it.is_end(); ++it) {
+    copy_v3_v3(it.out, it.in(0));
+    it.out[3] = 1.0f;
+  }
 }
 
 /* ******** Vector to Value ******** */
@@ -161,6 +221,14 @@ void ConvertVectorToValueOperation::executePixelSampled(float output[4],
   float input[4];
   this->m_inputOperation->readSampled(input, x, y, sampler);
   output[0] = (input[0] + input[1] + input[2]) / 3.0f;
+}
+
+void ConvertVectorToValueOperation::update_memory_buffer_partial(BuffersIterator<float> &it)
+{
+  for (; !it.is_end(); ++it) {
+    const float *in = it.in(0);
+    it.out[0] = (in[0] + in[1] + in[2]) / 3.0f;
+  }
 }
 
 /* ******** RGB to YCC ******** */
@@ -203,6 +271,24 @@ void ConvertRGBToYCCOperation::executePixelSampled(float output[4],
   /* R,G,B --> Y,Cb,Cr */
   mul_v3_v3fl(output, color, 1.0f / 255.0f);
   output[3] = inputColor[3];
+}
+
+void ConvertRGBToYCCOperation::hash_output_params()
+{
+  ConvertBaseOperation::hash_output_params();
+  hash_param(m_mode);
+}
+
+void ConvertRGBToYCCOperation::update_memory_buffer_partial(BuffersIterator<float> &it)
+{
+  for (; !it.is_end(); ++it) {
+    const float *in = it.in(0);
+    rgb_to_ycc(in[0], in[1], in[2], &it.out[0], &it.out[1], &it.out[2], this->m_mode);
+
+    /* Normalize for viewing (#rgb_to_ycc returns 0-255 values). */
+    mul_v3_fl(it.out, 1.0f / 255.0f);
+    it.out[3] = in[3];
+  }
 }
 
 /* ******** YCC to RGB ******** */
@@ -251,6 +337,28 @@ void ConvertYCCToRGBOperation::executePixelSampled(float output[4],
   output[3] = inputColor[3];
 }
 
+void ConvertYCCToRGBOperation::hash_output_params()
+{
+  ConvertBaseOperation::hash_output_params();
+  hash_param(m_mode);
+}
+
+void ConvertYCCToRGBOperation::update_memory_buffer_partial(BuffersIterator<float> &it)
+{
+  for (; !it.is_end(); ++it) {
+    const float *in = it.in(0);
+    /* Multiply by 255 to un-normalize (#ycc_to_rgb needs input values in 0-255 range). */
+    ycc_to_rgb(in[0] * 255.0f,
+               in[1] * 255.0f,
+               in[2] * 255.0f,
+               &it.out[0],
+               &it.out[1],
+               &it.out[2],
+               this->m_mode);
+    it.out[3] = in[3];
+  }
+}
+
 /* ******** RGB to YUV ******** */
 
 ConvertRGBToYUVOperation::ConvertRGBToYUVOperation() : ConvertBaseOperation()
@@ -274,6 +382,15 @@ void ConvertRGBToYUVOperation::executePixelSampled(float output[4],
              &output[2],
              BLI_YUV_ITU_BT709);
   output[3] = inputColor[3];
+}
+
+void ConvertRGBToYUVOperation::update_memory_buffer_partial(BuffersIterator<float> &it)
+{
+  for (; !it.is_end(); ++it) {
+    const float *in = it.in(0);
+    rgb_to_yuv(in[0], in[1], in[2], &it.out[0], &it.out[1], &it.out[2], BLI_YUV_ITU_BT709);
+    it.out[3] = in[3];
+  }
 }
 
 /* ******** YUV to RGB ******** */
@@ -301,6 +418,15 @@ void ConvertYUVToRGBOperation::executePixelSampled(float output[4],
   output[3] = inputColor[3];
 }
 
+void ConvertYUVToRGBOperation::update_memory_buffer_partial(BuffersIterator<float> &it)
+{
+  for (; !it.is_end(); ++it) {
+    const float *in = it.in(0);
+    yuv_to_rgb(in[0], in[1], in[2], &it.out[0], &it.out[1], &it.out[2], BLI_YUV_ITU_BT709);
+    it.out[3] = in[3];
+  }
+}
+
 /* ******** RGB to HSV ******** */
 
 ConvertRGBToHSVOperation::ConvertRGBToHSVOperation() : ConvertBaseOperation()
@@ -318,6 +444,15 @@ void ConvertRGBToHSVOperation::executePixelSampled(float output[4],
   this->m_inputOperation->readSampled(inputColor, x, y, sampler);
   rgb_to_hsv_v(inputColor, output);
   output[3] = inputColor[3];
+}
+
+void ConvertRGBToHSVOperation::update_memory_buffer_partial(BuffersIterator<float> &it)
+{
+  for (; !it.is_end(); ++it) {
+    const float *in = it.in(0);
+    rgb_to_hsv_v(in, it.out);
+    it.out[3] = in[3];
+  }
 }
 
 /* ******** HSV to RGB ******** */
@@ -342,6 +477,18 @@ void ConvertHSVToRGBOperation::executePixelSampled(float output[4],
   output[3] = inputColor[3];
 }
 
+void ConvertHSVToRGBOperation::update_memory_buffer_partial(BuffersIterator<float> &it)
+{
+  for (; !it.is_end(); ++it) {
+    const float *in = it.in(0);
+    hsv_to_rgb_v(in, it.out);
+    it.out[0] = max_ff(it.out[0], 0.0f);
+    it.out[1] = max_ff(it.out[1], 0.0f);
+    it.out[2] = max_ff(it.out[2], 0.0f);
+    it.out[3] = in[3];
+  }
+}
+
 /* ******** Premul to Straight ******** */
 
 ConvertPremulToStraightOperation::ConvertPremulToStraightOperation() : ConvertBaseOperation()
@@ -355,21 +502,17 @@ void ConvertPremulToStraightOperation::executePixelSampled(float output[4],
                                                            float y,
                                                            PixelSampler sampler)
 {
-  float inputValue[4];
-  float alpha;
+  ColorSceneLinear4f<eAlpha::Premultiplied> input;
+  this->m_inputOperation->readSampled(input, x, y, sampler);
+  ColorSceneLinear4f<eAlpha::Straight> converted = input.unpremultiply_alpha();
+  copy_v4_v4(output, converted);
+}
 
-  this->m_inputOperation->readSampled(inputValue, x, y, sampler);
-  alpha = inputValue[3];
-
-  if (fabsf(alpha) < 1e-5f) {
-    zero_v3(output);
+void ConvertPremulToStraightOperation::update_memory_buffer_partial(BuffersIterator<float> &it)
+{
+  for (; !it.is_end(); ++it) {
+    copy_v4_v4(it.out, ColorSceneLinear4f<eAlpha::Premultiplied>(it.in(0)).unpremultiply_alpha());
   }
-  else {
-    mul_v3_v3fl(output, inputValue, 1.0f / alpha);
-  }
-
-  /* never touches the alpha */
-  output[3] = alpha;
 }
 
 /* ******** Straight to Premul ******** */
@@ -385,16 +528,17 @@ void ConvertStraightToPremulOperation::executePixelSampled(float output[4],
                                                            float y,
                                                            PixelSampler sampler)
 {
-  float inputValue[4];
-  float alpha;
+  ColorSceneLinear4f<eAlpha::Straight> input;
+  this->m_inputOperation->readSampled(input, x, y, sampler);
+  ColorSceneLinear4f<eAlpha::Premultiplied> converted = input.premultiply_alpha();
+  copy_v4_v4(output, converted);
+}
 
-  this->m_inputOperation->readSampled(inputValue, x, y, sampler);
-  alpha = inputValue[3];
-
-  mul_v3_v3fl(output, inputValue, alpha);
-
-  /* never touches the alpha */
-  output[3] = alpha;
+void ConvertStraightToPremulOperation::update_memory_buffer_partial(BuffersIterator<float> &it)
+{
+  for (; !it.is_end(); ++it) {
+    copy_v4_v4(it.out, ColorSceneLinear4f<eAlpha::Straight>(it.in(0)).premultiply_alpha());
+  }
 }
 
 /* ******** Separate Channels ******** */
@@ -423,6 +567,15 @@ void SeparateChannelOperation::executePixelSampled(float output[4],
   float input[4];
   this->m_inputOperation->readSampled(input, x, y, sampler);
   output[0] = input[this->m_channel];
+}
+
+void SeparateChannelOperation::update_memory_buffer_partial(MemoryBuffer *output,
+                                                            const rcti &area,
+                                                            Span<MemoryBuffer *> inputs)
+{
+  for (BuffersIterator<float> it = output->iterate_with(inputs, area); !it.is_end(); ++it) {
+    it.out[0] = it.in(0)[this->m_channel];
+  }
 }
 
 /* ******** Combine Channels ******** */
@@ -478,6 +631,18 @@ void CombineChannelsOperation::executePixelSampled(float output[4],
   if (this->m_inputChannel4Operation) {
     this->m_inputChannel4Operation->readSampled(input, x, y, sampler);
     output[3] = input[0];
+  }
+}
+
+void CombineChannelsOperation::update_memory_buffer_partial(MemoryBuffer *output,
+                                                            const rcti &area,
+                                                            Span<MemoryBuffer *> inputs)
+{
+  for (BuffersIterator<float> it = output->iterate_with(inputs, area); !it.is_end(); ++it) {
+    it.out[0] = *it.in(0);
+    it.out[1] = *it.in(1);
+    it.out[2] = *it.in(2);
+    it.out[3] = *it.in(3);
   }
 }
 

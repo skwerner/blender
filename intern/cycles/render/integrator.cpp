@@ -53,6 +53,8 @@ NODE_DEFINE(Integrator)
   SOCKET_INT(transparent_max_bounce, "Transparent Max Bounce", 7);
 
   SOCKET_INT(ao_bounces, "AO Bounces", 0);
+  SOCKET_FLOAT(ao_factor, "AO Factor", 0.0f);
+  SOCKET_FLOAT(ao_distance, "AO Distance", FLT_MAX);
 
   SOCKET_INT(volume_max_steps, "Volume Max Steps", 1024);
   SOCKET_FLOAT(volume_step_rate, "Volume Step Rate", 1.0f);
@@ -83,20 +85,27 @@ NODE_DEFINE(Integrator)
   denoiser_type_enum.insert("optix", DENOISER_OPTIX);
   denoiser_type_enum.insert("openimagedenoise", DENOISER_OPENIMAGEDENOISE);
 
+  static NodeEnum denoiser_prefilter_enum;
+  denoiser_prefilter_enum.insert("none", DENOISER_PREFILTER_NONE);
+  denoiser_prefilter_enum.insert("fast", DENOISER_PREFILTER_FAST);
+  denoiser_prefilter_enum.insert("accurate", DENOISER_PREFILTER_ACCURATE);
+
   /* Construct default parameters, so that they are the source of truth for defaults. */
   const DenoiseParams default_denoise_params;
 
   SOCKET_BOOLEAN(use_denoise, "Use Denoiser", default_denoise_params.use);
-  SOCKET_BOOLEAN(
-      denoise_store_passes, "Store Denoiser Passes", default_denoise_params.store_passes);
   SOCKET_ENUM(denoiser_type, "Denoiser Type", denoiser_type_enum, default_denoise_params.type);
   SOCKET_INT(denoise_start_sample, "Start Sample to Denoise", default_denoise_params.start_sample);
   SOCKET_BOOLEAN(use_denoise_pass_albedo,
                  "Use Albedo Pass for Denoiser",
                  default_denoise_params.use_pass_albedo);
   SOCKET_BOOLEAN(use_denoise_pass_normal,
-                 "Use Normal  Pass for Denoiser Denoiser",
+                 "Use Normal Pass for Denoiser Denoiser",
                  default_denoise_params.use_pass_normal);
+  SOCKET_ENUM(denoiser_prefilter,
+              "Denoiser Type",
+              denoiser_prefilter_enum,
+              default_denoise_params.prefilter);
 
   return type;
 }
@@ -120,16 +129,26 @@ void Integrator::device_update(Device *device, DeviceScene *dscene, Scene *scene
     }
   });
 
+  KernelIntegrator *kintegrator = &dscene->data.integrator;
+
+  /* Adaptive sampling requires PMJ samples.
+   *
+   * This also makes detection of sampling pattern a bit more involved: can not rely on the changed
+   * state of socket, since its value might be different from the effective value used here. So
+   * instead compare with previous value in the KernelIntegrator. Only do it if the device was
+   * updated once (in which case the `sample_pattern_lut` will be allocated to a non-zero size). */
+  const SamplingPattern new_sampling_pattern = (use_adaptive_sampling) ? SAMPLING_PATTERN_PMJ :
+                                                                         sampling_pattern;
+
   const bool need_update_lut = max_bounce_is_modified() || max_transmission_bounce_is_modified() ||
-                               sampling_pattern_is_modified();
+                               dscene->sample_pattern_lut.size() == 0 ||
+                               kintegrator->sampling_pattern != new_sampling_pattern;
 
   if (need_update_lut) {
     dscene->sample_pattern_lut.tag_realloc();
   }
 
   device_free(device, dscene);
-
-  KernelIntegrator *kintegrator = &dscene->data.integrator;
 
   /* integrator parameters */
   kintegrator->min_bounce = min_bounce + 1;
@@ -144,6 +163,8 @@ void Integrator::device_update(Device *device, DeviceScene *dscene, Scene *scene
   kintegrator->transparent_max_bounce = transparent_max_bounce + 1;
 
   kintegrator->ao_bounces = ao_bounces;
+  kintegrator->ao_bounces_distance = ao_distance;
+  kintegrator->ao_bounces_factor = ao_factor;
 
   /* Transparent Shadows
    * We only need to enable transparent shadows, if we actually have
@@ -166,10 +187,7 @@ void Integrator::device_update(Device *device, DeviceScene *dscene, Scene *scene
   kintegrator->caustics_refractive = caustics_refractive;
   kintegrator->filter_glossy = (filter_glossy == 0.0f) ? FLT_MAX : 1.0f / filter_glossy;
 
-  kintegrator->seed = hash_uint2(seed, 0);
-
-  kintegrator->use_ambient_occlusion = ((Pass::contains(scene->passes, PASS_AO)) ||
-                                        dscene->data.background.ao_factor != 0.0f);
+  kintegrator->seed = seed;
 
   kintegrator->sample_clamp_direct = (sample_clamp_direct == 0.0f) ? FLT_MAX :
                                                                      sample_clamp_direct * 3.0f;
@@ -177,7 +195,7 @@ void Integrator::device_update(Device *device, DeviceScene *dscene, Scene *scene
                                            FLT_MAX :
                                            sample_clamp_indirect * 3.0f;
 
-  kintegrator->sampling_pattern = sampling_pattern;
+  kintegrator->sampling_pattern = new_sampling_pattern;
 
   if (light_sampling_threshold > 0.0f) {
     kintegrator->light_inv_rr_threshold = 1.0f / light_sampling_threshold;
@@ -194,8 +212,8 @@ void Integrator::device_update(Device *device, DeviceScene *dscene, Scene *scene
   dimensions = min(dimensions, SOBOL_MAX_DIMENSIONS);
 
   if (need_update_lut) {
-    if (sampling_pattern == SAMPLING_PATTERN_SOBOL) {
-      uint *directions = dscene->sample_pattern_lut.alloc(SOBOL_BITS * dimensions);
+    if (kintegrator->sampling_pattern == SAMPLING_PATTERN_SOBOL) {
+      uint *directions = (uint *)dscene->sample_pattern_lut.alloc(SOBOL_BITS * dimensions);
 
       sobol_generate_direction_vectors((uint(*)[SOBOL_BITS])directions, dimensions);
 
@@ -213,6 +231,7 @@ void Integrator::device_update(Device *device, DeviceScene *dscene, Scene *scene
             function_bind(&progressive_multi_jitter_02_generate_2D, sequence, sequence_size, j));
       }
       pool.wait_work();
+
       dscene->sample_pattern_lut.copy_to_device();
     }
   }
@@ -234,7 +253,7 @@ void Integrator::tag_update(Scene *scene, uint32_t flag)
     tag_modified();
   }
 
-  if (flag & (AO_PASS_MODIFIED | BACKGROUND_AO_MODIFIED)) {
+  if (flag & AO_PASS_MODIFIED) {
     /* tag only the ao_bounces socket as modified so we avoid updating sample_pattern_lut
      * unnecessarily */
     tag_ao_bounces_modified();
@@ -259,25 +278,11 @@ AdaptiveSampling Integrator::get_adaptive_sampling() const
 {
   AdaptiveSampling adaptive_sampling;
 
-  adaptive_sampling.use = (get_sampling_pattern() == SAMPLING_PATTERN_PMJ);
+  adaptive_sampling.use = use_adaptive_sampling;
 
   if (!adaptive_sampling.use) {
     return adaptive_sampling;
   }
-
-  if (aa_samples > 0 && adaptive_min_samples == 0) {
-    adaptive_sampling.min_samples = max(4, (int)sqrtf(aa_samples));
-    VLOG(1) << "Cycles adaptive sampling: automatic min samples = "
-            << adaptive_sampling.min_samples;
-  }
-  else {
-    adaptive_sampling.min_samples = max(4, adaptive_min_samples);
-  }
-
-  adaptive_sampling.adaptive_step = 16;
-
-  DCHECK(is_power_of_two(adaptive_sampling.adaptive_step))
-      << "Adaptive step must be a power of two for bitwise operations to work";
 
   if (aa_samples > 0 && adaptive_threshold == 0.0f) {
     adaptive_sampling.threshold = max(0.001f, 1.0f / (float)aa_samples);
@@ -286,6 +291,26 @@ AdaptiveSampling Integrator::get_adaptive_sampling() const
   else {
     adaptive_sampling.threshold = adaptive_threshold;
   }
+
+  if (adaptive_sampling.threshold > 0 && adaptive_min_samples == 0) {
+    /* Threshold 0.1 -> 32, 0.01 -> 64, 0.001 -> 128. */
+    const int min_samples = (int)ceilf(16.0f / sqrtf(adaptive_sampling.threshold * 0.3f));
+    adaptive_sampling.min_samples = max(4, min_samples);
+    VLOG(1) << "Cycles adaptive sampling: automatic min samples = "
+            << adaptive_sampling.min_samples;
+  }
+  else {
+    adaptive_sampling.min_samples = max(4, adaptive_min_samples);
+  }
+
+  /* Arbitrary factor that makes the threshold more similar to what is was before,
+   * and gives arguably more intuitive values. */
+  adaptive_sampling.threshold *= 5.0f;
+
+  adaptive_sampling.adaptive_step = 16;
+
+  DCHECK(is_power_of_two(adaptive_sampling.adaptive_step))
+      << "Adaptive step must be a power of two for bitwise operations to work";
 
   return adaptive_sampling;
 }
@@ -296,14 +321,14 @@ DenoiseParams Integrator::get_denoise_params() const
 
   denoise_params.use = use_denoise;
 
-  denoise_params.store_passes = denoise_store_passes;
-
   denoise_params.type = denoiser_type;
 
   denoise_params.start_sample = denoise_start_sample;
 
   denoise_params.use_pass_albedo = use_denoise_pass_albedo;
   denoise_params.use_pass_normal = use_denoise_pass_normal;
+
+  denoise_params.prefilter = denoiser_prefilter;
 
   return denoise_params;
 }

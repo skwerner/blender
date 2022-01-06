@@ -111,7 +111,6 @@ enum_device_type = (
     ('CPU', "CPU", "CPU", 0),
     ('CUDA', "CUDA", "CUDA", 1),
     ('OPTIX', "OptiX", "OptiX", 3),
-    ('OPENCL', "OpenCL", "OpenCL", 2)
 )
 
 enum_texture_limit = (
@@ -124,40 +123,46 @@ enum_texture_limit = (
     ('4096', "4096", "Limit texture size to 4096 pixels", 6),
     ('8192', "8192", "Limit texture size to 8192 pixels", 7),
 )
-
+ 
+# NOTE: Identifiers are expected to be an upper case version of identifiers from  `Pass::get_type_enum()`
 enum_view3d_shading_render_pass = (
     ('', "General", ""),
 
-    ('COMBINED', "Combined", "Show the Combined Render pass", 1),
-    ('EMISSION', "Emission", "Show the Emission render pass", 2),
-    ('BACKGROUND', "Background", "Show the Background render pass", 3),
-    ('AO', "Ambient Occlusion", "Show the Ambient Occlusion render pass", 4),
+    ('COMBINED', "Combined", "Show the Combined Render pass"),
+    ('EMISSION', "Emission", "Show the Emission render pass"),
+    ('BACKGROUND', "Background", "Show the Background render pass"),
+    ('AO', "Ambient Occlusion", "Show the Ambient Occlusion render pass"),
+    ('SHADOW', "Shadow", "Show the Shadow render pass"),
+    ('SHADOW_CATCHER', "Shadow Catcher", "Show the Shadow Catcher render pass"),
 
     ('', "Light", ""),
 
-    ('DIFFUSE_DIRECT', "Diffuse Direct", "Show the Diffuse Direct render pass", 7),
-    ('DIFFUSE_INDIRECT', "Diffuse Indirect", "Show the Diffuse Indirect render pass", 8),
-    ('DIFFUSE_COLOR', "Diffuse Color", "Show the Diffuse Color render pass", 45),
+    ('DIFFUSE_DIRECT', "Diffuse Direct", "Show the Diffuse Direct render pass"),
+    ('DIFFUSE_INDIRECT', "Diffuse Indirect", "Show the Diffuse Indirect render pass"),
+    ('DIFFUSE_COLOR', "Diffuse Color", "Show the Diffuse Color render pass"),
 
-    ('GLOSSY_DIRECT', "Glossy Direct", "Show the Glossy Direct render pass", 9),
-    ('GLOSSY_INDIRECT', "Glossy Indirect", "Show the Glossy Indirect render pass", 10),
-    ('GLOSSY_COLOR', "Glossy Color", "Show the Glossy Color render pass", 46),
+    ('GLOSSY_DIRECT', "Glossy Direct", "Show the Glossy Direct render pass"),
+    ('GLOSSY_INDIRECT', "Glossy Indirect", "Show the Glossy Indirect render pass"),
+    ('GLOSSY_COLOR', "Glossy Color", "Show the Glossy Color render pass"),
 
     ('', "", ""),
 
-    ('TRANSMISSION_DIRECT', "Transmission Direct", "Show the Transmission Direct render pass", 11),
-    ('TRANSMISSION_INDIRECT', "Transmission Indirect", "Show the Transmission Indirect render pass", 12),
-    ('TRANSMISSION_COLOR', "Transmission Color", "Show the Transmission Color render pass", 47),
+    ('TRANSMISSION_DIRECT', "Transmission Direct", "Show the Transmission Direct render pass"),
+    ('TRANSMISSION_INDIRECT', "Transmission Indirect", "Show the Transmission Indirect render pass"),
+    ('TRANSMISSION_COLOR', "Transmission Color", "Show the Transmission Color render pass"),
 
-    ('VOLUME_DIRECT', "Volume Direct", "Show the Volume Direct render pass", 13),
-    ('VOLUME_INDIRECT', "Volume Indirect", "Show the Volume Indirect render pass", 14),
+    ('VOLUME_DIRECT', "Volume Direct", "Show the Volume Direct render pass"),
+    ('VOLUME_INDIRECT', "Volume Indirect", "Show the Volume Indirect render pass"),
 
     ('', "Data", ""),
 
-    ('NORMAL', "Normal", "Show the Normal render pass", 33),
-    ('UV', "UV", "Show the UV render pass", 34),
-    ('MIST', "Mist", "Show the Mist render pass", 48),
-    ('SAMPLE_COUNT', "Sample Count", "Per-pixel number of samples", 44),
+    ('POSITION', "Position", "Show the Position render pass"),
+    ('NORMAL', "Normal", "Show the Normal render pass"),
+    ('UV', "UV", "Show the UV render pass"),
+    ('MIST', "Mist", "Show the Mist render pass"),
+    ('DENOISING_ALBEDO', "Denoising Albedo", "Albedo pass used by denoiser"),
+    ('DENOISING_NORMAL', "Denoising Normal", "Normal pass used by denoiser"),
+    ('SAMPLE_COUNT', "Sample Count", "Per-pixel number of samples"),
 )
 
 
@@ -196,16 +201,26 @@ def enum_denoiser(self, context):
 
 
 enum_denoising_input_passes = (
-    ('RGB', "Color", "Use only color as input", 1),
-    ('RGB_ALBEDO', "Color + Albedo", "Use color and albedo data as input", 2),
-    ('RGB_ALBEDO_NORMAL', "Color + Albedo + Normal", "Use color, albedo and normal data as input", 3),
+    ('RGB', "None", "Don't use utility passes for denoising", 1),
+    ('RGB_ALBEDO', "Albedo", "Use albedo pass for denoising", 2),
+    ('RGB_ALBEDO_NORMAL', "Albedo and Normal", "Use albedo and normal passes for denoising", 3),
 )
 
+enum_denoising_prefilter = (
+    ('NONE', "None", "No prefiltering, use when guiding passes are noise-free", 1),
+    ('FAST', "Fast", "Denoise color and guiding passes together. Improves quality when guiding passes are noisy using least amount of extra processing time", 2),
+    ('ACCURATE', "Accurate", "Prefilter noisy guiding passes before denoising color. Improves quality when guiding passes are noisy using extra processing time", 3),
+)
 
 def update_render_passes(self, context):
     scene = context.scene
     view_layer = context.view_layer
     view_layer.update_render_passes()
+
+
+def update_render_engine(self, context):
+    scene = context.scene
+    scene.update_render_engine()
 
 
 class CyclesRenderSettings(bpy.types.PropertyGroup):
@@ -221,6 +236,7 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         description="Feature set to use for rendering",
         items=enum_feature_set,
         default='SUPPORTED',
+        update=update_render_engine,
     )
     shading_system: BoolProperty(
         name="Open Shading Language",
@@ -236,21 +252,34 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
     use_denoising: BoolProperty(
         name="Use Denoising",
         description="Denoise the rendered image",
-        default=False,
+        default=True,
+        update=update_render_passes,
     )
-    use_preview_denoising: BoolProperty(
-        name="Use Viewport Denoising",
-        description="Denoise the image in the 3D viewport",
-        default=False,
-    )
-
     denoiser: EnumProperty(
         name="Denoiser",
         description="Denoise the image with the selected denoiser. "
         "For denoising the image after rendering",
         items=enum_denoiser,
-        default=1,
+        default=4, # Use integer to avoid error in builds without OpenImageDenoise.
         update=update_render_passes,
+    )
+    denoising_prefilter: EnumProperty(
+        name="Denoising Prefilter",
+        description="Prefilter noisy guiding (albedo and normal) passes to improve denoising quality when using OpenImageDenoiser",
+        items=enum_denoising_prefilter,
+        default='ACCURATE',
+    )
+    denoising_input_passes: EnumProperty(
+        name="Denoising Input Passes",
+        description="Passes used by the denoiser to distinguish noise from shader and geometry detail",
+        items=enum_denoising_input_passes,
+        default='RGB_ALBEDO_NORMAL',
+    )
+
+    use_preview_denoising: BoolProperty(
+        name="Use Viewport Denoising",
+        description="Denoise the image in the 3D viewport",
+        default=False,
     )
     preview_denoiser: EnumProperty(
         name="Viewport Denoiser",
@@ -258,24 +287,46 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         items=enum_preview_denoiser,
         default=0,
     )
-
-    use_square_samples: BoolProperty(
-        name="Square Samples",
-        description="Square sampling values for easier artist control",
-        default=False,
+    preview_denoising_prefilter: EnumProperty(
+        name="Viewport Denoising Prefilter",
+        description="Prefilter noisy guiding (albedo and normal) passes to improve denoising quality when using OpenImageDenoiser",
+        items=enum_denoising_prefilter,
+        default='FAST',
+    )
+    preview_denoising_input_passes: EnumProperty(
+        name="Viewport Denoising Input Passes",
+        description="Passes used by the denoiser to distinguish noise from shader and geometry detail",
+        items=enum_denoising_input_passes,
+        default='RGB_ALBEDO',
+    )
+    preview_denoising_start_sample: IntProperty(
+        name="Start Denoising",
+        description="Sample to start denoising the preview at",
+        min=0, max=(1 << 24),
+        default=1,
     )
 
     samples: IntProperty(
         name="Samples",
         description="Number of samples to render for each pixel",
         min=1, max=(1 << 24),
-        default=128,
+        default=4096,
     )
     preview_samples: IntProperty(
         name="Viewport Samples",
         description="Number of samples to render in the viewport, unlimited if 0",
         min=0, max=(1 << 24),
-        default=32,
+        default=1024,
+    )
+
+    time_limit: FloatProperty(
+        name="Time Limit",
+        description="Limit the render time (excluding synchronization time)."
+        "Zero disables the limit",
+        min=0.0,
+        default=0.0,
+        step=100.0,
+        unit='TIME_ABSOLUTE',
     )
 
     sampling_pattern: EnumProperty(
@@ -303,19 +354,39 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
     use_adaptive_sampling: BoolProperty(
         name="Use Adaptive Sampling",
         description="Automatically reduce the number of samples per pixel based on estimated noise level",
-        default=False,
+        default=True,
     )
-
     adaptive_threshold: FloatProperty(
         name="Adaptive Sampling Threshold",
-        description="Noise level step to stop sampling at, lower values reduce noise the cost of render time. Zero for automatic setting based on number of AA samples",
+        description="Noise level step to stop sampling at, lower values reduce noise at the cost of render time. Zero for automatic setting based on number of AA samples",
         min=0.0, max=1.0,
-        default=0.0,
+        soft_min=0.001,
+        default=0.01,
         precision=4,
     )
     adaptive_min_samples: IntProperty(
         name="Adaptive Min Samples",
-        description="Minimum AA samples for adaptive sampling, to discover noisy features before stopping sampling. Zero for automatic setting based on number of AA samples",
+        description="Minimum AA samples for adaptive sampling, to discover noisy features before stopping sampling. Zero for automatic setting based on noise threshold",
+        min=0, max=4096,
+        default=0,
+    )
+
+    use_preview_adaptive_sampling: BoolProperty(
+        name="Use Adaptive Sampling",
+        description="Automatically reduce the number of samples per pixel based on estimated noise level, for viewport renders",
+        default=True,
+    )
+    preview_adaptive_threshold: FloatProperty(
+        name="Adaptive Sampling Threshold",
+        description="Noise level step to stop sampling at, lower values reduce noise at the cost of render time. Zero for automatic setting based on number of AA samples, for viewport renders",
+        min=0.0, max=1.0,
+        soft_min=0.001,
+        default=0.1,
+        precision=4,
+    )
+    preview_adaptive_min_samples: IntProperty(
+        name="Adaptive Min Samples",
+        description="Minimum AA samples for adaptive sampling, to discover noisy features before stopping sampling. Zero for automatic setting based on noise threshold, for viewport renders",
         min=0, max=4096,
         default=0,
     )
@@ -389,7 +460,7 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
 
     transparent_max_bounces: IntProperty(
         name="Transparent Max Bounces",
-        description="Maximum number of transparent bounces",
+        description="Maximum number of transparent bounces. This is independent of maximum number of other bounces ",
         min=0, max=1024,
         default=8,
     )
@@ -532,19 +603,6 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         default=10.0,
     )
 
-    preview_denoising_start_sample: IntProperty(
-        name="Start Denoising",
-        description="Sample to start denoising the preview at",
-        min=0, max=(1 << 24),
-        default=1,
-    )
-    preview_denoising_input_passes: EnumProperty(
-        name="Viewport Input Passes",
-        description="Passes used by the denoiser to distinguish noise from shader and geometry detail",
-        items=enum_denoising_input_passes,
-        default='RGB_ALBEDO',
-    )
-
     debug_bvh_type: EnumProperty(
         name="Viewport BVH Type",
         description="Choose between faster updates, or faster render",
@@ -573,17 +631,18 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         default='COMBINED',
         description="Type of pass to bake",
         items=(
-            ('COMBINED', "Combined", ""),
-            ('AO', "Ambient Occlusion", ""),
-            ('SHADOW', "Shadow", ""),
-            ('NORMAL', "Normal", ""),
-            ('UV', "UV", ""),
-            ('ROUGHNESS', "Roughness", ""),
-            ('EMIT', "Emit", ""),
-            ('ENVIRONMENT', "Environment", ""),
-            ('DIFFUSE', "Diffuse", ""),
-            ('GLOSSY', "Glossy", ""),
-            ('TRANSMISSION', "Transmission", ""),
+            ('COMBINED', "Combined", "", 0),
+            ('AO', "Ambient Occlusion", "", 1),
+            ('SHADOW', "Shadow", "", 2),
+            ('POSITION', "Position", "", 11),
+            ('NORMAL', "Normal", "", 3),
+            ('UV', "UV", "", 4),
+            ('ROUGHNESS', "Roughness", "", 5),
+            ('EMIT', "Emit", "", 6),
+            ('ENVIRONMENT', "Environment", "", 7),
+            ('DIFFUSE', "Diffuse", "", 8),
+            ('GLOSSY', "Glossy", "", 9),
+            ('TRANSMISSION', "Transmission", "", 10),
         ),
     )
 
@@ -754,6 +813,18 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         min=0, max=1024,
     )
 
+    use_auto_tile: BoolProperty(
+        name="Auto Tiles",
+        description="Automatically split image into tiles",
+        default=True,
+    )
+    tile_size: IntProperty(
+        name="Tile Size",
+        default=2048,
+        description="",
+        min=0, max=16384,
+    )
+
     # Various fine-tuning debug flags
 
     def _devices_update_callback(self, context):
@@ -774,39 +845,10 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
 
     debug_use_cuda_adaptive_compile: BoolProperty(name="Adaptive Compile", default=False)
 
-    debug_optix_curves_api: BoolProperty(name="Native OptiX Curve Primitive", default=False)
-
-    debug_opencl_kernel_type: EnumProperty(
-        name="OpenCL Kernel Type",
-        default='DEFAULT',
-        items=(
-            ('DEFAULT', "Default", ""),
-            ('MEGA', "Mega", ""),
-            ('SPLIT', "Split", ""),
-        ),
-        update=CyclesRenderSettings._devices_update_callback
-    )
-
-    debug_opencl_device_type: EnumProperty(
-        name="OpenCL Device Type",
-        default='ALL',
-        items=(
-            ('NONE', "None", ""),
-            ('ALL', "All", ""),
-            ('DEFAULT', "Default", ""),
-            ('CPU', "CPU", ""),
-            ('GPU', "GPU", ""),
-            ('ACCELERATOR', "Accelerator", ""),
-        ),
-        update=CyclesRenderSettings._devices_update_callback
-    )
-
-    debug_use_opencl_debug: BoolProperty(name="Debug OpenCL", default=False)
-
-    debug_opencl_mem_limit: IntProperty(
-        name="Memory limit",
-        default=0,
-        description="Artificial limit on OpenCL memory usage in MB (0 to disable limit)"
+    debug_use_optix_debug: BoolProperty(
+        name="OptiX Module Debug",
+        description="Load OptiX module in debug mode: lower logging verbosity level, enable validations, and lower optimization level",
+        default=False
     )
 
     @classmethod
@@ -1082,12 +1124,6 @@ class CyclesVisibilitySettings(bpy.types.PropertyGroup):
 
     @classmethod
     def register(cls):
-        bpy.types.Object.cycles_visibility = PointerProperty(
-            name="Cycles Visibility Settings",
-            description="Cycles visibility settings",
-            type=cls,
-        )
-
         bpy.types.World.cycles_visibility = PointerProperty(
             name="Cycles Visibility Settings",
             description="Cycles visibility settings",
@@ -1096,7 +1132,6 @@ class CyclesVisibilitySettings(bpy.types.PropertyGroup):
 
     @classmethod
     def unregister(cls):
-        del bpy.types.Object.cycles_visibility
         del bpy.types.World.cycles_visibility
 
 
@@ -1173,24 +1208,25 @@ class CyclesObjectSettings(bpy.types.PropertyGroup):
     )
 
     shadow_terminator_offset: FloatProperty(
-        name="Shadow Terminator Offset",
+        name="Shadow Terminator Shading Offset",
         description="Push the shadow terminator towards the light to hide artifacts on low poly geometry",
         min=0.0, max=1.0,
         default=0.0,
     )
 
-    is_shadow_catcher: BoolProperty(
-        name="Shadow Catcher",
-        description="Only render shadows on this object, for compositing renders into real footage",
-        default=False,
+    shadow_terminator_geometry_offset: FloatProperty(
+        name="Shadow Terminator Geometry Offset",
+        description="Offset rays from the surface to reduce shadow terminator artifact on low poly geometry. Only affects triangles at grazing angles to light",
+        min=0.0, max=1.0,
+        default=0.1,
     )
 
-    is_holdout: BoolProperty(
-        name="Holdout",
-        description="Render objects as a holdout or matte, creating a "
-        "hole in the image with zero alpha, to fill out in "
-        "compositing with real footage or another render",
-        default=False,
+    ao_distance: FloatProperty(
+        name="AO Distance",
+        description="AO distance used for approximate global illumination (0 means use world setting)",
+        min=0.0,
+        default=0.0,
+        subtype='DISTANCE',
     )
 
     @classmethod
@@ -1236,30 +1272,6 @@ class CyclesCurveRenderSettings(bpy.types.PropertyGroup):
 
 class CyclesRenderLayerSettings(bpy.types.PropertyGroup):
 
-    pass_debug_bvh_traversed_nodes: BoolProperty(
-        name="Debug BVH Traversed Nodes",
-        description="Store Debug BVH Traversed Nodes pass",
-        default=False,
-        update=update_render_passes,
-    )
-    pass_debug_bvh_traversed_instances: BoolProperty(
-        name="Debug BVH Traversed Instances",
-        description="Store Debug BVH Traversed Instances pass",
-        default=False,
-        update=update_render_passes,
-    )
-    pass_debug_bvh_intersections: BoolProperty(
-        name="Debug BVH Intersections",
-        description="Store Debug BVH Intersections",
-        default=False,
-        update=update_render_passes,
-    )
-    pass_debug_ray_bounces: BoolProperty(
-        name="Debug Ray Bounces",
-        description="Store Debug Ray Bounces pass",
-        default=False,
-        update=update_render_passes,
-    )
     pass_debug_render_time: BoolProperty(
         name="Debug Render Time",
         description="Render time in milliseconds per sample and pixel",
@@ -1305,19 +1317,6 @@ class CyclesRenderLayerSettings(bpy.types.PropertyGroup):
         update=update_render_passes,
     )
 
-    denoising_optix_input_passes: EnumProperty(
-        name="Input Passes",
-        description="Passes used by the denoiser to distinguish noise from shader and geometry detail",
-        items=enum_denoising_input_passes,
-        default='RGB_ALBEDO',
-    )
-    denoising_openimagedenoise_input_passes: EnumProperty(
-        name="Input Passes",
-        description="Passes used by the denoiser to distinguish noise from shader and geometry detail",
-        items=enum_denoising_input_passes,
-        default='RGB_ALBEDO_NORMAL',
-    )
-
     @classmethod
     def register(cls):
         bpy.types.ViewLayer.cycles = PointerProperty(
@@ -1343,14 +1342,12 @@ class CyclesPreferences(bpy.types.AddonPreferences):
 
     def get_device_types(self, context):
         import _cycles
-        has_cuda, has_optix, has_opencl = _cycles.get_device_types()
+        has_cuda, has_optix = _cycles.get_device_types()
         list = [('NONE', "None", "Don't use compute device", 0)]
         if has_cuda:
             list.append(('CUDA', "CUDA", "Use CUDA for GPU acceleration", 1))
         if has_optix:
             list.append(('OPTIX', "OptiX", "Use OptiX for GPU acceleration", 3))
-        if has_opencl:
-            list.append(('OPENCL', "OpenCL", "Use OpenCL for GPU acceleration", 2))
         return list
 
     compute_device_type: EnumProperty(
@@ -1375,7 +1372,7 @@ class CyclesPreferences(bpy.types.AddonPreferences):
 
     def update_device_entries(self, device_list):
         for device in device_list:
-            if not device[1] in {'CUDA', 'OPTIX', 'OPENCL', 'CPU'}:
+            if not device[1] in {'CUDA', 'OPTIX', 'CPU'}:
                 continue
             # Try to find existing Device entry
             entry = self.find_existing_device_entry(device)
@@ -1409,22 +1406,23 @@ class CyclesPreferences(bpy.types.AddonPreferences):
             elif entry.type == 'CPU':
                 cpu_devices.append(entry)
         # Extend all GPU devices with CPU.
-        if compute_device_type in {'CUDA', 'OPTIX', 'OPENCL'}:
+        if compute_device_type != 'CPU':
             devices.extend(cpu_devices)
         return devices
 
-    # For backwards compatibility, only returns CUDA and OpenCL but still
-    # refreshes all devices.
-    def get_devices(self, compute_device_type=''):
+    # Refresh device list. This does not happen automatically on Blender
+    # startup due to unstable OpenCL implementations that can cause crashes.
+    def refresh_devices(self):
         import _cycles
         # Ensure `self.devices` is not re-allocated when the second call to
         # get_devices_for_type is made, freeing items from the first list.
         for device_type in ('CUDA', 'OPTIX', 'OPENCL'):
             self.update_device_entries(_cycles.available_devices(device_type))
 
-        cuda_devices = self.get_devices_for_type('CUDA')
-        opencl_devices = self.get_devices_for_type('OPENCL')
-        return cuda_devices, opencl_devices
+    # Deprecated: use refresh_devices instead.
+    def get_devices(self, compute_device_type=''):
+        self.refresh_devices()
+        return None
 
     def get_num_gpu_devices(self):
         import _cycles

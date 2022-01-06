@@ -17,14 +17,19 @@
 CCL_NAMESPACE_BEGIN
 
 /*
+ * Original code is under the MIT License, Copyright (c) 2013 Inigo Quilez.
+ *
  * Smooth Voronoi:
  *
  * - https://wiki.blender.org/wiki/User:OmarSquircleArt/GSoC2019/Documentation/Smooth_Voronoi
  *
- * Distance To Edge:
+ * Distance To Edge based on:
  *
- * - https://www.shadertoy.com/view/llG3zy
+ * - https://www.iquilezles.org/www/articles/voronoilines/voronoilines.htm
+ * - https://www.shadertoy.com/view/ldl3W8
  *
+ * With optimization to change -2..2 scan window to -1..1 for better performance,
+ * as explained in https://www.shadertoy.com/view/llG3zy.
  */
 
 /* **** 1D Voronoi **** */
@@ -898,16 +903,16 @@ ccl_device void voronoi_n_sphere_radius_4d(float4 coord, float randomness, float
 }
 
 template<uint node_feature_mask>
-ccl_device void svm_node_tex_voronoi(const KernelGlobals *kg,
-                                     ShaderData *sd,
-                                     float *stack,
-                                     uint dimensions,
-                                     uint feature,
-                                     uint metric,
-                                     int *offset)
+ccl_device_noinline int svm_node_tex_voronoi(const KernelGlobals *kg,
+                                             ShaderData *sd,
+                                             float *stack,
+                                             uint dimensions,
+                                             uint feature,
+                                             uint metric,
+                                             int offset)
 {
-  uint4 stack_offsets = read_node(kg, offset);
-  uint4 defaults = read_node(kg, offset);
+  uint4 stack_offsets = read_node(kg, &offset);
+  uint4 defaults = read_node(kg, &offset);
 
   uint coord_stack_offset, w_stack_offset, scale_stack_offset, smoothness_stack_offset;
   uint exponent_stack_offset, randomness_stack_offset, distance_out_stack_offset,
@@ -994,7 +999,7 @@ ccl_device void svm_node_tex_voronoi(const KernelGlobals *kg,
                         &position_out_2d);
           break;
         case NODE_VORONOI_SMOOTH_F1:
-          if (NODES_FEATURE(VORONOI_EXTRA)) {
+          if (KERNEL_NODES_FEATURE(VORONOI_EXTRA)) {
             voronoi_smooth_f1_2d(coord_2d,
                                  smoothness,
                                  exponent,
@@ -1039,7 +1044,7 @@ ccl_device void svm_node_tex_voronoi(const KernelGlobals *kg,
                         &position_out);
           break;
         case NODE_VORONOI_SMOOTH_F1:
-          if (NODES_FEATURE(VORONOI_EXTRA)) {
+          if (KERNEL_NODES_FEATURE(VORONOI_EXTRA)) {
             voronoi_smooth_f1_3d(coord,
                                  smoothness,
                                  exponent,
@@ -1073,7 +1078,7 @@ ccl_device void svm_node_tex_voronoi(const KernelGlobals *kg,
     }
 
     case 4: {
-      if (NODES_FEATURE(VORONOI_EXTRA)) {
+      if (KERNEL_NODES_FEATURE(VORONOI_EXTRA)) {
         float4 coord_4d = make_float4(coord.x, coord.y, coord.z, w);
         float4 position_out_4d;
         switch (voronoi_feature) {
@@ -1134,6 +1139,7 @@ ccl_device void svm_node_tex_voronoi(const KernelGlobals *kg,
     stack_store_float(stack, w_out_stack_offset, w_out);
   if (stack_valid(radius_out_stack_offset))
     stack_store_float(stack, radius_out_stack_offset, radius_out);
+  return offset;
 }
 
 CCL_NAMESPACE_END

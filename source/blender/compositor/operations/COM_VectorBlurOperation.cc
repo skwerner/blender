@@ -48,8 +48,8 @@ void antialias_tagbuf(int xsize, int ysize, char *rectmove);
 VectorBlurOperation::VectorBlurOperation()
 {
   this->addInputSocket(DataType::Color);
-  this->addInputSocket(DataType::Value);  // ZBUF
-  this->addInputSocket(DataType::Color);  // SPEED
+  this->addInputSocket(DataType::Value); /* ZBUF */
+  this->addInputSocket(DataType::Color); /* SPEED */
   this->addOutputSocket(DataType::Color);
   this->m_settings = nullptr;
   this->m_cachedInstance = nullptr;
@@ -57,6 +57,7 @@ VectorBlurOperation::VectorBlurOperation()
   this->m_inputSpeedProgram = nullptr;
   this->m_inputZProgram = nullptr;
   flags.complex = true;
+  flags.is_fullframe_operation = true;
 }
 void VectorBlurOperation::initExecution()
 {
@@ -119,6 +120,51 @@ bool VectorBlurOperation::determineDependingAreaOfInterest(rcti * /*input*/,
   }
 
   return false;
+}
+
+void VectorBlurOperation::get_area_of_interest(const int UNUSED(input_idx),
+                                               const rcti &UNUSED(output_area),
+                                               rcti &r_input_area)
+{
+  r_input_area.xmin = 0;
+  r_input_area.xmax = this->getWidth();
+  r_input_area.ymin = 0;
+  r_input_area.ymax = this->getHeight();
+}
+
+void VectorBlurOperation::update_memory_buffer(MemoryBuffer *output,
+                                               const rcti &area,
+                                               Span<MemoryBuffer *> inputs)
+{
+  /* TODO(manzanilla): once tiled implementation is removed, run multi-threaded where possible. */
+  if (!m_cachedInstance) {
+    MemoryBuffer *image = inputs[IMAGE_INPUT_INDEX];
+    const bool is_image_inflated = image->is_a_single_elem();
+    image = is_image_inflated ? image->inflate() : image;
+
+    /* Must be a copy because it's modified in #generateVectorBlur. */
+    MemoryBuffer *speed = inputs[SPEED_INPUT_INDEX];
+    speed = speed->is_a_single_elem() ? speed->inflate() : new MemoryBuffer(*speed);
+
+    MemoryBuffer *z = inputs[Z_INPUT_INDEX];
+    const bool is_z_inflated = z->is_a_single_elem();
+    z = is_z_inflated ? z->inflate() : z;
+
+    m_cachedInstance = (float *)MEM_dupallocN(image->getBuffer());
+    this->generateVectorBlur(m_cachedInstance, image, speed, z);
+
+    if (is_image_inflated) {
+      delete image;
+    }
+    delete speed;
+    if (is_z_inflated) {
+      delete z;
+    }
+  }
+
+  const int num_channels = COM_data_type_num_channels(getOutputSocket()->getDataType());
+  MemoryBuffer buf(m_cachedInstance, num_channels, this->getWidth(), this->getHeight());
+  output->copy_from(&buf, area);
 }
 
 void VectorBlurOperation::generateVectorBlur(float *data,
@@ -432,7 +478,7 @@ void antialias_tagbuf(int xsize, int ysize, char *rectmove)
     }
   }
 
-  /* 2: evaluate horizontal scanlines and calculate alphas */
+  /* 2: evaluate horizontal scan-lines and calculate alphas. */
   row1 = rectmove;
   for (y = 0; y < ysize; y++) {
     row1++;
@@ -449,7 +495,7 @@ void antialias_tagbuf(int xsize, int ysize, char *rectmove)
           /* now we can blend values */
           next = row1[step];
 
-          /* note, prev value can be next value, but we do this loop to clear 128 then */
+          /* NOTE: prev value can be next value, but we do this loop to clear 128 then. */
           for (a = 0; a < step; a++) {
             int fac, mfac;
 
@@ -463,7 +509,7 @@ void antialias_tagbuf(int xsize, int ysize, char *rectmove)
     }
   }
 
-  /* 3: evaluate vertical scanlines and calculate alphas */
+  /* 3: evaluate vertical scan-lines and calculate alphas */
   /*    use for reading a copy of the original tagged buffer */
   for (x = 0; x < xsize; x++) {
     row1 = rectmove + x + xsize;
@@ -480,7 +526,7 @@ void antialias_tagbuf(int xsize, int ysize, char *rectmove)
         if (y + step != ysize) {
           /* now we can blend values */
           next = row1[step * xsize];
-          /* note, prev value can be next value, but we do this loop to clear 128 then */
+          /* NOTE: prev value can be next value, but we do this loop to clear 128 then. */
           for (a = 0; a < step; a++) {
             int fac, mfac;
 

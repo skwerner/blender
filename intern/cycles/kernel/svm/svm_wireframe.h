@@ -88,10 +88,10 @@ ccl_device_inline float wireframe(
   return 0.0f;
 }
 
-ccl_device void svm_node_wireframe(const KernelGlobals *kg,
-                                   ShaderData *sd,
-                                   float *stack,
-                                   uint4 node)
+ccl_device_noinline void svm_node_wireframe(const KernelGlobals *kg,
+                                            ShaderData *sd,
+                                            float *stack,
+                                            uint4 node)
 {
   uint in_size = node.y;
   uint out_fac = node.z;
@@ -103,18 +103,7 @@ ccl_device void svm_node_wireframe(const KernelGlobals *kg,
   int pixel_size = (int)use_pixel_size;
 
   /* Calculate wireframe */
-#ifdef __SPLIT_KERNEL__
-  /* TODO(sergey): This is because sd is actually a global space,
-   * which makes it difficult to re-use same wireframe() function.
-   *
-   * With OpenCL 2.0 it's possible to avoid this change, but for until
-   * then we'll be living with such an exception.
-   */
-  float3 P = sd->P;
-  float f = wireframe(kg, sd, size, pixel_size, &P);
-#else
   float f = wireframe(kg, sd, size, pixel_size, &sd->P);
-#endif
 
   /* TODO(sergey): Think of faster way to calculate derivatives. */
   if (bump_offset == NODE_BUMP_OFFSET_DX) {

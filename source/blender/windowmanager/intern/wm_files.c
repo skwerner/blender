@@ -28,10 +28,9 @@
  * winsock stuff.
  */
 #include <errno.h>
+#include <fcntl.h> /* for open flags (O_BINARY, O_RDONLY). */
 #include <stddef.h>
 #include <string.h>
-
-#include "zlib.h" /* wm_read_exotic() */
 
 #ifdef WIN32
 /* Need to include windows.h so _WIN32_IE is defined. */
@@ -51,12 +50,16 @@
 
 #include "BLI_blenlib.h"
 #include "BLI_fileops_types.h"
+#include "BLI_filereader.h"
 #include "BLI_linklist.h"
+#include "BLI_math.h"
 #include "BLI_system.h"
 #include "BLI_threads.h"
 #include "BLI_timer.h"
 #include "BLI_utildefines.h"
 #include BLI_SYSTEM_PID_H
+
+#include "PIL_time.h"
 
 #include "BLT_translation.h"
 
@@ -478,53 +481,64 @@ static void wm_init_userdef(Main *bmain)
 /* intended to check for non-blender formats but for now it only reads blends */
 static int wm_read_exotic(const char *name)
 {
-  int len;
-  gzFile gzfile;
-  char header[7];
-  int retval;
-
   /* make sure we're not trying to read a directory.... */
 
-  len = strlen(name);
-  if (len > 0 && ELEM(name[len - 1], '/', '\\')) {
-    retval = BKE_READ_EXOTIC_FAIL_PATH;
+  int namelen = strlen(name);
+  if (namelen > 0 && ELEM(name[namelen - 1], '/', '\\')) {
+    return BKE_READ_EXOTIC_FAIL_PATH;
+  }
+
+  /* open the file. */
+  const int filedes = BLI_open(name, O_BINARY | O_RDONLY, 0);
+  if (filedes == -1) {
+    return BKE_READ_EXOTIC_FAIL_OPEN;
+  }
+
+  FileReader *rawfile = BLI_filereader_new_file(filedes);
+  if (rawfile == NULL) {
+    return BKE_READ_EXOTIC_FAIL_OPEN;
+  }
+
+  /* read the header (7 bytes are enough to identify all known types). */
+  char header[7];
+  if (rawfile->read(rawfile, header, sizeof(header)) != sizeof(header)) {
+    rawfile->close(rawfile);
+    return BKE_READ_EXOTIC_FAIL_FORMAT;
+  }
+  rawfile->seek(rawfile, 0, SEEK_SET);
+
+  /* check for uncompressed .blend */
+  if (STREQLEN(header, "BLENDER", 7)) {
+    rawfile->close(rawfile);
+    return BKE_READ_EXOTIC_OK_BLEND;
+  }
+
+  /* check for compressed .blend */
+  FileReader *compressed_file = NULL;
+  if (BLI_file_magic_is_gzip(header)) {
+    /* In earlier versions of Blender (before 3.0), compressed files used Gzip instead of Zstd.
+     * While these files will no longer be written, there still needs to be reading support. */
+    compressed_file = BLI_filereader_new_gzip(rawfile);
+  }
+  else if (BLI_file_magic_is_zstd(header)) {
+    compressed_file = BLI_filereader_new_zstd(rawfile);
+  }
+
+  /* If a compression signature matches, try decompressing the start and check if it's a .blend */
+  if (compressed_file != NULL) {
+    size_t len = compressed_file->read(compressed_file, header, sizeof(header));
+    compressed_file->close(compressed_file);
+    if (len == sizeof(header) && STREQLEN(header, "BLENDER", 7)) {
+      return BKE_READ_EXOTIC_OK_BLEND;
+    }
   }
   else {
-    gzfile = BLI_gzopen(name, "rb");
-    if (gzfile == NULL) {
-      retval = BKE_READ_EXOTIC_FAIL_OPEN;
-    }
-    else {
-      len = gzread(gzfile, header, sizeof(header));
-      gzclose(gzfile);
-      if (len == sizeof(header) && STREQLEN(header, "BLENDER", 7)) {
-        retval = BKE_READ_EXOTIC_OK_BLEND;
-      }
-      else {
-        /* We may want to support loading other file formats
-         * from their header bytes or file extension.
-         * This used to be supported in the code below and may be added
-         * back at some point. */
-#if 0
-        WM_cursor_wait(true);
-
-        if (is_foo_format(name)) {
-          read_foo(name);
-          retval = BKE_READ_EXOTIC_OK_OTHER;
-        }
-        else
-#endif
-        {
-          retval = BKE_READ_EXOTIC_FAIL_FORMAT;
-        }
-#if 0
-        WM_cursor_wait(false);
-#endif
-      }
-    }
+    rawfile->close(rawfile);
   }
 
-  return retval;
+  /* Add check for future file formats here. */
+
+  return BKE_READ_EXOTIC_FAIL_FORMAT;
 }
 
 /** \} */
@@ -593,18 +607,32 @@ static void wm_file_read_pre(bContext *C, bool use_data, bool UNUSED(use_userdef
 }
 
 /**
+ * Parameters for #wm_file_read_post, also used for deferred initialization.
+ */
+struct wmFileReadPost_Params {
+  uint use_data : 1;
+  uint use_userdef : 1;
+
+  uint is_startup_file : 1;
+  uint is_factory_startup : 1;
+  uint reset_app_template : 1;
+};
+
+/**
  * Logic shared between #WM_file_read & #wm_homefile_read,
  * updates to make after reading a file.
  */
-static void wm_file_read_post(bContext *C,
-                              const bool is_startup_file,
-                              const bool is_factory_startup,
-                              const bool use_data,
-                              const bool use_userdef,
-                              const bool reset_app_template)
+static void wm_file_read_post(bContext *C, const struct wmFileReadPost_Params *params)
 {
-  bool addons_loaded = false;
   wmWindowManager *wm = CTX_wm_manager(C);
+
+  const bool use_data = params->use_data;
+  const bool use_userdef = params->use_userdef;
+  const bool is_startup_file = params->is_startup_file;
+  const bool is_factory_startup = params->is_factory_startup;
+  const bool reset_app_template = params->reset_app_template;
+
+  bool addons_loaded = false;
 
   if (use_data) {
     if (!G.background) {
@@ -733,6 +761,106 @@ static void wm_file_read_post(bContext *C,
 /** \name Read Main Blend-File API
  * \{ */
 
+static void file_read_reports_finalize(BlendFileReadReport *bf_reports)
+{
+  double duration_whole_minutes, duration_whole_seconds;
+  double duration_libraries_minutes, duration_libraries_seconds;
+  double duration_lib_override_minutes, duration_lib_override_seconds;
+  double duration_lib_override_resync_minutes, duration_lib_override_resync_seconds;
+  double duration_lib_override_recursive_resync_minutes,
+      duration_lib_override_recursive_resync_seconds;
+
+  BLI_math_time_seconds_decompose(bf_reports->duration.whole,
+                                  NULL,
+                                  NULL,
+                                  &duration_whole_minutes,
+                                  &duration_whole_seconds,
+                                  NULL);
+  BLI_math_time_seconds_decompose(bf_reports->duration.libraries,
+                                  NULL,
+                                  NULL,
+                                  &duration_libraries_minutes,
+                                  &duration_libraries_seconds,
+                                  NULL);
+  BLI_math_time_seconds_decompose(bf_reports->duration.lib_overrides,
+                                  NULL,
+                                  NULL,
+                                  &duration_lib_override_minutes,
+                                  &duration_lib_override_seconds,
+                                  NULL);
+  BLI_math_time_seconds_decompose(bf_reports->duration.lib_overrides_resync,
+                                  NULL,
+                                  NULL,
+                                  &duration_lib_override_resync_minutes,
+                                  &duration_lib_override_resync_seconds,
+                                  NULL);
+  BLI_math_time_seconds_decompose(bf_reports->duration.lib_overrides_recursive_resync,
+                                  NULL,
+                                  NULL,
+                                  &duration_lib_override_recursive_resync_minutes,
+                                  &duration_lib_override_recursive_resync_seconds,
+                                  NULL);
+
+  CLOG_INFO(
+      &LOG, 0, "Blender file read in %.0fm%.2fs", duration_whole_minutes, duration_whole_seconds);
+  CLOG_INFO(&LOG,
+            0,
+            " * Loading libraries: %.0fm%.2fs",
+            duration_libraries_minutes,
+            duration_libraries_seconds);
+  CLOG_INFO(&LOG,
+            0,
+            " * Applying overrides: %.0fm%.2fs",
+            duration_lib_override_minutes,
+            duration_lib_override_seconds);
+  CLOG_INFO(&LOG,
+            0,
+            " * Resyncing overrides: %.0fm%.2fs (%d root overrides), including recursive "
+            "resyncs: %.0fm%.2fs)",
+            duration_lib_override_resync_minutes,
+            duration_lib_override_resync_seconds,
+            bf_reports->count.resynced_lib_overrides,
+            duration_lib_override_recursive_resync_minutes,
+            duration_lib_override_recursive_resync_seconds);
+
+  if (bf_reports->resynced_lib_overrides_libraries_count != 0) {
+    for (LinkNode *node_lib = bf_reports->resynced_lib_overrides_libraries; node_lib != NULL;
+         node_lib = node_lib->next) {
+      Library *library = node_lib->link;
+      BKE_reportf(
+          bf_reports->reports, RPT_INFO, "Library %s needs overrides resync", library->filepath);
+    }
+  }
+
+  if (bf_reports->count.missing_libraries != 0 || bf_reports->count.missing_linked_id != 0) {
+    BKE_reportf(bf_reports->reports,
+                RPT_WARNING,
+                "%d libraries and %d linked data-blocks are missing (including %d ObjectData and "
+                "%d Proxies), please check the Info and Outliner editors for details",
+                bf_reports->count.missing_libraries,
+                bf_reports->count.missing_linked_id,
+                bf_reports->count.missing_obdata,
+                bf_reports->count.missing_obproxies);
+  }
+  else {
+    BLI_assert(bf_reports->count.missing_obdata == 0);
+    BLI_assert(bf_reports->count.missing_obproxies == 0);
+  }
+
+  if (bf_reports->resynced_lib_overrides_libraries_count != 0) {
+    BKE_reportf(bf_reports->reports,
+                RPT_WARNING,
+                "%d libraries have overrides needing resync (auto resynced in %.0fm%.2fs),  "
+                "please check the Info editor for details",
+                bf_reports->resynced_lib_overrides_libraries_count,
+                duration_lib_override_recursive_resync_minutes,
+                duration_lib_override_recursive_resync_seconds);
+  }
+
+  BLI_linklist_free(bf_reports->resynced_lib_overrides_libraries, NULL);
+  bf_reports->resynced_lib_overrides_libraries = NULL;
+}
+
 bool WM_file_read(bContext *C, const char *filepath, ReportList *reports)
 {
   /* assume automated tasks with background, don't write recent file list */
@@ -750,7 +878,7 @@ bool WM_file_read(bContext *C, const char *filepath, ReportList *reports)
 
   /* first try to append data from exotic file formats... */
   /* it throws error box when file doesn't exist and returns -1 */
-  /* note; it should set some error message somewhere... (ton) */
+  /* NOTE(ton): it should set some error message somewhere. */
   const int retval = wm_read_exotic(filepath);
 
   /* we didn't succeed, now try to read Blender file */
@@ -763,7 +891,9 @@ bool WM_file_read(bContext *C, const char *filepath, ReportList *reports)
         .skip_flags = BLO_READ_SKIP_USERDEF,
     };
 
-    struct BlendFileData *bfd = BKE_blendfile_read(filepath, &params, reports);
+    BlendFileReadReport bf_reports = {.reports = reports,
+                                      .duration.whole = PIL_check_seconds_timer()};
+    struct BlendFileData *bfd = BKE_blendfile_read(filepath, &params, &bf_reports);
     if (bfd != NULL) {
       wm_file_read_pre(C, use_data, use_userdef);
 
@@ -773,10 +903,10 @@ bool WM_file_read(bContext *C, const char *filepath, ReportList *reports)
       wm_window_match_init(C, &wmbase);
 
       /* This flag is initialized by the operator but overwritten on read.
-       * need to re-enable it here else drivers + registered scripts wont work. */
+       * need to re-enable it here else drivers and registered scripts won't work. */
       const int G_f_orig = G.f;
 
-      BKE_blendfile_read_setup(C, bfd, &params, reports);
+      BKE_blendfile_read_setup(C, bfd, &params, &bf_reports);
 
       if (G.f != G_f_orig) {
         const int flags_keep = G_FLAG_ALL_RUNTIME;
@@ -805,7 +935,17 @@ bool WM_file_read(bContext *C, const char *filepath, ReportList *reports)
         wm_history_file_update();
       }
 
-      wm_file_read_post(C, false, false, use_data, use_userdef, false);
+      wm_file_read_post(C,
+                        &(const struct wmFileReadPost_Params){
+                            .use_data = use_data,
+                            .use_userdef = use_userdef,
+                            .is_startup_file = false,
+                            .is_factory_startup = false,
+                            .reset_app_template = false,
+                        });
+
+      bf_reports.duration.whole = PIL_check_seconds_timer() - bf_reports.duration.whole;
+      file_read_reports_finalize(&bf_reports);
 
       success = true;
     }
@@ -830,7 +970,7 @@ bool WM_file_read(bContext *C, const char *filepath, ReportList *reports)
   }
   else {
     BKE_reportf(reports, RPT_ERROR, "Unknown error loading '%s'", filepath);
-    BLI_assert(!"invalid 'retval'");
+    BLI_assert_msg(0, "invalid 'retval'");
   }
 
   if (success == false) {
@@ -885,35 +1025,33 @@ const char *WM_init_state_app_template_get(void)
 
 /**
  * Called on startup, (context entirely filled with NULLs)
- * or called for 'New File' both startup.blend and userpref.blend are checked.
+ * or called for 'New File' both `startup.blend` and `userpref.blend` are checked.
  *
- * \param use_factory_settings:
- * Ignore on-disk startup file, use bundled ``datatoc_startup_blend`` instead.
- * Used for "Restore Factory Settings".
- *
- * \param use_userdef: Load factory settings as well as startup file.
- * Disabled for "File New" we don't want to reload preferences.
- *
- * \param filepath_startup_override:
- * Optional path pointing to an alternative blend file (may be NULL).
- *
- * \param app_template_override:
- * Template to use instead of the template defined in user-preferences.
- * When not-null, this is written into the user preferences.
+ * \param r_params_file_read_post: Support postponed initialization,
+ * needed for initial startup when only some sub-systems have been initialized.
+ * When non-null, #wm_file_read_post doesn't run, instead it's arguments are stored
+ * in this return argument.
+ * The caller is responsible for calling #wm_homefile_read_post with this return argument.
  */
-void wm_homefile_read(bContext *C,
-                      ReportList *reports,
-                      bool use_factory_settings,
-                      bool use_empty_data,
-                      bool use_data,
-                      bool use_userdef,
-                      const char *filepath_startup_override,
-                      const char *app_template_override,
-                      bool *r_is_factory_startup)
+void wm_homefile_read_ex(bContext *C,
+                         const struct wmHomeFileRead_Params *params_homefile,
+                         ReportList *reports,
+                         struct wmFileReadPost_Params **r_params_file_read_post)
 {
-  Main *bmain = G_MAIN; /* Context does not always have valid main pointer here... */
+#if 0 /* UNUSED, keep as this may be needed later & the comment below isn't self evident. */
+  /* Context does not always have valid main pointer here. */
+  Main *bmain = G_MAIN;
+#endif
   ListBase wmbase;
   bool success = false;
+
+  /* May be enabled, when the user configuration doesn't exist. */
+  const bool use_data = params_homefile->use_data;
+  const bool use_userdef = params_homefile->use_userdef;
+  bool use_factory_settings = params_homefile->use_factory_settings;
+  const bool use_empty_data = params_homefile->use_empty_data;
+  const char *filepath_startup_override = params_homefile->filepath_startup_override;
+  const char *app_template_override = params_homefile->app_template_override;
 
   bool filepath_startup_is_factory = true;
   char filepath_startup[FILE_MAX];
@@ -1083,11 +1221,12 @@ void wm_homefile_read(bContext *C,
           .is_startup = true,
           .skip_flags = skip_flags | BLO_READ_SKIP_USERDEF,
       };
+      BlendFileReadReport bf_reports = {.reports = reports};
+      struct BlendFileData *bfd = BKE_blendfile_read(filepath_startup, &params, &bf_reports);
 
-      struct BlendFileData *bfd = BKE_blendfile_read(filepath_startup, &params, NULL);
       if (bfd != NULL) {
         BKE_blendfile_read_setup_ex(
-            C, bfd, &params, NULL, update_defaults && use_data, app_template);
+            C, bfd, &params, &bf_reports, update_defaults && use_data, app_template);
         success = true;
       }
     }
@@ -1117,7 +1256,7 @@ void wm_homefile_read(bContext *C,
     struct BlendFileData *bfd = BKE_blendfile_read_from_memory(
         datatoc_startup_blend, datatoc_startup_blend_size, &params, NULL);
     if (bfd != NULL) {
-      BKE_blendfile_read_setup_ex(C, bfd, &params, NULL, true, NULL);
+      BKE_blendfile_read_setup_ex(C, bfd, &params, &(BlendFileReadReport){NULL}, true, NULL);
       success = true;
     }
 
@@ -1170,7 +1309,7 @@ void wm_homefile_read(bContext *C,
     BLI_strncpy(U.app_template, app_template_override, sizeof(U.app_template));
   }
 
-  bmain = CTX_data_main(C);
+  Main *bmain = CTX_data_main(C);
 
   if (use_userdef) {
     /* check userdef before open window, keymaps etc */
@@ -1201,11 +1340,43 @@ void wm_homefile_read(bContext *C,
     G.save_over = 0;
   }
 
-  wm_file_read_post(C, true, is_factory_startup, use_data, use_userdef, reset_app_template);
+  {
+    const struct wmFileReadPost_Params params_file_read_post = {
+        .use_data = use_data,
+        .use_userdef = use_userdef,
+        .is_startup_file = true,
+        .is_factory_startup = is_factory_startup,
+        .reset_app_template = reset_app_template,
+    };
+    if (r_params_file_read_post == NULL) {
+      wm_file_read_post(C, &params_file_read_post);
+    }
+    else {
+      *r_params_file_read_post = MEM_mallocN(sizeof(struct wmFileReadPost_Params), __func__);
+      **r_params_file_read_post = params_file_read_post;
 
-  if (r_is_factory_startup) {
-    *r_is_factory_startup = is_factory_startup;
+      /* Match #wm_file_read_post which leaves the window cleared too. */
+      CTX_wm_window_set(C, NULL);
+    }
   }
+}
+
+void wm_homefile_read(bContext *C,
+                      const struct wmHomeFileRead_Params *params_homefile,
+                      ReportList *reports)
+{
+  wm_homefile_read_ex(C, params_homefile, reports, NULL);
+}
+
+/**
+ * Special case, support deferred execution of #wm_file_read_post,
+ * Needed when loading for the first time to workaround order of initialization bug, see T89046.
+ */
+void wm_homefile_read_post(struct bContext *C,
+                           const struct wmFileReadPost_Params *params_file_read_post)
+{
+  wm_file_read_post(C, params_file_read_post);
+  MEM_freeN((void *)params_file_read_post);
 }
 
 /* -------------------------------------------------------------------- */
@@ -1344,14 +1515,73 @@ static void wm_history_file_update(void)
 /** \} */
 
 /* -------------------------------------------------------------------- */
-/** \name Save Main Blend-File (internal)
+/** \name Save Main Blend-File (internal) Screen-Shot
+ *
+ * Screen-shot the active window.
+ * \{ */
+
+static ImBuf *blend_file_thumb_from_screenshot(bContext *C, BlendThumbnail **thumb_pt)
+{
+  if (*thumb_pt) {
+    /* We are given a valid thumbnail data, so just generate image from it. */
+    return BKE_main_thumbnail_to_imbuf(NULL, *thumb_pt);
+  }
+
+  /* Redraw to remove menus that might be open. */
+  WM_redraw_windows(C);
+  WM_cursor_wait(true);
+
+  /* The window to capture should be a main window (without parent). */
+  wmWindow *win = CTX_wm_window(C);
+  while (win && win->parent) {
+    win = win->parent;
+  }
+
+  int win_size[2];
+  uint *buffer = WM_window_pixels_read(CTX_wm_manager(C), win, win_size);
+  ImBuf *ibuf = IMB_allocFromBufferOwn(buffer, NULL, win_size[0], win_size[1], 24);
+
+  if (ibuf) {
+    int ex, ey;
+    if (ibuf->x > ibuf->y) {
+      ex = BLEN_THUMB_SIZE;
+      ey = max_ii(1, (int)(((float)ibuf->y / (float)ibuf->x) * BLEN_THUMB_SIZE));
+    }
+    else {
+      ex = max_ii(1, (int)(((float)ibuf->x / (float)ibuf->y) * BLEN_THUMB_SIZE));
+      ey = BLEN_THUMB_SIZE;
+    }
+
+    /* File-system thumbnail image can be 256x256. */
+    IMB_scaleImBuf(ibuf, ex * 2, ey * 2);
+
+    /* Thumbnail inside blend should be 128x128. */
+    ImBuf *thumb_ibuf = IMB_dupImBuf(ibuf);
+    IMB_scaleImBuf(thumb_ibuf, ex, ey);
+
+    BlendThumbnail *thumb = BKE_main_thumbnail_from_imbuf(NULL, thumb_ibuf);
+    IMB_freeImBuf(thumb_ibuf);
+    *thumb_pt = thumb;
+  }
+  WM_cursor_wait(false);
+
+  /* Must be freed by caller. */
+  return ibuf;
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Save Main Blend-File (internal) Camera View
+ *
+ * Render the current scene with the active camera.
  * \{ */
 
 /* screen can be NULL */
-static ImBuf *blend_file_thumb(const bContext *C,
-                               Scene *scene,
-                               bScreen *screen,
-                               BlendThumbnail **thumb_pt)
+static ImBuf *blend_file_thumb_from_camera(const bContext *C,
+                                           Scene *scene,
+                                           bScreen *screen,
+                                           BlendThumbnail **thumb_pt)
 {
   /* will be scaled down, but gives some nice oversampling */
   ImBuf *ibuf;
@@ -1402,8 +1632,8 @@ static ImBuf *blend_file_thumb(const bContext *C,
                                                  NULL,
                                                  OB_SOLID,
                                                  scene->camera,
-                                                 BLEN_THUMB_SIZE * 2,
-                                                 BLEN_THUMB_SIZE * 2,
+                                                 PREVIEW_RENDER_LARGE_HEIGHT * 2,
+                                                 PREVIEW_RENDER_LARGE_HEIGHT * 2,
                                                  IB_rect,
                                                  V3D_OFSDRAW_NONE,
                                                  R_ALPHAPREMUL,
@@ -1417,8 +1647,8 @@ static ImBuf *blend_file_thumb(const bContext *C,
                                           OB_SOLID,
                                           v3d,
                                           region,
-                                          BLEN_THUMB_SIZE * 2,
-                                          BLEN_THUMB_SIZE * 2,
+                                          PREVIEW_RENDER_LARGE_HEIGHT * 2,
+                                          PREVIEW_RENDER_LARGE_HEIGHT * 2,
                                           IB_rect,
                                           R_ALPHAPREMUL,
                                           NULL,
@@ -1439,8 +1669,14 @@ static ImBuf *blend_file_thumb(const bContext *C,
 
   if (ibuf) {
     /* dirty oversampling */
-    IMB_scaleImBuf(ibuf, BLEN_THUMB_SIZE, BLEN_THUMB_SIZE);
-    thumb = BKE_main_thumbnail_from_imbuf(NULL, ibuf);
+    ImBuf *thumb_ibuf;
+    thumb_ibuf = IMB_dupImBuf(ibuf);
+    /* BLEN_THUMB_SIZE is size of thumbnail inside blend file: 128x128. */
+    IMB_scaleImBuf(thumb_ibuf, BLEN_THUMB_SIZE, BLEN_THUMB_SIZE);
+    thumb = BKE_main_thumbnail_from_imbuf(NULL, thumb_ibuf);
+    IMB_freeImBuf(thumb_ibuf);
+    /* Thumbnail saved to file-system should be 256x256. */
+    IMB_scaleImBuf(ibuf, PREVIEW_RENDER_LARGE_HEIGHT, PREVIEW_RENDER_LARGE_HEIGHT);
   }
   else {
     /* '*thumb_pt' needs to stay NULL to prevent a bad thumbnail from being handled */
@@ -1503,7 +1739,7 @@ static bool wm_file_write(bContext *C,
     return ok;
   }
 
-  /* note: used to replace the file extension (to ensure '.blend'),
+  /* NOTE: used to replace the file extension (to ensure '.blend'),
    * no need to now because the operator ensures,
    * its handy for scripts to save to a predefined name without blender editing it */
 
@@ -1527,8 +1763,13 @@ static bool wm_file_write(bContext *C,
   /* Main now can store a '.blend' thumbnail, useful for background mode
    * or thumbnail customization. */
   main_thumb = thumb = bmain->blen_thumb;
-  if ((U.flag & USER_SAVE_PREVIEWS) && BLI_thread_is_main()) {
-    ibuf_thumb = blend_file_thumb(C, CTX_data_scene(C), CTX_wm_screen(C), &thumb);
+  if (BLI_thread_is_main()) {
+    if (U.file_preview_type == USER_FILE_PREVIEW_SCREENSHOT) {
+      ibuf_thumb = blend_file_thumb_from_screenshot(C, &thumb);
+    }
+    else if (U.file_preview_type == USER_FILE_PREVIEW_CAMERA) {
+      ibuf_thumb = blend_file_thumb_from_camera(C, CTX_data_scene(C), CTX_wm_screen(C), &thumb);
+    }
   }
 
   /* operator now handles overwrite checks */
@@ -1542,13 +1783,13 @@ static bool wm_file_write(bContext *C,
 
   ED_editors_flush_edits(bmain);
 
-  /* first time saving */
-  /* XXX temp solution to solve bug, real fix coming (ton) */
+  /* First time saving. */
+  /* XXX(ton): temp solution to solve bug, real fix coming. */
   if ((BKE_main_blendfile_path(bmain)[0] == '\0') && (use_save_as_copy == false)) {
     BLI_strncpy(bmain->name, filepath, sizeof(bmain->name));
   }
 
-  /* XXX temp solution to solve bug, real fix coming (ton) */
+  /* XXX(ton): temp solution to solve bug, real fix coming. */
   bmain->recovered = 0;
 
   if (BLO_write_file(CTX_data_main(C),
@@ -1580,7 +1821,7 @@ static bool wm_file_write(bContext *C,
 
     BKE_callback_exec_null(bmain, BKE_CB_EVT_SAVE_POST);
 
-    /* run this function after because the file cant be written before the blend is */
+    /* run this function after because the file can't be written before the blend is */
     if (ibuf_thumb) {
       IMB_thumb_delete(filepath, THB_FAIL); /* without this a failed thumb overrides */
       ibuf_thumb = IMB_thumb_create(filepath, THB_LARGE, THB_SOURCE_BLEND, ibuf_thumb);
@@ -1775,7 +2016,7 @@ void wm_open_init_use_scripts(wmOperator *op, bool use_prefs)
   if (!RNA_property_is_set(op->ptr, prop)) {
     /* use G_FLAG_SCRIPT_AUTOEXEC rather than the userpref because this means if
      * the flag has been disabled from the command line, then opening
-     * from the menu wont enable this setting. */
+     * from the menu won't enable this setting. */
     bool value = use_prefs ? ((U.flag & USER_SCRIPT_AUTOEXEC_DISABLE) == 0) :
                              ((G.f & G_FLAG_SCRIPT_AUTOEXEC) != 0);
 
@@ -1833,7 +2074,7 @@ static int wm_homefile_write_exec(bContext *C, wmOperator *op)
                      &(const struct BlendFileWriteParams){
                          /* Make all paths absolute when saving the startup file.
                           * On load the `G.relbase_valid` will be false so the paths
-                          * wont have a base for resolving the relative paths. */
+                          * won't have a base for resolving the relative paths. */
                          .remap_mode = BLO_WRITE_PATH_REMAP_ABSOLUTE,
                          /* Don't apply any path changes to the current blend file. */
                          .use_save_as_copy = true,
@@ -1975,14 +2216,15 @@ static int wm_userpref_read_exec(bContext *C, wmOperator *op)
   UserDef U_backup = U;
 
   wm_homefile_read(C,
-                   op->reports,
-                   use_factory_settings,
-                   false,
-                   use_data,
-                   use_userdef,
-                   NULL,
-                   WM_init_state_app_template_get(),
-                   NULL);
+                   &(const struct wmHomeFileRead_Params){
+                       .use_data = use_data,
+                       .use_userdef = use_userdef,
+                       .use_factory_settings = use_factory_settings,
+                       .use_empty_data = false,
+                       .filepath_startup_override = NULL,
+                       .app_template_override = WM_init_state_app_template_get(),
+                   },
+                   op->reports);
 
   wm_userpref_read_exceptions(&U, &U_backup);
   SET_FLAG_FROM_TEST(G.f, use_factory_settings, G_FLAG_USERPREF_NO_SAVE_ON_EXIT);
@@ -2121,16 +2363,17 @@ static int wm_homefile_read_exec(bContext *C, wmOperator *op)
     app_template = WM_init_state_app_template_get();
   }
 
-  bool use_data = true;
   wm_homefile_read(C,
-                   op->reports,
-                   use_factory_settings,
-                   use_empty_data,
-                   use_data,
-                   use_userdef,
-                   filepath,
-                   app_template,
-                   NULL);
+                   &(const struct wmHomeFileRead_Params){
+                       .use_data = true,
+                       .use_userdef = use_userdef,
+                       .use_factory_settings = use_factory_settings,
+                       .use_empty_data = use_empty_data,
+                       .filepath_startup_override = filepath,
+                       .app_template_override = app_template,
+                   },
+                   op->reports);
+
   if (use_splash) {
     WM_init_splash(C);
   }
@@ -2482,12 +2725,11 @@ static void wm_open_mainfile_ui(bContext *UNUSED(C), wmOperator *op)
 {
   struct FileRuntime *file_info = (struct FileRuntime *)&op->customdata;
   uiLayout *layout = op->layout;
-  uiLayout *col = op->layout;
   const char *autoexec_text;
 
   uiItemR(layout, op->ptr, "load_ui", 0, NULL, ICON_NONE);
 
-  col = uiLayoutColumn(layout, false);
+  uiLayout *col = uiLayoutColumn(layout, false);
   if (file_info->is_untrusted) {
     autoexec_text = IFACE_("Trusted Source [Untrusted Path]");
     uiLayoutSetActive(col, false);
@@ -3332,7 +3574,7 @@ static uiBlock *block_create__close_file_dialog(struct bContext *C,
     BLI_split_file_part(blendfile_pathpath, filename, sizeof(filename));
   }
   else {
-    STRNCPY(filename, IFACE_("untitled.blend"));
+    STRNCPY(filename, "untitled.blend");
   }
   uiItemL(layout, filename, ICON_NONE);
 

@@ -1854,6 +1854,7 @@ class VIEW3D_MT_select_gpencil(Menu):
 
         layout.operator("gpencil.select_linked", text="Linked")
         layout.operator("gpencil.select_alternate")
+        layout.operator("gpencil.select_random")
         layout.operator_menu_enum("gpencil.select_grouped", "type", text="Grouped")
 
         if context.mode == 'VERTEX_GPENCIL':
@@ -2314,6 +2315,7 @@ class VIEW3D_MT_object_animation(Menu):
 
         layout.operator("nla.bake", text="Bake Action...")
         layout.operator("gpencil.bake_mesh_animation", text="Bake Mesh to Grease Pencil...")
+        layout.operator("gpencil.bake_grease_pencil_animation", text="Bake Object Transform to Grease Pencil...")
 
 
 class VIEW3D_MT_object_rigid_body(Menu):
@@ -2529,7 +2531,7 @@ class VIEW3D_MT_object_context_menu(Menu):
                 layout.operator_menu_enum("gpencil.convert", "type", text="Convert To")
 
             if (
-                    obj.type in {'MESH', 'CURVE', 'SURFACE', 'GPENCIL', 'LATTICE', 'ARMATURE', 'META'} or
+                    obj.type in {'MESH', 'CURVE', 'SURFACE', 'GPENCIL', 'LATTICE', 'ARMATURE', 'META', 'FONT'} or
                     (obj.type == 'EMPTY' and obj.instance_collection is not None)
             ):
                 layout.operator_context = 'INVOKE_REGION_WIN'
@@ -2764,23 +2766,27 @@ class VIEW3D_MT_make_single_user(Menu):
 
         props = layout.operator("object.make_single_user", text="Object")
         props.object = True
-        props.obdata = props.material = props.animation = False
+        props.obdata = props.material = props.animation = props.obdata_animation = False
 
         props = layout.operator("object.make_single_user", text="Object & Data")
         props.object = props.obdata = True
-        props.material = props.animation = False
+        props.material = props.animation = props.obdata_animation = False
 
         props = layout.operator("object.make_single_user", text="Object & Data & Materials")
         props.object = props.obdata = props.material = True
-        props.animation = False
+        props.animation = props.obdata_animation = False
 
         props = layout.operator("object.make_single_user", text="Materials")
         props.material = True
-        props.object = props.obdata = props.animation = False
+        props.object = props.obdata = props.animation = props.obdata_animation = False
 
         props = layout.operator("object.make_single_user", text="Object Animation")
         props.animation = True
-        props.object = props.obdata = props.material = False
+        props.object = props.obdata = props.material = props.obdata_animation = False
+
+        props = layout.operator("object.make_single_user", text="Object Data Animation")
+        props.obdata_animation = props.obdata = True
+        props.object = props.material = props.animation = False
 
 
 class VIEW3D_MT_object_convert(Menu):
@@ -3128,7 +3134,6 @@ class VIEW3D_MT_mask(Menu):
         layout.menu("VIEW3D_MT_random_mask", text="Random Mask")
 
 
-
 class VIEW3D_MT_face_sets(Menu):
     bl_label = "Face Sets"
 
@@ -3257,6 +3262,7 @@ class VIEW3D_MT_random_mask(Menu):
 
         op = layout.operator("sculpt.mask_init", text='Per Loose Part')
         op.mode = 'RANDOM_PER_LOOSE_PART'
+
 
 class VIEW3D_MT_particle(Menu):
     bl_label = "Particle"
@@ -3726,6 +3732,8 @@ class VIEW3D_MT_edit_mesh_context_menu(Menu):
 
         layout = self.layout
 
+        with_freestyle = bpy.app.build_options.freestyle
+
         layout.operator_context = 'INVOKE_REGION_WIN'
 
         # If nothing is selected
@@ -3843,10 +3851,11 @@ class VIEW3D_MT_edit_mesh_context_menu(Menu):
             col.operator("mesh.mark_sharp")
             col.operator("mesh.mark_sharp", text="Clear Sharp").clear = True
 
-            col.separator()
+            if with_freestyle:
+                col.separator()
 
-            col.operator("mesh.mark_freestyle_edge").clear = False
-            col.operator("mesh.mark_freestyle_edge", text="Clear Freestyle Edge").clear = True
+                col.operator("mesh.mark_freestyle_edge").clear = False
+                col.operator("mesh.mark_freestyle_edge", text="Clear Freestyle Edge").clear = True
 
             col.separator()
 
@@ -4011,38 +4020,6 @@ class VIEW3D_MT_edit_mesh_vertices(Menu):
         layout.separator()
 
         layout.operator("object.vertex_parent_set")
-
-
-class VIEW3D_MT_edit_mesh_edges_data(Menu):
-    bl_label = "Edge Data"
-
-    def draw(self, context):
-        layout = self.layout
-
-        layout.operator_context = 'INVOKE_REGION_WIN'
-
-        layout.operator("transform.edge_crease")
-        layout.operator("transform.edge_bevelweight")
-
-        layout.separator()
-
-        layout.operator("mesh.mark_seam").clear = False
-        layout.operator("mesh.mark_seam", text="Clear Seam").clear = True
-
-        layout.separator()
-
-        layout.operator("mesh.mark_sharp")
-        layout.operator("mesh.mark_sharp", text="Clear Sharp").clear = True
-
-        layout.operator("mesh.mark_sharp", text="Mark Sharp from Vertices").use_verts = True
-        props = layout.operator("mesh.mark_sharp", text="Clear Sharp from Vertices")
-        props.use_verts = True
-        props.clear = True
-
-        layout.separator()
-
-        layout.operator("mesh.mark_freestyle_edge").clear = False
-        layout.operator("mesh.mark_freestyle_edge", text="Clear Freestyle Edge").clear = True
 
 
 class VIEW3D_MT_edit_mesh_edges(Menu):
@@ -5033,6 +5010,10 @@ class VIEW3D_MT_edit_gpencil_stroke(Menu):
         layout.operator_menu_enum("gpencil.stroke_caps_set", text="Toggle Caps", property="type")
         layout.operator("gpencil.stroke_flip", text="Switch Direction")
         layout.prop(settings, "use_scale_thickness", text="Scale Thickness")
+
+        layout.separator()
+        layout.operator("gpencil.stroke_normalize", text="Normalize Thickness").mode = 'THICKNESS'
+        layout.operator("gpencil.stroke_normalize", text="Normalize Opacity").mode = 'OPACITY'
 
         layout.separator()
         layout.operator("gpencil.reset_transform_fill", text="Reset Fill Transform")
@@ -6406,7 +6387,13 @@ class VIEW3D_PT_overlay_edit_mesh_normals(Panel):
 
         sub = row.row(align=True)
         sub.active = overlay.show_vertex_normals or overlay.show_face_normals or overlay.show_split_normals
-        sub.prop(overlay, "normals_length", text="Size")
+        if overlay.use_normals_constant_screen_size:
+            sub.prop(overlay, "normals_constant_screen_size", text="Size")
+        else:
+            sub.prop(overlay, "normals_length", text="Size")
+
+        row.prop(overlay, "use_normals_constant_screen_size", text="", icon='FIXED_SIZE')
+
 
 
 class VIEW3D_PT_overlay_edit_mesh_freestyle(Panel):
@@ -6994,7 +6981,7 @@ class VIEW3D_PT_context_properties(Panel):
 
         if member:
             # Draw with no edit button
-            rna_prop_ui.draw(self.layout, context, member, object, False)
+            rna_prop_ui.draw(self.layout, context, member, object, use_edit=False)
 
 
 # Grease Pencil Object - Multiframe falloff tools
@@ -7601,7 +7588,6 @@ classes = (
     VIEW3D_MT_edit_mesh_extrude,
     VIEW3D_MT_edit_mesh_vertices,
     VIEW3D_MT_edit_mesh_edges,
-    VIEW3D_MT_edit_mesh_edges_data,
     VIEW3D_MT_edit_mesh_faces,
     VIEW3D_MT_edit_mesh_faces_data,
     VIEW3D_MT_edit_mesh_normals,

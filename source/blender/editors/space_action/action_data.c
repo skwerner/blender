@@ -599,16 +599,13 @@ void ED_animedit_unlink_action(
     id_fake_user_clear(&act->id);
   }
 
-  /* If in Tweak Mode, don't unlink. Instead, this
-   * becomes a shortcut to exit Tweak Mode instead
-   */
+  /* If in Tweak Mode, don't unlink. Instead, this becomes a shortcut to exit Tweak Mode. */
   if ((adt) && (adt->flag & ADT_NLA_EDIT_ON)) {
-    /* Exit Tweak Mode */
     BKE_nla_tweakmode_exit(adt);
 
-    /* Flush this to the Action Editor (if that's where this change was initiated) */
-    if (area->spacetype == SPACE_ACTION) {
-      actedit_change_action(C, NULL);
+    Scene *scene = CTX_data_scene(C);
+    if (scene != NULL) {
+      scene->flag &= ~SCE_NLA_EDIT_ON;
     }
   }
   else {
@@ -659,6 +656,9 @@ static int action_unlink_exec(bContext *C, wmOperator *op)
   if (adt && adt->action) {
     ED_animedit_unlink_action(C, NULL, adt, adt->action, op->reports, force_delete);
   }
+
+  /* Unlink is also abused to exit NLA tweak mode. */
+  WM_main_add_notifier(NC_ANIMATION | ND_NLA_ACTCHANGE, NULL);
 
   return OPERATOR_FINISHED;
 }
@@ -723,7 +723,7 @@ static NlaStrip *action_layer_get_nlastrip(ListBase *strips, float ctime)
   return NULL;
 }
 
-/* Switch NLA Strips/Actions  */
+/* Switch NLA Strips/Actions. */
 static void action_layer_switch_strip(
     AnimData *adt, NlaTrack *old_track, NlaStrip *old_strip, NlaTrack *nlt, NlaStrip *strip)
 {
@@ -813,7 +813,7 @@ static int action_layer_next_exec(bContext *C, wmOperator *op)
   NlaTrack *act_track;
 
   Scene *scene = CTX_data_scene(C);
-  float ctime = BKE_scene_frame_get(scene);
+  float ctime = BKE_scene_ctime_get(scene);
 
   /* Get active track */
   act_track = BKE_nlatrack_find_tweaked(adt);
@@ -925,7 +925,7 @@ static int action_layer_prev_exec(bContext *C, wmOperator *op)
   NlaTrack *nlt;
 
   Scene *scene = CTX_data_scene(C);
-  float ctime = BKE_scene_frame_get(scene);
+  float ctime = BKE_scene_ctime_get(scene);
 
   /* Sanity Check */
   if (adt == NULL) {

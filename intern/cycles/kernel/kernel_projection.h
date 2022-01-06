@@ -34,7 +34,7 @@
 
 CCL_NAMESPACE_BEGIN
 
-/* Spherical coordinates <-> Cartesian direction  */
+/* Spherical coordinates <-> Cartesian direction. */
 
 ccl_device float2 direction_to_spherical(float3 dir)
 {

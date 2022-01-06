@@ -584,48 +584,11 @@ ccl_device_inline void bvh_instance_motion_pop_factor(const KernelGlobals *kg,
 
 #endif
 
-/* TODO(sergey): This is only for until we've got OpenCL 2.0
- * on all devices we consider supported. It'll be replaced with
- * generic address space.
- */
+/* TODO: This can be removed when we know if no devices will require explicit
+ * address space qualifiers for this case. */
 
-#ifdef __KERNEL_OPENCL__
-ccl_device_inline void object_position_transform_addrspace(const KernelGlobals *kg,
-                                                           const ShaderData *sd,
-                                                           ccl_addr_space float3 *P)
-{
-  float3 private_P = *P;
-  object_position_transform(kg, sd, &private_P);
-  *P = private_P;
-}
-
-ccl_device_inline void object_dir_transform_addrspace(const KernelGlobals *kg,
-                                                      const ShaderData *sd,
-                                                      ccl_addr_space float3 *D)
-{
-  float3 private_D = *D;
-  object_dir_transform(kg, sd, &private_D);
-  *D = private_D;
-}
-
-ccl_device_inline void object_normal_transform_addrspace(const KernelGlobals *kg,
-                                                         const ShaderData *sd,
-                                                         ccl_addr_space float3 *N)
-{
-  float3 private_N = *N;
-  object_normal_transform(kg, sd, &private_N);
-  *N = private_N;
-}
-#endif
-
-#ifndef __KERNEL_OPENCL__
-#  define object_position_transform_auto object_position_transform
-#  define object_dir_transform_auto object_dir_transform
-#  define object_normal_transform_auto object_normal_transform
-#else
-#  define object_position_transform_auto object_position_transform_addrspace
-#  define object_dir_transform_auto object_dir_transform_addrspace
-#  define object_normal_transform_auto object_normal_transform_addrspace
-#endif
+#define object_position_transform_auto object_position_transform
+#define object_dir_transform_auto object_dir_transform
+#define object_normal_transform_auto object_normal_transform
 
 CCL_NAMESPACE_END

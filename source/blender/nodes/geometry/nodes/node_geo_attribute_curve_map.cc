@@ -24,17 +24,15 @@
 
 #include "node_geometry_util.hh"
 
-static bNodeSocketTemplate geo_node_attribute_curve_map_in[] = {
-    {SOCK_GEOMETRY, N_("Geometry")},
-    {SOCK_STRING, N_("Attribute")},
-    {SOCK_STRING, N_("Result")},
-    {-1, ""},
-};
+namespace blender::nodes {
 
-static bNodeSocketTemplate geo_node_attribute_curve_map_out[] = {
-    {SOCK_GEOMETRY, N_("Geometry")},
-    {-1, ""},
-};
+static void geo_node_attribute_curve_map_declare(NodeDeclarationBuilder &b)
+{
+  b.add_input<decl::Geometry>("Geometry");
+  b.add_input<decl::String>("Attribute");
+  b.add_input<decl::String>("Result");
+  b.add_output<decl::Geometry>("Geometry");
+}
 
 static void geo_node_attribute_curve_map_layout(uiLayout *layout,
                                                 bContext *UNUSED(C),
@@ -101,22 +99,19 @@ static void geo_node_attribute_curve_map_update(bNodeTree *UNUSED(ntree), bNode 
   }
 }
 
-namespace blender::nodes {
-
 static AttributeDomain get_result_domain(const GeometryComponent &component,
                                          StringRef input_name,
                                          StringRef result_name)
 {
   /* Use the domain of the result attribute if it already exists. */
-  ReadAttributeLookup result_attribute = component.attribute_try_get_for_read(result_name);
-  if (result_attribute) {
-    return result_attribute.domain;
+  std::optional<AttributeMetaData> result_info = component.attribute_get_meta_data(result_name);
+  if (result_info) {
+    return result_info->domain;
   }
-
   /* Otherwise use the input attribute's domain if it exists. */
-  ReadAttributeLookup input_attribute = component.attribute_try_get_for_read(input_name);
-  if (input_attribute) {
-    return input_attribute.domain;
+  std::optional<AttributeMetaData> input_info = component.attribute_get_meta_data(input_name);
+  if (input_info) {
+    return input_info->domain;
   }
 
   return ATTR_DOMAIN_POINT;
@@ -144,7 +139,7 @@ static void execute_on_component(const GeoNodeExecParams &params, GeometryCompon
       GVArray_Typed<float> attribute_in = component.attribute_get_for_read<float>(
           input_name, result_domain, float(0.0f));
       MutableSpan<float> results = attribute_result.as_span<float>();
-      parallel_for(IndexRange(attribute_in.size()), 512, [&](IndexRange range) {
+      threading::parallel_for(IndexRange(attribute_in.size()), 512, [&](IndexRange range) {
         for (const int i : range) {
           results[i] = BKE_curvemapping_evaluateF(cumap, 3, attribute_in[i]);
         }
@@ -156,7 +151,7 @@ static void execute_on_component(const GeoNodeExecParams &params, GeometryCompon
       GVArray_Typed<float3> attribute_in = component.attribute_get_for_read<float3>(
           input_name, result_domain, float3(0.0f));
       MutableSpan<float3> results = attribute_result.as_span<float3>();
-      parallel_for(IndexRange(attribute_in.size()), 512, [&](IndexRange range) {
+      threading::parallel_for(IndexRange(attribute_in.size()), 512, [&](IndexRange range) {
         for (const int i : range) {
           BKE_curvemapping_evaluate3F(cumap, results[i], attribute_in[i]);
         }
@@ -165,10 +160,11 @@ static void execute_on_component(const GeoNodeExecParams &params, GeometryCompon
     }
     case CD_PROP_COLOR: {
       const CurveMapping *cumap = (CurveMapping *)node_storage.curve_rgb;
-      GVArray_Typed<Color4f> attribute_in = component.attribute_get_for_read<Color4f>(
-          input_name, result_domain, Color4f(0.0f, 0.0f, 0.0f, 1.0f));
-      MutableSpan<Color4f> results = attribute_result.as_span<Color4f>();
-      parallel_for(IndexRange(attribute_in.size()), 512, [&](IndexRange range) {
+      GVArray_Typed<ColorGeometry4f> attribute_in =
+          component.attribute_get_for_read<ColorGeometry4f>(
+              input_name, result_domain, ColorGeometry4f(0.0f, 0.0f, 0.0f, 1.0f));
+      MutableSpan<ColorGeometry4f> results = attribute_result.as_span<ColorGeometry4f>();
+      threading::parallel_for(IndexRange(attribute_in.size()), 512, [&](IndexRange range) {
         for (const int i : range) {
           BKE_curvemapping_evaluateRGBF(cumap, results[i], attribute_in[i]);
         }
@@ -215,17 +211,16 @@ void register_node_type_geo_attribute_curve_map()
   static bNodeType ntype;
 
   geo_node_type_base(
-      &ntype, GEO_NODE_ATTRIBUTE_CURVE_MAP, "Attribute Curve Map", NODE_CLASS_ATTRIBUTE, 0);
-  node_type_socket_templates(
-      &ntype, geo_node_attribute_curve_map_in, geo_node_attribute_curve_map_out);
-  node_type_update(&ntype, geo_node_attribute_curve_map_update);
-  node_type_init(&ntype, geo_node_attribute_curve_map_init);
+      &ntype, GEO_NODE_LEGACY_ATTRIBUTE_CURVE_MAP, "Attribute Curve Map", NODE_CLASS_ATTRIBUTE, 0);
+  node_type_update(&ntype, blender::nodes::geo_node_attribute_curve_map_update);
+  node_type_init(&ntype, blender::nodes::geo_node_attribute_curve_map_init);
   node_type_size_preset(&ntype, NODE_SIZE_LARGE);
   node_type_storage(&ntype,
                     "NodeAttributeCurveMap",
-                    geo_node_attribute_curve_map_free_storage,
-                    geo_node_attribute_curve_map_copy_storage);
+                    blender::nodes::geo_node_attribute_curve_map_free_storage,
+                    blender::nodes::geo_node_attribute_curve_map_copy_storage);
+  ntype.declare = blender::nodes::geo_node_attribute_curve_map_declare;
   ntype.geometry_node_execute = blender::nodes::geo_node_attribute_curve_map_exec;
-  ntype.draw_buttons = geo_node_attribute_curve_map_layout;
+  ntype.draw_buttons = blender::nodes::geo_node_attribute_curve_map_layout;
   nodeRegisterType(&ntype);
 }

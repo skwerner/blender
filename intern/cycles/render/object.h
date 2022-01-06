@@ -64,13 +64,16 @@ class Object : public Node {
   NODE_SOCKET_API(bool, hide_on_missing_motion)
   NODE_SOCKET_API(bool, use_holdout)
   NODE_SOCKET_API(bool, is_shadow_catcher)
-  NODE_SOCKET_API(float, shadow_terminator_offset)
+  NODE_SOCKET_API(float, shadow_terminator_shading_offset)
+  NODE_SOCKET_API(float, shadow_terminator_geometry_offset)
 
   NODE_SOCKET_API(float3, dupli_generated)
   NODE_SOCKET_API(float2, dupli_uv)
 
   NODE_SOCKET_API(ParticleSystem *, particle_system);
   NODE_SOCKET_API(int, particle_index);
+
+  NODE_SOCKET_API(float, ao_distance)
 
   Object();
   ~Object();

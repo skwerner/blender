@@ -48,15 +48,14 @@
 #include "bvh/bvh_embree.h"
 
 #include "render/buffers.h"
-#include "render/coverage.h"
 
 #include "util/util_debug.h"
 #include "util/util_foreach.h"
 #include "util/util_function.h"
 #include "util/util_logging.h"
 #include "util/util_map.h"
-#include "util/util_openimagedenoise.h"
 #include "util/util_opengl.h"
+#include "util/util_openimagedenoise.h"
 #include "util/util_optimization.h"
 #include "util/util_progress.h"
 #include "util/util_system.h"
@@ -377,7 +376,7 @@ void CPUDevice::thread_render(DeviceTask &task)
   }
 
   /* allocate buffer for kernel globals */
-  CPUKernelThreadGlobals kg(kernel_globals, get_cpu_osl_memory());
+  CPUKernelThreadGlobals kg(kernel_globals, get_cpu_osl_memory(), get_cpu_oiio_memory());
 
   profiler.add_state(&kg.profiler);
 
@@ -460,8 +459,9 @@ void CPUDevice::get_cpu_kernel_thread_globals(
 
   kernel_thread_globals.clear();
   void *osl_memory = get_cpu_osl_memory();
+  void *oiio_memory = get_cpu_oiio_memory();
   for (int i = 0; i < info.cpu_threads; i++) {
-    kernel_thread_globals.emplace_back(kernel_globals, osl_memory);
+    kernel_thread_globals.emplace_back(kernel_globals, osl_memory, oiio_memory, profiler);
   }
 }
 
@@ -479,7 +479,7 @@ void *CPUDevice::get_cpu_oiio_memory()
   return &oiio_globals;
 }
 
-bool CPUDevice::load_kernels(const DeviceRequestedFeatures & /*requested_features*/)
+bool CPUDevice::load_kernels(const uint /*kernel_features*/)
 {
   return true;
 }

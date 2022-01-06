@@ -49,7 +49,7 @@ void OSLShader::thread_init(KernelGlobals *kg, OSLGlobals *osl_globals)
     return;
   }
 
-  /* per thread kernel data init*/
+  /* Per thread kernel data init. */
   kg->osl = osl_globals;
 
   OSL::ShadingSystem *ss = kg->osl->ss;
@@ -89,7 +89,7 @@ void OSLShader::thread_free(KernelGlobals *kg)
 
 static void shaderdata_to_shaderglobals(const KernelGlobals *kg,
                                         ShaderData *sd,
-                                        const IntegratorState *state,
+                                        const IntegratorStateCPU *state,
                                         int path_flag,
                                         OSLThreadData *tdata)
 {
@@ -134,10 +134,7 @@ static void shaderdata_to_shaderglobals(const KernelGlobals *kg,
 
   /* Used by render-services. */
   sd->osl_globals = kg;
-  /* TODO */
-#if 0
   sd->osl_path_state = state;
-#endif
 }
 
 /* Surface */
@@ -178,7 +175,7 @@ static void flatten_surface_closure_tree(ShaderData *sd,
 }
 
 void OSLShader::eval_surface(const KernelGlobals *kg,
-                             const IntegratorState *state,
+                             const IntegratorStateCPU *state,
                              ShaderData *sd,
                              int path_flag)
 {
@@ -286,7 +283,7 @@ static void flatten_background_closure_tree(ShaderData *sd,
 }
 
 void OSLShader::eval_background(const KernelGlobals *kg,
-                                const IntegratorState *state,
+                                const IntegratorStateCPU *state,
                                 ShaderData *sd,
                                 int path_flag)
 {
@@ -344,7 +341,7 @@ static void flatten_volume_closure_tree(ShaderData *sd,
 }
 
 void OSLShader::eval_volume(const KernelGlobals *kg,
-                            const IntegratorState *state,
+                            const IntegratorStateCPU *state,
                             ShaderData *sd,
                             int path_flag)
 {
@@ -370,7 +367,7 @@ void OSLShader::eval_volume(const KernelGlobals *kg,
 /* Displacement */
 
 void OSLShader::eval_displacement(const KernelGlobals *kg,
-                                  const IntegratorState *state,
+                                  const IntegratorStateCPU *state,
                                   ShaderData *sd)
 {
   /* setup shader globals from shader data */

@@ -80,8 +80,13 @@ void WorkTileScheduler::reset_scheduler_state()
 
 bool WorkTileScheduler::get_work(KernelWorkTile *work_tile_, const int max_work_size)
 {
+  /* Note that the `max_work_size` can be higher than the `max_num_path_states_`: this is because
+   * the path trace work can decice to use smaller tile sizes and greedily schedule multiple tiles,
+   * improving overall device occupancy.
+   * So the `max_num_path_states_` is a "scheduling unit", and the `max_work_size` is a "scheduling
+   * limit". */
+
   DCHECK_NE(max_num_path_states_, 0);
-  DCHECK_LE(max_work_size, max_num_path_states_);
 
   const int work_index = atomic_fetch_and_add_int32(&next_work_index_, 1);
   if (work_index >= total_work_size_) {

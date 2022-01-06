@@ -14,23 +14,20 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
+#include "BKE_spline.hh"
 #include "BKE_volume.h"
 
 #include "node_geometry_util.hh"
 
-static bNodeSocketTemplate geo_node_bounding_box_in[] = {
-    {SOCK_GEOMETRY, N_("Geometry")},
-    {-1, ""},
-};
-
-static bNodeSocketTemplate geo_node_bounding_box_out[] = {
-    {SOCK_GEOMETRY, N_("Mesh")},
-    {SOCK_VECTOR, N_("Min")},
-    {SOCK_VECTOR, N_("Max")},
-    {-1, ""},
-};
-
 namespace blender::nodes {
+
+static void geo_node_bounding_box_declare(NodeDeclarationBuilder &b)
+{
+  b.add_input<decl::Geometry>("Geometry");
+  b.add_output<decl::Geometry>("Bounding Box");
+  b.add_output<decl::Vector>("Min");
+  b.add_output<decl::Vector>("Max");
+}
 
 using bke::GeometryInstanceGroup;
 
@@ -81,6 +78,28 @@ static void compute_min_max_from_volume_and_transforms(const VolumeComponent &vo
 #endif
 }
 
+static void compute_min_max_from_curve_and_transforms(const CurveComponent &curve_component,
+                                                      Span<float4x4> transforms,
+                                                      float3 &r_min,
+                                                      float3 &r_max)
+{
+  const CurveEval *curve = curve_component.get_for_read();
+  if (curve == nullptr) {
+    return;
+  }
+  for (const SplinePtr &spline : curve->splines()) {
+    Span<float3> positions = spline->evaluated_positions();
+
+    for (const float4x4 &transform : transforms) {
+      for (const int i : positions.index_range()) {
+        const float3 position = positions[i];
+        const float3 transformed_position = transform * position;
+        minmax_v3v3_v3(r_min, r_max, transformed_position);
+      }
+    }
+  }
+}
+
 static void compute_geometry_set_instances_boundbox(const GeometrySet &geometry_set,
                                                     float3 &r_min,
                                                     float3 &r_max)
@@ -104,6 +123,10 @@ static void compute_geometry_set_instances_boundbox(const GeometrySet &geometry_
       compute_min_max_from_volume_and_transforms(
           *set.get_component_for_read<VolumeComponent>(), transforms, r_min, r_max);
     }
+    if (set.has<CurveComponent>()) {
+      compute_min_max_from_curve_and_transforms(
+          *set.get_component_for_read<CurveComponent>(), transforms, r_min, r_max);
+    }
   }
 }
 
@@ -122,16 +145,16 @@ static void geo_node_bounding_box_exec(GeoNodeExecParams params)
   }
 
   if (min == float3(FLT_MAX)) {
-    params.set_output("Mesh", GeometrySet());
+    params.set_output("Bounding Box", GeometrySet());
     params.set_output("Min", float3(0));
     params.set_output("Max", float3(0));
   }
   else {
     const float3 scale = max - min;
     const float3 center = min + scale / 2.0f;
-    Mesh *mesh = create_cube_mesh(1.0f);
-    transform_mesh(mesh, center, float3(0), scale);
-    params.set_output("Mesh", GeometrySet::create_with_mesh(mesh));
+    Mesh *mesh = create_cuboid_mesh(scale, 2, 2, 2);
+    transform_mesh(mesh, center, float3(0), float3(1));
+    params.set_output("Bounding Box", GeometrySet::create_with_mesh(mesh));
     params.set_output("Min", min);
     params.set_output("Max", max);
   }
@@ -144,7 +167,7 @@ void register_node_type_geo_bounding_box()
   static bNodeType ntype;
 
   geo_node_type_base(&ntype, GEO_NODE_BOUNDING_BOX, "Bounding Box", NODE_CLASS_GEOMETRY, 0);
-  node_type_socket_templates(&ntype, geo_node_bounding_box_in, geo_node_bounding_box_out);
+  ntype.declare = blender::nodes::geo_node_bounding_box_declare;
   ntype.geometry_node_execute = blender::nodes::geo_node_bounding_box_exec;
   nodeRegisterType(&ntype);
 }

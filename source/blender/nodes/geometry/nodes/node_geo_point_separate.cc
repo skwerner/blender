@@ -23,19 +23,15 @@
 
 #include "node_geometry_util.hh"
 
-static bNodeSocketTemplate geo_node_point_instance_in[] = {
-    {SOCK_GEOMETRY, N_("Geometry")},
-    {SOCK_STRING, N_("Mask")},
-    {-1, ""},
-};
-
-static bNodeSocketTemplate geo_node_point_instance_out[] = {
-    {SOCK_GEOMETRY, N_("Geometry 1")},
-    {SOCK_GEOMETRY, N_("Geometry 2")},
-    {-1, ""},
-};
-
 namespace blender::nodes {
+
+static void geo_node_point_instance_declare(NodeDeclarationBuilder &b)
+{
+  b.add_input<decl::Geometry>("Geometry");
+  b.add_input<decl::String>("Mask");
+  b.add_output<decl::Geometry>("Geometry 1");
+  b.add_output<decl::Geometry>("Geometry 2");
+}
 
 template<typename T>
 static void copy_data_based_on_mask(Span<T> data,
@@ -52,13 +48,13 @@ static void copy_data_based_on_mask(Span<T> data,
   }
 }
 
-static void copy_attributes_based_on_mask(const GeometryComponent &in_component,
-                                          GeometryComponent &result_component,
-                                          Span<bool> masks,
-                                          const bool invert)
+void copy_point_attributes_based_on_mask(const GeometryComponent &in_component,
+                                         GeometryComponent &result_component,
+                                         Span<bool> masks,
+                                         const bool invert)
 {
-  for (const std::string &name : in_component.attribute_names()) {
-    ReadAttributeLookup attribute = in_component.attribute_try_get_for_read(name);
+  for (const AttributeIDRef &attribute_id : in_component.attribute_ids()) {
+    ReadAttributeLookup attribute = in_component.attribute_try_get_for_read(attribute_id);
     const CustomDataType data_type = bke::cpp_type_to_custom_data_type(attribute.varray->type());
 
     /* Only copy point attributes. Theoretically this could interpolate attributes on other
@@ -69,7 +65,7 @@ static void copy_attributes_based_on_mask(const GeometryComponent &in_component,
     }
 
     OutputAttribute result_attribute = result_component.attribute_try_get_for_output_only(
-        name, ATTR_DOMAIN_POINT, data_type);
+        attribute_id, ATTR_DOMAIN_POINT, data_type);
 
     attribute_math::convert_to_static_type(data_type, [&](auto dummy) {
       using T = decltype(dummy);
@@ -118,7 +114,7 @@ static void separate_points_from_component(const GeometryComponent &in_component
 
   create_component_points(out_component, total);
 
-  copy_attributes_based_on_mask(in_component, out_component, masks, invert);
+  copy_point_attributes_based_on_mask(in_component, out_component, masks, invert);
 }
 
 static GeometrySet separate_geometry_set(const GeometrySet &set_in,
@@ -127,6 +123,10 @@ static GeometrySet separate_geometry_set(const GeometrySet &set_in,
 {
   GeometrySet set_out;
   for (const GeometryComponent *component : set_in.get_components_for_read()) {
+    if (component->type() == GEO_COMPONENT_TYPE_CURVE) {
+      /* Don't support the curve component for now, even though it has a point domain. */
+      continue;
+    }
     GeometryComponent &out_component = set_out.get_component_for_write(component->type());
     separate_points_from_component(*component, out_component, mask_name, invert);
   }
@@ -164,9 +164,10 @@ void register_node_type_geo_point_separate()
 {
   static bNodeType ntype;
 
-  geo_node_type_base(&ntype, GEO_NODE_POINT_SEPARATE, "Point Separate", NODE_CLASS_GEOMETRY, 0);
-  node_type_socket_templates(&ntype, geo_node_point_instance_in, geo_node_point_instance_out);
+  geo_node_type_base(
+      &ntype, GEO_NODE_LEGACY_POINT_SEPARATE, "Point Separate", NODE_CLASS_GEOMETRY, 0);
+  ntype.declare = blender::nodes::geo_node_point_instance_declare;
   ntype.geometry_node_execute = blender::nodes::geo_node_point_separate_exec;
-  ntype.geometry_node_execute_supports_lazyness = true;
+  ntype.geometry_node_execute_supports_laziness = true;
   nodeRegisterType(&ntype);
 }

@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
@@ -19,11 +19,16 @@
 #include "BLI_map.hh"
 
 #include "NOD_derived_node_tree.hh"
-#include "NOD_node_tree_multi_function.hh"
+#include "NOD_geometry_nodes_eval_log.hh"
+#include "NOD_multi_function.hh"
 
 #include "FN_generic_pointer.hh"
 
 #include "DNA_modifier_types.h"
+
+#include "FN_multi_function.hh"
+
+namespace geo_log = blender::nodes::geometry_nodes_eval_log;
 
 namespace blender::modifiers::geometry_nodes {
 
@@ -31,18 +36,22 @@ using namespace nodes::derived_node_tree_types;
 using fn::GMutablePointer;
 using fn::GPointer;
 
-using LogSocketValueFn = std::function<void(DSocket, Span<GPointer>)>;
-
 struct GeometryNodesEvaluationParams {
   blender::LinearAllocator<> allocator;
 
   Map<DOutputSocket, GMutablePointer> input_values;
   Vector<DInputSocket> output_sockets;
-  nodes::MultiFunctionByNode *mf_by_node;
+  /* These sockets will be computed but are not part of the output. Their value can be retrieved in
+   * `log_socket_value_fn`. These sockets are not part of `output_sockets` because then the
+   * evaluator would have to keep the socket values in memory until the end, which might not be
+   * necessary in all cases. Sometimes `log_socket_value_fn` might just want to look at the value
+   * and then it can be freed. */
+  Vector<DSocket> force_compute_sockets;
+  nodes::NodeMultiFunctions *mf_by_node;
   const NodesModifierData *modifier_;
   Depsgraph *depsgraph;
   Object *self_object;
-  LogSocketValueFn log_socket_value_fn;
+  geo_log::GeoLogger *geo_logger;
 
   Vector<GMutablePointer> r_output_values;
 };

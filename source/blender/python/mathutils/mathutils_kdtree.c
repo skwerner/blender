@@ -37,7 +37,8 @@
 #include "BLI_strict_flags.h"
 
 typedef struct {
-  PyObject_HEAD KDTree_3d *obj;
+  PyObject_HEAD
+  KDTree_3d *obj;
   uint maxsize;
   uint count;
   uint count_balance; /* size when we last balanced */
@@ -222,7 +223,7 @@ static PyObject *py_kdtree_find(PyKDTree *self, PyObject *args, PyObject *kwargs
   const char *keywords[] = {"co", "filter", NULL};
 
   if (!PyArg_ParseTupleAndKeywords(
-          args, kwargs, "O|O:find", (char **)keywords, &py_co, &py_filter)) {
+          args, kwargs, "O|$O:find", (char **)keywords, &py_co, &py_filter)) {
     return NULL;
   }
 

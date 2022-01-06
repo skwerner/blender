@@ -125,7 +125,7 @@ static void object_force_modifier_update_for_bind(Depsgraph *depsgraph, Object *
     BKE_displist_make_mball(depsgraph, scene_eval, ob_eval);
   }
   else if (ELEM(ob->type, OB_CURVE, OB_SURF, OB_FONT)) {
-    BKE_displist_make_curveTypes(depsgraph, scene_eval, ob_eval, false, false);
+    BKE_displist_make_curveTypes(depsgraph, scene_eval, ob_eval, false);
   }
   else if (ob->type == OB_GPENCIL) {
     BKE_gpencil_modifiers_calc(depsgraph, scene_eval, ob_eval);
@@ -352,7 +352,7 @@ static bool object_modifier_remove(
 
   /* special cases */
   if (md->type == eModifierType_ParticleSystem) {
-    object_remove_particle_system(bmain, scene, ob);
+    object_remove_particle_system(bmain, scene, ob, ((ParticleSystemModifierData *)md)->psys);
     return true;
   }
 
@@ -1923,8 +1923,8 @@ static int multires_subdivide_exec(bContext *C, wmOperator *op)
     return OPERATOR_CANCELLED;
   }
 
-  const eMultiresSubdivideModeType subdivide_mode = (eMultiresSubdivideModeType)(
-      RNA_enum_get(op->ptr, "mode"));
+  const eMultiresSubdivideModeType subdivide_mode = (eMultiresSubdivideModeType)(RNA_enum_get(
+      op->ptr, "mode"));
   multiresModifier_subdivide(object, mmd, subdivide_mode);
 
   ED_object_iter_other(
@@ -2147,7 +2147,7 @@ static int multires_external_pack_exec(bContext *C, wmOperator *UNUSED(op))
     return OPERATOR_CANCELLED;
   }
 
-  /* XXX don't remove.. */
+  /* XXX don't remove. */
   CustomData_external_remove(&me->ldata, &me->id, CD_MDISPS, me->totloop);
 
   return OPERATOR_FINISHED;
@@ -2598,7 +2598,7 @@ static Object *modifier_skin_armature_create(Depsgraph *depsgraph, Main *bmain, 
 
   BLI_bitmap *edges_visited = BLI_BITMAP_NEW(me->totedge, "edge_visited");
 
-  /* note: we use EditBones here, easier to set them up and use
+  /* NOTE: we use EditBones here, easier to set them up and use
    * edit-armature functions to convert back to regular bones */
   for (int v = 0; v < me->totvert; v++) {
     if (mvert_skin[v].flag & MVERT_SKIN_ROOT) {
@@ -3100,7 +3100,7 @@ void OBJECT_OT_ocean_bake(wmOperatorType *ot)
 /** \} */
 
 /* ------------------------------------------------------------------- */
-/** \name Laplaciandeform Bind Operator
+/** \name Laplacian-Deform Bind Operator
  * \{ */
 
 static bool laplaciandeform_poll(bContext *C)

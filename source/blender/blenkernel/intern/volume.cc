@@ -36,6 +36,7 @@
 #include "BLI_math.h"
 #include "BLI_path_util.h"
 #include "BLI_string.h"
+#include "BLI_task.hh"
 #include "BLI_utildefines.h"
 
 #include "BKE_anim_data.h"
@@ -196,7 +197,7 @@ static struct VolumeFileCache {
     Entry &entry = (Entry &)*it;
     entry.num_metadata_users++;
 
-    /* Note: pointers to unordered_set values are not invalidated when adding
+    /* NOTE: pointers to unordered_set values are not invalidated when adding
      * or removing other values. */
     return &entry;
   }
@@ -324,15 +325,19 @@ struct VolumeGrid {
 
     openvdb::io::File file(filepath);
 
-    try {
-      file.setCopyMaxBytes(0);
-      file.open();
-      openvdb::GridBase::Ptr vdb_grid = file.readGrid(name());
-      entry->grid->setTree(vdb_grid->baseTreePtr());
-    }
-    catch (const openvdb::IoError &e) {
-      entry->error_msg = e.what();
-    }
+    /* Isolate file loading since that's potentially multithreaded and we are
+     * holding a mutex lock. */
+    blender::threading::isolate_task([&] {
+      try {
+        file.setCopyMaxBytes(0);
+        file.open();
+        openvdb::GridBase::Ptr vdb_grid = file.readGrid(name());
+        entry->grid->setTree(vdb_grid->baseTreePtr());
+      }
+      catch (const openvdb::IoError &e) {
+        entry->error_msg = e.what();
+      }
+    });
 
     std::atomic_thread_fence(std::memory_order_release);
     entry->is_loaded = true;
@@ -573,27 +578,26 @@ static void volume_blend_write(BlendWriter *writer, ID *id, const void *id_addre
 {
   Volume *volume = (Volume *)id;
   const bool is_undo = BLO_write_is_undo(writer);
-  if (volume->id.us > 0 || is_undo) {
-    /* Clean up, important in undo case to reduce false detection of changed datablocks. */
-    volume->runtime.grids = nullptr;
 
-    /* Do not store packed files in case this is a library override ID. */
-    if (ID_IS_OVERRIDE_LIBRARY(volume) && !is_undo) {
-      volume->packedfile = nullptr;
-    }
+  /* Clean up, important in undo case to reduce false detection of changed datablocks. */
+  volume->runtime.grids = nullptr;
 
-    /* write LibData */
-    BLO_write_id_struct(writer, Volume, id_address, &volume->id);
-    BKE_id_blend_write(writer, &volume->id);
-
-    /* direct data */
-    BLO_write_pointer_array(writer, volume->totcol, volume->mat);
-    if (volume->adt) {
-      BKE_animdata_blend_write(writer, volume->adt);
-    }
-
-    BKE_packedfile_blend_write(writer, volume->packedfile);
+  /* Do not store packed files in case this is a library override ID. */
+  if (ID_IS_OVERRIDE_LIBRARY(volume) && !is_undo) {
+    volume->packedfile = nullptr;
   }
+
+  /* write LibData */
+  BLO_write_id_struct(writer, Volume, id_address, &volume->id);
+  BKE_id_blend_write(writer, &volume->id);
+
+  /* direct data */
+  BLO_write_pointer_array(writer, volume->totcol, volume->mat);
+  if (volume->adt) {
+    BKE_animdata_blend_write(writer, volume->adt);
+  }
+
+  BKE_packedfile_blend_write(writer, volume->packedfile);
 }
 
 static void volume_blend_read_data(BlendDataReader *reader, ID *id)
@@ -740,7 +744,7 @@ static int volume_sequence_frame(const Depsgraph *depsgraph, const Volume *volum
     }
   }
 
-  /* Important to apply after, else we cant loop on e.g. frames 100 - 110. */
+  /* Important to apply after, else we can't loop on e.g. frames 100 - 110. */
   frame += frame_offset;
 
   return frame;
@@ -1219,7 +1223,7 @@ const VolumeGrid *BKE_volume_grid_active_get_for_read(const Volume *volume)
   return BKE_volume_grid_get_for_read(volume, index);
 }
 
-/* Tries to find a grid with the given name. Make sure that that the volume has been loaded. */
+/* Tries to find a grid with the given name. Make sure that the volume has been loaded. */
 const VolumeGrid *BKE_volume_grid_find_for_read(const Volume *volume, const char *name)
 {
   int num_grids = BKE_volume_num_grids(volume);

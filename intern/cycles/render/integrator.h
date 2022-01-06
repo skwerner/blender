@@ -45,6 +45,8 @@ class Integrator : public Node {
   NODE_SOCKET_API(int, transparent_max_bounce)
 
   NODE_SOCKET_API(int, ao_bounces)
+  NODE_SOCKET_API(float, ao_factor)
+  NODE_SOCKET_API(float, ao_distance)
 
   NODE_SOCKET_API(int, volume_max_steps)
   NODE_SOCKET_API(float, volume_step_rate)
@@ -75,15 +77,15 @@ class Integrator : public Node {
   NODE_SOCKET_API(SamplingPattern, sampling_pattern)
 
   NODE_SOCKET_API(bool, use_denoise);
-  NODE_SOCKET_API(bool, denoise_store_passes);
   NODE_SOCKET_API(DenoiserType, denoiser_type);
   NODE_SOCKET_API(int, denoise_start_sample);
   NODE_SOCKET_API(bool, use_denoise_pass_albedo);
   NODE_SOCKET_API(bool, use_denoise_pass_normal);
+  NODE_SOCKET_API(DenoiserPrefilter, denoiser_prefilter);
 
   enum : uint32_t {
     AO_PASS_MODIFIED = (1 << 0),
-    BACKGROUND_AO_MODIFIED = (1 << 1),
+    OBJECT_MANAGER = (1 << 1),
 
     /* tag everything in the manager for an update */
     UPDATE_ALL = ~0u,

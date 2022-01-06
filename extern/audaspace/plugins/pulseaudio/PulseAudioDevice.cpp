@@ -32,17 +32,24 @@ void PulseAudioDevice::PulseAudio_state_callback(pa_context *context, void *data
 	device->m_state = AUD_pa_context_get_state(context);
 }
 
-void PulseAudioDevice::PulseAudio_request(pa_stream *stream, size_t num_bytes, void *data)
+void PulseAudioDevice::PulseAudio_request(pa_stream *stream, size_t total_bytes, void *data)
 {
 	PulseAudioDevice* device = (PulseAudioDevice*)data;
 
 	void* buffer;
 
-	AUD_pa_stream_begin_write(stream, &buffer, &num_bytes);
+	while(total_bytes > 0)
+	{
+		size_t num_bytes = total_bytes;
 
-	device->mix((data_t*)buffer, num_bytes / AUD_DEVICE_SAMPLE_SIZE(device->m_specs));
+		AUD_pa_stream_begin_write(stream, &buffer, &num_bytes);
 
-	AUD_pa_stream_write(stream, buffer, num_bytes, nullptr, 0, PA_SEEK_RELATIVE);
+		device->mix((data_t*)buffer, num_bytes / AUD_DEVICE_SAMPLE_SIZE(device->m_specs));
+
+		AUD_pa_stream_write(stream, buffer, num_bytes, nullptr, 0, PA_SEEK_RELATIVE);
+
+		total_bytes -= num_bytes;
+	}
 }
 
 void PulseAudioDevice::PulseAudio_underflow(pa_stream *stream, void *data)
@@ -78,6 +85,7 @@ void PulseAudioDevice::runMixingThread()
 			if(shouldStop())
 			{
 				AUD_pa_stream_cork(m_stream, 1, nullptr, nullptr);
+				AUD_pa_stream_flush(m_stream, nullptr, nullptr);
 				doStop();
 				return;
 			}
@@ -86,13 +94,15 @@ void PulseAudioDevice::runMixingThread()
 		if(AUD_pa_stream_is_corked(m_stream))
 			AUD_pa_stream_cork(m_stream, 0, nullptr, nullptr);
 
-		AUD_pa_mainloop_iterate(m_mainloop, true, nullptr);
+		// similar to AUD_pa_mainloop_iterate(m_mainloop, false, nullptr); except with a longer timeout
+		AUD_pa_mainloop_prepare(m_mainloop, 1 << 14);
+		AUD_pa_mainloop_poll(m_mainloop);
+		AUD_pa_mainloop_dispatch(m_mainloop);
 	}
 }
 
 PulseAudioDevice::PulseAudioDevice(std::string name, DeviceSpecs specs, int buffersize) :
 	m_state(PA_CONTEXT_UNCONNECTED),
-	m_buffersize(buffersize),
 	m_underflows(0)
 {
 	m_mainloop = AUD_pa_mainloop_new();
@@ -182,6 +192,9 @@ PulseAudioDevice::PulseAudioDevice(std::string name, DeviceSpecs specs, int buff
 
 	AUD_pa_stream_set_write_callback(m_stream, PulseAudio_request, this);
 	AUD_pa_stream_set_underflow_callback(m_stream, PulseAudio_underflow, this);
+
+	buffersize *= AUD_DEVICE_SAMPLE_SIZE(m_specs);
+	m_buffersize = buffersize;
 
 	pa_buffer_attr buffer_attr;
 

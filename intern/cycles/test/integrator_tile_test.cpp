@@ -34,4 +34,14 @@ TEST(tile_calculate_best_size, Basic)
             TileSize(1920, 1080, 100));
 }
 
+TEST(tile_calculate_best_size, Extreme)
+{
+  EXPECT_EQ(tile_calculate_best_size(make_int2(32, 32), 262144, 131072), TileSize(1, 1, 512));
+  EXPECT_EQ(tile_calculate_best_size(make_int2(32, 32), 1048576, 131072), TileSize(1, 1, 1024));
+  EXPECT_EQ(tile_calculate_best_size(make_int2(32, 32), 10485760, 131072), TileSize(1, 1, 4096));
+
+  EXPECT_EQ(tile_calculate_best_size(make_int2(32, 32), 8192 * 8192 * 2, 1024),
+            TileSize(1, 1, 1024));
+}
+
 CCL_NAMESPACE_END

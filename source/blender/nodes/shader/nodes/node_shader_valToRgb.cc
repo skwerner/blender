@@ -140,7 +140,7 @@ class ColorBandFunction : public blender::fn::MultiFunction {
   {
     blender::fn::MFSignatureBuilder signature{"Color Band"};
     signature.single_input<float>("Value");
-    signature.single_output<blender::Color4f>("Color");
+    signature.single_output<blender::ColorGeometry4f>("Color");
     signature.single_output<float>("Alpha");
     return signature.build();
   }
@@ -150,12 +150,12 @@ class ColorBandFunction : public blender::fn::MultiFunction {
             blender::fn::MFContext UNUSED(context)) const override
   {
     const blender::VArray<float> &values = params.readonly_single_input<float>(0, "Value");
-    blender::MutableSpan<blender::Color4f> colors =
-        params.uninitialized_single_output<blender::Color4f>(1, "Color");
+    blender::MutableSpan<blender::ColorGeometry4f> colors =
+        params.uninitialized_single_output<blender::ColorGeometry4f>(1, "Color");
     blender::MutableSpan<float> alphas = params.uninitialized_single_output<float>(2, "Alpha");
 
     for (int64_t i : mask) {
-      blender::Color4f color;
+      blender::ColorGeometry4f color;
       BKE_colorband_evaluate(&color_band_, values[i], color);
       colors[i] = color;
       alphas[i] = color.a;
@@ -163,9 +163,10 @@ class ColorBandFunction : public blender::fn::MultiFunction {
   }
 };
 
-static void sh_node_valtorgb_expand_in_mf_network(blender::nodes::NodeMFNetworkBuilder &builder)
+static void sh_node_valtorgb_build_multi_function(
+    blender::nodes::NodeMultiFunctionBuilder &builder)
 {
-  bNode &bnode = builder.bnode();
+  bNode &bnode = builder.node();
   const ColorBand *color_band = (const ColorBand *)bnode.storage;
   builder.construct_and_set_matching_fn<ColorBandFunction>(*color_band);
 }
@@ -174,14 +175,14 @@ void register_node_type_sh_valtorgb(void)
 {
   static bNodeType ntype;
 
-  sh_fn_node_type_base(&ntype, SH_NODE_VALTORGB, "ColorRamp", NODE_CLASS_CONVERTOR, 0);
+  sh_fn_node_type_base(&ntype, SH_NODE_VALTORGB, "ColorRamp", NODE_CLASS_CONVERTER, 0);
   node_type_socket_templates(&ntype, sh_node_valtorgb_in, sh_node_valtorgb_out);
   node_type_init(&ntype, node_shader_init_valtorgb);
   node_type_size_preset(&ntype, NODE_SIZE_LARGE);
   node_type_storage(&ntype, "ColorBand", node_free_standard_storage, node_copy_standard_storage);
   node_type_exec(&ntype, nullptr, nullptr, node_shader_exec_valtorgb);
   node_type_gpu(&ntype, gpu_shader_valtorgb);
-  ntype.expand_in_mf_network = sh_node_valtorgb_expand_in_mf_network;
+  ntype.build_multi_function = sh_node_valtorgb_build_multi_function;
 
   nodeRegisterType(&ntype);
 }
@@ -220,7 +221,7 @@ void register_node_type_sh_rgbtobw(void)
 {
   static bNodeType ntype;
 
-  sh_node_type_base(&ntype, SH_NODE_RGBTOBW, "RGB to BW", NODE_CLASS_CONVERTOR, 0);
+  sh_node_type_base(&ntype, SH_NODE_RGBTOBW, "RGB to BW", NODE_CLASS_CONVERTER, 0);
   node_type_socket_templates(&ntype, sh_node_rgbtobw_in, sh_node_rgbtobw_out);
   node_type_exec(&ntype, nullptr, nullptr, node_shader_exec_rgbtobw);
   node_type_gpu(&ntype, gpu_shader_rgbtobw);

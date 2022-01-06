@@ -155,7 +155,7 @@ class Texture {
 
   void mip_size_get(int mip, int r_size[3]) const
   {
-    /* TODO assert if lvl is below the limit of 1px in each dimension. */
+    /* TODO: assert if lvl is below the limit of 1px in each dimension. */
     int div = 1 << mip;
     r_size[0] = max_ii(1, w_ / div);
 
@@ -316,7 +316,7 @@ inline size_t to_bytesize(eGPUTextureFormat format)
     case GPU_RGBA8_DXT5:
       return 1; /* Incorrect but actual size is fractional. */
     default:
-      BLI_assert(!"Texture format incorrect or unsupported\n");
+      BLI_assert_msg(0, "Texture format incorrect or unsupported");
       return 0;
   }
 }
@@ -333,7 +333,7 @@ inline size_t to_block_size(eGPUTextureFormat data_type)
     case GPU_RGBA8_DXT5:
       return 16;
     default:
-      BLI_assert(!"Texture format is not a compressed format\n");
+      BLI_assert_msg(0, "Texture format is not a compressed format");
       return 0;
   }
 }
@@ -407,7 +407,7 @@ inline size_t to_bytesize(eGPUDataFormat data_format)
     case GPU_DATA_2_10_10_10_REV:
       return 4;
     default:
-      BLI_assert(!"Data format incorrect or unsupported\n");
+      BLI_assert_msg(0, "Data format incorrect or unsupported");
       return 0;
   }
 }
@@ -503,7 +503,7 @@ inline eGPUFrameBufferBits to_framebuffer_bits(eGPUTextureFormat tex_format)
 static inline eGPUTextureFormat to_texture_format(const GPUVertFormat *format)
 {
   if (format->attr_len > 1 || format->attr_len == 0) {
-    BLI_assert(!"Incorrect vertex format for buffer texture");
+    BLI_assert_msg(0, "Incorrect vertex format for buffer texture");
     return GPU_DEPTH_COMPONENT24;
   }
   switch (format->attrs[0].comp_len) {
@@ -559,7 +559,7 @@ static inline eGPUTextureFormat to_texture_format(const GPUVertFormat *format)
         case GPU_COMP_I16:
           return GPU_RGBA16I;
         case GPU_COMP_U16:
-          /* Note: Checking the fetch mode to select the right GPU texture format. This can be
+          /* NOTE: Checking the fetch mode to select the right GPU texture format. This can be
            * added to other formats as well. */
           switch (format->attrs[0].fetch_mode) {
             case GPU_FETCH_INT:
@@ -584,7 +584,7 @@ static inline eGPUTextureFormat to_texture_format(const GPUVertFormat *format)
     default:
       break;
   }
-  BLI_assert(!"Unsupported vertex format for buffer texture");
+  BLI_assert_msg(0, "Unsupported vertex format for buffer texture");
   return GPU_DEPTH_COMPONENT24;
 }
 

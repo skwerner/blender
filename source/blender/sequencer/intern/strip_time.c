@@ -34,6 +34,7 @@
 #include "BKE_scene.h"
 #include "BKE_sound.h"
 
+#include "DNA_sound_types.h"
 #include "IMB_imbuf.h"
 
 #include "SEQ_iterator.h"
@@ -60,7 +61,7 @@ float seq_give_frame_index(Sequence *seq, float timeline_frame)
   }
 
   if (seq->flag & SEQ_REVERSE_FRAMES) {
-    /*reverse frame in this sequence */
+    /* Reverse frame in this sequence. */
     if (timeline_frame <= sta) {
       frame_index = end - sta;
     }
@@ -111,8 +112,8 @@ static void seq_update_sound_bounds_recursive_impl(Scene *scene,
 {
   Sequence *seq;
 
-  /* for sound we go over full meta tree to update bounds of the sound strips,
-   * since sound is played outside of evaluating the imbufs, */
+  /* For sound we go over full meta tree to update bounds of the sound strips,
+   * since sound is played outside of evaluating the imbufs. */
   for (seq = metaseq->seqbase.first; seq; seq = seq->next) {
     if (seq->type == SEQ_TYPE_META) {
       seq_update_sound_bounds_recursive_impl(
@@ -134,7 +135,8 @@ static void seq_update_sound_bounds_recursive_impl(Scene *scene,
                                    seq->scene_sound,
                                    seq->start + startofs,
                                    seq->start + seq->len - endofs,
-                                   startofs + seq->anim_startofs);
+                                   startofs + seq->anim_startofs,
+                                   seq->sound->offset_time);
       }
     }
   }
@@ -184,7 +186,7 @@ static void seq_time_update_meta_strip(Scene *scene, Sequence *seq_meta)
   seq_update_sound_bounds_recursive(scene, seq_meta);
 }
 
-static void seq_time_update_meta_strip_range(Scene *scene, Sequence *seq_meta)
+void SEQ_time_update_meta_strip_range(Scene *scene, Sequence *seq_meta)
 {
   seq_time_update_meta_strip(scene, seq_meta);
 
@@ -223,7 +225,7 @@ void SEQ_time_update_sequence(Scene *scene, Sequence *seq)
         seq->start = seq->startdisp = seq->seq1->startdisp;
         seq->enddisp = seq->seq1->enddisp;
       }
-      /* we cant help if strips don't overlap, it wont give useful results.
+      /* we can't help if strips don't overlap, it won't give useful results.
        * but at least ensure 'len' is never negative which causes bad bugs elsewhere. */
       if (seq->enddisp < seq->startdisp) {
         /* simple start/end swap */
@@ -247,23 +249,14 @@ void SEQ_time_update_sequence(Scene *scene, Sequence *seq)
       seq_time_update_meta_strip(scene, seq);
     }
 
-    Editing *ed = SEQ_editing_get(scene, false);
+    Editing *ed = SEQ_editing_get(scene);
     MetaStack *ms = SEQ_meta_stack_active_get(ed);
     if (ms != NULL) {
-      seq_time_update_meta_strip_range(scene, ms->parseq);
+      SEQ_time_update_meta_strip_range(scene, ms->parseq);
     }
 
     SEQ_time_update_sequence_bounds(scene, seq);
   }
-}
-
-/** Comparison function suitable to be used with BLI_listbase_sort()... */
-int SEQ_time_cmp_time_startdisp(const void *a, const void *b)
-{
-  const Sequence *seq_a = a;
-  const Sequence *seq_b = b;
-
-  return (seq_a->startdisp > seq_b->startdisp);
 }
 
 int SEQ_time_find_next_prev_edit(Scene *scene,
@@ -273,7 +266,7 @@ int SEQ_time_find_next_prev_edit(Scene *scene,
                                  const bool do_center,
                                  const bool do_unselected)
 {
-  Editing *ed = SEQ_editing_get(scene, false);
+  Editing *ed = SEQ_editing_get(scene);
   Sequence *seq;
 
   int dist, best_dist, best_frame = timeline_frame;
@@ -409,7 +402,7 @@ static bool strip_exists_at_frame(SeqCollection *all_strips, const int timeline_
 {
   Sequence *seq;
   SEQ_ITERATOR_FOREACH (seq, all_strips) {
-    if ((seq->startdisp <= timeline_frame) && (seq->enddisp > timeline_frame)) {
+    if (SEQ_time_strip_intersects_frame(seq, timeline_frame)) {
       return true;
     }
   }
@@ -467,4 +460,18 @@ void seq_time_gap_info_get(const Scene *scene,
       break;
     }
   }
+}
+
+/**
+ * Test if strip intersects with timeline frame.
+ * NOTE: This checks if strip would be rendered at this frame. For rendering it is assumed, that
+ * timeline frame has width of 1 frame and therefore ends at timeline_frame + 1
+ *
+ * \param seq: Sequence to be checked
+ * \param timeline_frame: absolute frame position
+ * \return true if strip intersects with timeline frame.
+ */
+bool SEQ_time_strip_intersects_frame(const Sequence *seq, const int timeline_frame)
+{
+  return (seq->startdisp <= timeline_frame) && (seq->enddisp > timeline_frame);
 }

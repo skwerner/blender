@@ -242,8 +242,8 @@ static int gpencil_get_stroke_material_fromcurve(
   float color_fill[4] = {0.0f, 0.0f, 0.0f, 0.0f};
 
   /* If the curve has 2 materials, the first is considered as Fill and the second as Stroke.
-   * If the has only one material, if the name contains _stroke, the is used
-   * as stroke, else as fill.*/
+   * If the has only one material, if the name contains "_stroke",
+   * it's used as a stroke, otherwise as fill. */
   if (ob_cu->totcol >= 2) {
     *do_stroke = true;
     *do_fill = true;
@@ -350,7 +350,7 @@ static void gpencil_convert_spline(Main *bmain,
   /* Assign material index to stroke. */
   gps->mat_nr = r_idx;
 
-  /* Add stroke to frame.*/
+  /* Add stroke to frame. */
   BLI_addtail(&gpf->strokes, gps);
 
   float *coord_array = NULL;
@@ -883,7 +883,7 @@ static void gpencil_interpolate_fl_from_to(
   float *r = point_offset;
   for (int i = 0; i <= it; i++) {
     float fac = (float)i / (float)it;
-    fac = 3.0f * fac * fac - 2.0f * fac * fac * fac;  // smooth
+    fac = 3.0f * fac * fac - 2.0f * fac * fac * fac; /* Smooth. */
     *r = interpf(to, from, fac);
     r = POINTER_OFFSET(r, stride);
   }
@@ -896,7 +896,7 @@ static void gpencil_interpolate_v4_from_to(
   float *r = point_offset;
   for (int i = 0; i <= it; i++) {
     float fac = (float)i / (float)it;
-    fac = 3.0f * fac * fac - 2.0f * fac * fac * fac;  // smooth
+    fac = 3.0f * fac * fac - 2.0f * fac * fac * fac; /* Smooth. */
     interp_v4_v4v4(r, from, to, fac);
     r = POINTER_OFFSET(r, stride);
   }

@@ -32,10 +32,7 @@ CCL_NAMESPACE_BEGIN
  * that only one of those can happen at a bounce, and so do not need to accumulate
  * them separately. */
 
-ccl_device_inline void bsdf_eval_init(BsdfEval *eval,
-                                      const bool is_diffuse,
-                                      float3 value,
-                                      const bool use_light_pass)
+ccl_device_inline void bsdf_eval_init(BsdfEval *eval, const bool is_diffuse, float3 value)
 {
   eval->diffuse = zero_float3();
   eval->glossy = zero_float3();
@@ -101,6 +98,11 @@ ccl_device_inline float3 bsdf_eval_diffuse_glossy_ratio(const BsdfEval *eval)
 
 ccl_device_forceinline void kernel_accum_clamp(const KernelGlobals *kg, float3 *L, int bounce)
 {
+#ifdef __KERNEL_DEBUG_NAN__
+  if (!isfinite3_safe(*L)) {
+    kernel_assert(!"Cycles sample with non-finite value detected");
+  }
+#endif
   /* Make sure all components are finite, allowing the contribution to be usable by adaptive
    * sampling convergence check, but also to make it so render result never causes issues with
    * post-processing. */
@@ -115,193 +117,6 @@ ccl_device_forceinline void kernel_accum_clamp(const KernelGlobals *kg, float3 *
   }
 #endif
 }
-
-/* --------------------------------------------------------------------
- * Legacy functions.
- *
- * TODO: Seems to be mainly related to shadow catcher, which is about to have new implementation.
- * Some other code is related to clamping, which is done in `kernel_accum_clamp()`. Port remaining
- * parts over, remove legacy code.
- */
-
-#if 0
-ccl_device_inline void path_radiance_accum_light(const KernelGlobals *kg,
-                                                 PathRadiance *L,
-                                                 ccl_addr_space PathState *state,
-                                                 float3 throughput,
-                                                 BsdfEval *bsdf_eval,
-                                                 float3 shadow,
-                                                 float shadow_fac,
-                                                 bool is_lamp)
-{
-#  ifdef __SHADOW_TRICKS__
-  if (state->flag & PATH_RAY_STORE_SHADOW_INFO) {
-    float3 light = throughput * bsdf_eval->sum_no_mis;
-    L->path_total += light;
-    L->path_total_shaded += shadow * light;
-
-    if (state->flag & PATH_RAY_SHADOW_CATCHER) {
-      return;
-    }
-  }
-#  endif
-}
-
-ccl_device_inline void path_radiance_accum_total_light(PathRadiance *L,
-                                                       ccl_addr_space PathState *state,
-                                                       float3 throughput,
-                                                       const BsdfEval *bsdf_eval)
-{
-#  ifdef __SHADOW_TRICKS__
-  if (state->flag & PATH_RAY_STORE_SHADOW_INFO) {
-    L->path_total += throughput * bsdf_eval->sum_no_mis;
-  }
-#  else
-  (void)L;
-  (void)state;
-  (void)throughput;
-  (void)bsdf_eval;
-#  endif
-}
-
-ccl_device_inline void path_radiance_accum_background(const KernelGlobals *kg,
-                                                      PathRadiance *L,
-                                                      ccl_addr_space PathState *state,
-                                                      float3 throughput,
-                                                      float3 value)
-{
-
-#  ifdef __SHADOW_TRICKS__
-  if (state->flag & PATH_RAY_STORE_SHADOW_INFO) {
-    L->path_total += throughput * value;
-    L->path_total_shaded += throughput * value * L->shadow_transparency;
-
-    if (state->flag & PATH_RAY_SHADOW_CATCHER) {
-      return;
-    }
-  }
-#  endif
-}
-
-ccl_device_inline void path_radiance_accum_transparent(PathRadiance *L,
-                                                       ccl_addr_space PathState *state,
-                                                       float3 throughput)
-{
-  L->transparent += average(throughput);
-}
-
-#  ifdef __SHADOW_TRICKS__
-ccl_device_inline void path_radiance_accum_shadowcatcher(PathRadiance *L,
-                                                         float3 throughput,
-                                                         float3 background)
-{
-  L->shadow_throughput += average(throughput);
-  L->shadow_background_color += throughput * background;
-  L->has_shadow_catcher = 1;
-}
-#  endif
-
-#  ifdef __SHADOW_TRICKS__
-ccl_device_inline void path_radiance_sum_shadowcatcher(const KernelGlobals *kg,
-                                                       PathRadiance *L,
-                                                       float3 *L_sum,
-                                                       float *alpha)
-{
-  /* Calculate current shadow of the path. */
-  float path_total = average(L->path_total);
-  float shadow;
-
-  if (UNLIKELY(!isfinite_safe(path_total))) {
-    kernel_assert(!"Non-finite total radiance along the path");
-    shadow = 0.0f;
-  }
-  else if (path_total == 0.0f) {
-    shadow = L->shadow_transparency;
-  }
-  else {
-    float path_total_shaded = average(L->path_total_shaded);
-    shadow = path_total_shaded / path_total;
-  }
-
-  /* Calculate final light sum and transparency for shadow catcher object. */
-  if (kernel_data.background.transparent) {
-    *alpha -= L->shadow_throughput * shadow;
-  }
-  else {
-    L->shadow_background_color *= shadow;
-    *L_sum += L->shadow_background_color;
-  }
-}
-#  endif
-
-ccl_device_inline float3 path_radiance_clamp_and_sum(const KernelGlobals *kg,
-                                                     PathRadiance *L,
-                                                     float *alpha)
-{
-  float3 L_sum;
-  /* Light Passes are used */
-#  ifdef __PASSES__
-  float3 L_direct, L_indirect;
-  if (L->use_light_pass) {
-    path_radiance_sum_indirect(L);
-
-    L_direct = L->direct_diffuse + L->direct_glossy + L->direct_transmission + L->direct_volume +
-               L->emission;
-    L_indirect = L->indirect_diffuse + L->indirect_glossy + L->indirect_transmission +
-                 L->indirect_volume;
-
-    if (!kernel_data.background.transparent)
-      L_direct += L->background;
-
-    L_sum = L_direct + L_indirect;
-    float sum = fabsf((L_sum).x) + fabsf((L_sum).y) + fabsf((L_sum).z);
-
-    /* Reject invalid value */
-    if (!isfinite_safe(sum)) {
-      kernel_assert(!"Non-finite sum in path_radiance_clamp_and_sum!");
-      L_sum = zero_float3();
-
-      L->direct_diffuse = zero_float3();
-      L->direct_glossy = zero_float3();
-      L->direct_transmission = zero_float3();
-      L->direct_volume = zero_float3();
-
-      L->indirect_diffuse = zero_float3();
-      L->indirect_glossy = zero_float3();
-      L->indirect_transmission = zero_float3();
-      L->indirect_volume = zero_float3();
-
-      L->emission = zero_float3();
-    }
-  }
-
-  /* No Light Passes */
-  else
-#  endif
-  {
-    L_sum = L->emission;
-
-    /* Reject invalid value */
-    float sum = fabsf((L_sum).x) + fabsf((L_sum).y) + fabsf((L_sum).z);
-    if (!isfinite_safe(sum)) {
-      kernel_assert(!"Non-finite final sum in path_radiance_clamp_and_sum!");
-      L_sum = zero_float3();
-    }
-  }
-
-  /* Compute alpha. */
-  *alpha = 1.0f - L->transparent;
-
-  /* Add shadow catcher contributions. */
-#  ifdef __SHADOW_TRICKS__
-  if (L->has_shadow_catcher) {
-    path_radiance_sum_shadowcatcher(kg, L, &L_sum, alpha);
-  }
-#  endif /* __SHADOW_TRICKS__ */
-
-  return L_sum;
-}
-#endif
 
 /* --------------------------------------------------------------------
  * Pass accumulation utilities.
@@ -365,25 +180,31 @@ ccl_device void kernel_accum_adaptive_buffer(INTEGRATOR_STATE_CONST_ARGS,
 /* Accumulate contribution to the Shadow Catcher pass.
  *
  * Returns truth if the contribution is fully handled here and is not to be added to the other
- * passes (like combined, adaptive sampling, denoising passes). */
+ * passes (like combined, adaptive sampling). */
 
 ccl_device bool kernel_accum_shadow_catcher(INTEGRATOR_STATE_CONST_ARGS,
                                             const float3 contribution,
                                             ccl_global float *ccl_restrict buffer)
 {
+  if (!kernel_data.integrator.has_shadow_catcher) {
+    return false;
+  }
+
+  kernel_assert(kernel_data.film.pass_shadow_catcher != PASS_UNUSED);
+  kernel_assert(kernel_data.film.pass_shadow_catcher_matte != PASS_UNUSED);
+
   /* Matte pass. */
-  if (kernel_data.film.pass_shadow_catcher_matte != PASS_UNUSED) {
-    if (kernel_shadow_catcher_is_matte_path(INTEGRATOR_STATE_PASS)) {
-      kernel_write_pass_float3(buffer + kernel_data.film.pass_shadow_catcher_matte, contribution);
-    }
+  if (kernel_shadow_catcher_is_matte_path(INTEGRATOR_STATE_PASS)) {
+    kernel_write_pass_float3(buffer + kernel_data.film.pass_shadow_catcher_matte, contribution);
+    /* NOTE: Accumulate the combined pass and to the samples count pass, so that the adaptive
+     * sampling is based on how noisy the combined pass is as if there were no catchers in the
+     * scene. */
   }
 
   /* Shadow catcher pass. */
-  if (kernel_data.film.pass_shadow_catcher != PASS_UNUSED) {
-    if (kernel_shadow_catcher_is_object_pass(INTEGRATOR_STATE_PASS)) {
-      kernel_write_pass_float3(buffer + kernel_data.film.pass_shadow_catcher, contribution);
-      return true;
-    }
+  if (kernel_shadow_catcher_is_object_pass(INTEGRATOR_STATE_PASS)) {
+    kernel_write_pass_float3(buffer + kernel_data.film.pass_shadow_catcher, contribution);
+    return true;
   }
 
   return false;
@@ -394,26 +215,53 @@ ccl_device bool kernel_accum_shadow_catcher_transparent(INTEGRATOR_STATE_CONST_A
                                                         const float transparent,
                                                         ccl_global float *ccl_restrict buffer)
 {
+  if (!kernel_data.integrator.has_shadow_catcher) {
+    return false;
+  }
+
+  kernel_assert(kernel_data.film.pass_shadow_catcher != PASS_UNUSED);
+  kernel_assert(kernel_data.film.pass_shadow_catcher_matte != PASS_UNUSED);
+
+  if (INTEGRATOR_STATE(path, flag) & PATH_RAY_SHADOW_CATCHER_BACKGROUND) {
+    return true;
+  }
+
   /* Matte pass. */
-  if (kernel_data.film.pass_shadow_catcher_matte != PASS_UNUSED) {
-    if (kernel_shadow_catcher_is_matte_path(INTEGRATOR_STATE_PASS)) {
-      kernel_write_pass_float4(
-          buffer + kernel_data.film.pass_shadow_catcher_matte,
-          make_float4(contribution.x, contribution.y, contribution.z, transparent));
-    }
+  if (kernel_shadow_catcher_is_matte_path(INTEGRATOR_STATE_PASS)) {
+    kernel_write_pass_float4(
+        buffer + kernel_data.film.pass_shadow_catcher_matte,
+        make_float4(contribution.x, contribution.y, contribution.z, transparent));
+    /* NOTE: Accumulate the combined pass and to the samples count pass, so that the adaptive
+     * sampling is based on how noisy the combined pass is as if there were no catchers in the
+     * scene. */
   }
 
   /* Shadow catcher pass. */
-  if (kernel_data.film.pass_shadow_catcher != PASS_UNUSED) {
-    if (kernel_shadow_catcher_is_object_pass(INTEGRATOR_STATE_PASS)) {
-      kernel_write_pass_float4(
-          buffer + kernel_data.film.pass_shadow_catcher,
-          make_float4(contribution.x, contribution.y, contribution.z, transparent));
-      return true;
-    }
+  if (kernel_shadow_catcher_is_object_pass(INTEGRATOR_STATE_PASS)) {
+    /* NOTE: The transparency of the shadow catcher pass is ignored. It is not needed for the
+     * calculation and the alpha channel of the pass contains numbers of samples contributed to a
+     * pixel of the pass. */
+    kernel_write_pass_float3(buffer + kernel_data.film.pass_shadow_catcher, contribution);
+    return true;
   }
 
   return false;
+}
+
+ccl_device void kernel_accum_shadow_catcher_transparent_only(INTEGRATOR_STATE_CONST_ARGS,
+                                                             const float transparent,
+                                                             ccl_global float *ccl_restrict buffer)
+{
+  if (!kernel_data.integrator.has_shadow_catcher) {
+    return;
+  }
+
+  kernel_assert(kernel_data.film.pass_shadow_catcher_matte != PASS_UNUSED);
+
+  /* Matte pass. */
+  if (kernel_shadow_catcher_is_matte_path(INTEGRATOR_STATE_PASS)) {
+    kernel_write_pass_float(buffer + kernel_data.film.pass_shadow_catcher_matte + 3, transparent);
+  }
 }
 
 #endif /* __SHADOW_CATCHER__ */
@@ -434,15 +282,8 @@ ccl_device_inline void kernel_accum_combined_pass(INTEGRATOR_STATE_CONST_ARGS,
 #endif
 
   if (kernel_data.film.light_pass_flag & PASSMASK(COMBINED)) {
-    kernel_write_pass_float3(buffer, contribution);
+    kernel_write_pass_float3(buffer + kernel_data.film.pass_combined, contribution);
   }
-
-#ifdef __PASSES__
-  if (kernel_data.film.pass_denoising_color != PASS_UNUSED) {
-    kernel_write_pass_float3_unaligned(buffer + kernel_data.film.pass_denoising_color,
-                                       contribution);
-  }
-#endif
 
   kernel_accum_adaptive_buffer(INTEGRATOR_STATE_PASS, contribution, buffer);
 }
@@ -463,15 +304,9 @@ ccl_device_inline void kernel_accum_combined_transparent_pass(INTEGRATOR_STATE_C
 
   if (kernel_data.film.light_pass_flag & PASSMASK(COMBINED)) {
     kernel_write_pass_float4(
-        buffer, make_float4(contribution.x, contribution.y, contribution.z, transparent));
+        buffer + kernel_data.film.pass_combined,
+        make_float4(contribution.x, contribution.y, contribution.z, transparent));
   }
-
-#ifdef __PASSES__
-  if (kernel_data.film.pass_denoising_color != PASS_UNUSED) {
-    kernel_write_pass_float3_unaligned(buffer + kernel_data.film.pass_denoising_color,
-                                       contribution);
-  }
-#endif
 
   kernel_accum_adaptive_buffer(INTEGRATOR_STATE_PASS, contribution, buffer);
 }
@@ -491,28 +326,31 @@ ccl_device_inline void kernel_accum_emission_or_background_pass(INTEGRATOR_STATE
   const int path_flag = INTEGRATOR_STATE(path, flag);
   int pass_offset = PASS_UNUSED;
 
+  /* Denoising albedo. */
+#  ifdef __DENOISING_FEATURES__
+  if (path_flag & PATH_RAY_DENOISING_FEATURES) {
+    if (kernel_data.film.pass_denoising_albedo != PASS_UNUSED) {
+      const float3 denoising_feature_throughput = INTEGRATOR_STATE(path,
+                                                                   denoising_feature_throughput);
+      const float3 denoising_albedo = denoising_feature_throughput * contribution;
+      kernel_write_pass_float3(buffer + kernel_data.film.pass_denoising_albedo, denoising_albedo);
+    }
+  }
+#  endif /* __DENOISING_FEATURES__ */
+
   if (!(path_flag & PATH_RAY_ANY_PASS)) {
     /* Directly visible, write to emission or background pass. */
     pass_offset = pass;
-
-    /* Denoising albedo. */
-#  ifdef __DENOISING_FEATURES__
-    if (path_flag & PATH_RAY_DENOISING_FEATURES) {
-      if (kernel_data.film.pass_denoising_albedo != PASS_UNUSED) {
-        const float3 denoising_feature_throughput = INTEGRATOR_STATE(path,
-                                                                     denoising_feature_throughput);
-        const float3 denoising_albedo = denoising_feature_throughput * contribution;
-        kernel_write_pass_float3_unaligned(buffer + kernel_data.film.pass_denoising_albedo,
-                                           denoising_albedo);
-      }
-    }
-#  endif /* __DENOISING_FEATURES__ */
   }
-  else if (path_flag & PATH_RAY_REFLECT_PASS) {
+  else if (path_flag & (PATH_RAY_REFLECT_PASS | PATH_RAY_TRANSMISSION_PASS)) {
     /* Indirectly visible through reflection. */
-    const int glossy_pass_offset = pass_offset = (INTEGRATOR_STATE(path, bounce) == 1) ?
-                                                     kernel_data.film.pass_glossy_direct :
-                                                     kernel_data.film.pass_glossy_indirect;
+    const int glossy_pass_offset = (path_flag & PATH_RAY_REFLECT_PASS) ?
+                                       ((INTEGRATOR_STATE(path, bounce) == 1) ?
+                                            kernel_data.film.pass_glossy_direct :
+                                            kernel_data.film.pass_glossy_indirect) :
+                                       ((INTEGRATOR_STATE(path, bounce) == 1) ?
+                                            kernel_data.film.pass_transmission_direct :
+                                            kernel_data.film.pass_transmission_indirect);
 
     if (glossy_pass_offset != PASS_UNUSED) {
       /* Glossy is a subset of the throughput, reconstruct it here using the
@@ -528,12 +366,6 @@ ccl_device_inline void kernel_accum_emission_or_background_pass(INTEGRATOR_STATE
     if (pass_offset != PASS_UNUSED) {
       contribution *= INTEGRATOR_STATE(path, diffuse_glossy_ratio);
     }
-  }
-  else if (path_flag & PATH_RAY_TRANSMISSION_PASS) {
-    /* Indirectly visible through transmission. */
-    pass_offset = (INTEGRATOR_STATE(path, bounce) == 1) ?
-                      kernel_data.film.pass_transmission_direct :
-                      kernel_data.film.pass_transmission_indirect;
   }
   else if (path_flag & PATH_RAY_VOLUME_PASS) {
     /* Indirectly visible through volume. */
@@ -566,11 +398,15 @@ ccl_device_inline void kernel_accum_light(INTEGRATOR_STATE_CONST_ARGS,
     const int path_flag = INTEGRATOR_STATE(shadow_path, flag);
     int pass_offset = PASS_UNUSED;
 
-    if (path_flag & PATH_RAY_REFLECT_PASS) {
+    if (path_flag & (PATH_RAY_REFLECT_PASS | PATH_RAY_TRANSMISSION_PASS)) {
       /* Indirectly visible through reflection. */
-      const int glossy_pass_offset = pass_offset = (INTEGRATOR_STATE(shadow_path, bounce) == 0) ?
-                                                       kernel_data.film.pass_glossy_direct :
-                                                       kernel_data.film.pass_glossy_indirect;
+      const int glossy_pass_offset = (path_flag & PATH_RAY_REFLECT_PASS) ?
+                                         ((INTEGRATOR_STATE(shadow_path, bounce) == 1) ?
+                                              kernel_data.film.pass_glossy_direct :
+                                              kernel_data.film.pass_glossy_indirect) :
+                                         ((INTEGRATOR_STATE(shadow_path, bounce) == 1) ?
+                                              kernel_data.film.pass_transmission_direct :
+                                              kernel_data.film.pass_transmission_indirect);
 
       if (glossy_pass_offset != PASS_UNUSED) {
         /* Glossy is a subset of the throughput, reconstruct it here using the
@@ -588,12 +424,6 @@ ccl_device_inline void kernel_accum_light(INTEGRATOR_STATE_CONST_ARGS,
         contribution *= INTEGRATOR_STATE(shadow_path, diffuse_glossy_ratio);
       }
     }
-    else if (path_flag & PATH_RAY_TRANSMISSION_PASS) {
-      /* Indirectly visible through transmission. */
-      pass_offset = (INTEGRATOR_STATE(shadow_path, bounce) == 0) ?
-                        kernel_data.film.pass_transmission_direct :
-                        kernel_data.film.pass_transmission_indirect;
-    }
     else if (path_flag & PATH_RAY_VOLUME_PASS) {
       /* Indirectly visible through volume. */
       pass_offset = (INTEGRATOR_STATE(shadow_path, bounce) == 0) ?
@@ -606,17 +436,15 @@ ccl_device_inline void kernel_accum_light(INTEGRATOR_STATE_CONST_ARGS,
       kernel_write_pass_float3(buffer + pass_offset, contribution);
     }
 
-    /* TODO: Write shadow pass. */
-#  if 0
-  if (path_flag & PATH_RAY_SHADOW_FOR_LIGHT) {
-    const int shadow_pass_offset = kernel_data.film.pass_shadow;
-    if (shadow_pass_offset != PASS_UNUSED) {
-      kernel_write_pass_float4(
-          buffer + shadow_pass_offset,
-          make_float4(shadow.x, shadow.y, shadow.z, kernel_data.film.pass_shadow_scale));
+    /* Write shadow pass. */
+    if (kernel_data.film.pass_shadow != PASS_UNUSED && (path_flag & PATH_RAY_SHADOW_FOR_LIGHT) &&
+        (path_flag & PATH_RAY_CAMERA)) {
+      const float3 unshadowed_throughput = INTEGRATOR_STATE(shadow_path, unshadowed_throughput);
+      const float3 shadowed_throughput = INTEGRATOR_STATE(shadow_path, throughput);
+      const float3 shadow = safe_divide_float3_float3(shadowed_throughput, unshadowed_throughput) *
+                            kernel_data.film.pass_shadow_scale;
+      kernel_write_pass_float3(buffer + kernel_data.film.pass_shadow, shadow);
     }
-  }
-#  endif
   }
 #endif
 }
@@ -630,11 +458,14 @@ ccl_device_inline void kernel_accum_transparent(INTEGRATOR_STATE_CONST_ARGS,
                                                 const float transparent,
                                                 ccl_global float *ccl_restrict render_buffer)
 {
+  ccl_global float *buffer = kernel_accum_pixel_render_buffer(INTEGRATOR_STATE_PASS,
+                                                              render_buffer);
+
   if (kernel_data.film.light_pass_flag & PASSMASK(COMBINED)) {
-    ccl_global float *buffer = kernel_accum_pixel_render_buffer(INTEGRATOR_STATE_PASS,
-                                                                render_buffer);
-    kernel_write_pass_float(buffer + 3, transparent);
+    kernel_write_pass_float(buffer + kernel_data.film.pass_combined + 3, transparent);
   }
+
+  kernel_accum_shadow_catcher_transparent_only(INTEGRATOR_STATE_PASS, transparent, buffer);
 }
 
 /* Write background contribution to render buffer.
@@ -643,6 +474,7 @@ ccl_device_inline void kernel_accum_transparent(INTEGRATOR_STATE_CONST_ARGS,
 ccl_device_inline void kernel_accum_background(INTEGRATOR_STATE_CONST_ARGS,
                                                const float3 L,
                                                const float transparent,
+                                               const bool is_transparent_background_ray,
                                                ccl_global float *ccl_restrict render_buffer)
 {
   float3 contribution = INTEGRATOR_STATE(path, throughput) * L;
@@ -651,17 +483,24 @@ ccl_device_inline void kernel_accum_background(INTEGRATOR_STATE_CONST_ARGS,
   ccl_global float *buffer = kernel_accum_pixel_render_buffer(INTEGRATOR_STATE_PASS,
                                                               render_buffer);
 
-  kernel_accum_combined_transparent_pass(INTEGRATOR_STATE_PASS, contribution, transparent, buffer);
+  if (is_transparent_background_ray) {
+    kernel_accum_transparent(INTEGRATOR_STATE_PASS, transparent, render_buffer);
+  }
+  else {
+    kernel_accum_combined_transparent_pass(
+        INTEGRATOR_STATE_PASS, contribution, transparent, buffer);
+  }
   kernel_accum_emission_or_background_pass(
       INTEGRATOR_STATE_PASS, contribution, buffer, kernel_data.film.pass_background);
 }
 
 /* Write emission to render buffer. */
 ccl_device_inline void kernel_accum_emission(INTEGRATOR_STATE_CONST_ARGS,
+                                             const float3 throughput,
                                              const float3 L,
                                              ccl_global float *ccl_restrict render_buffer)
 {
-  float3 contribution = INTEGRATOR_STATE(path, throughput) * L;
+  float3 contribution = throughput * L;
   kernel_accum_clamp(kg, &contribution, INTEGRATOR_STATE(path, bounce) - 1);
 
   ccl_global float *buffer = kernel_accum_pixel_render_buffer(INTEGRATOR_STATE_PASS,

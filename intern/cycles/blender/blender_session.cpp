@@ -156,18 +156,22 @@ void BlenderSession::create_session()
 
   /* set buffer parameters */
   BufferParams buffer_params = BlenderSync::get_buffer_params(
-      b_render, b_v3d, b_rv3d, scene->camera, width, height);
+      b_v3d, b_rv3d, scene->camera, width, height);
   session->reset(buffer_params, session_params.samples);
 
   /* Create GPU display. */
-  if (!background) {
+  if (!b_engine.is_preview() && !headless) {
     session->set_gpu_display(make_unique<BlenderGPUDisplay>(b_engine, b_scene));
   }
 
-  /* TODO(sergey): Decice on what is to be communicated to the engine here. There is no tiled
-   * rendering for from visual point of view when render buffer fits big tile. But for huge
-   * render resolutions it might still be helpful to see which big tile is being sampled. */
-  /* b_engine.use_highlight_tiles(session_params.progressive_refine == false); */
+  /* Viewport and preview (as in, material preview) does not do tiled rendering, so can inform
+   * engine that no tracking of the tiles state is needed.
+   * The offline rendering will make a decision when tile is being written. The penalty of asking
+   * the engine to keep track of tiles state is minimal, so there is nothing to worry about here
+   * about possible single-tiled final render. */
+  if (!b_engine.is_preview() && !b_v3d) {
+    b_engine.use_highlight_tiles(true);
+  }
 
   update_resumable_tile_manager(session_params.samples);
 }
@@ -251,18 +255,16 @@ void BlenderSession::reset_session(BL::BlendData &b_data, BL::Depsgraph &b_depsg
   BL::SpaceView3D b_null_space_view3d(PointerRNA_NULL);
   BL::RegionView3D b_null_region_view3d(PointerRNA_NULL);
   BufferParams buffer_params = BlenderSync::get_buffer_params(
-      b_render, b_null_space_view3d, b_null_region_view3d, scene->camera, width, height);
+      b_null_space_view3d, b_null_region_view3d, scene->camera, width, height);
   session->reset(buffer_params, session_params.samples);
-
-  /* TODO(sergey): Decice on what is to be communicated to the engine here. There is no tiled
-   * rendering for from visual point of view when render buffer fits big tile. But for huge
-   * render resolutions it might still be helpful to see which big tile is being sampled. */
-  /* TODO(sergey): If some logic is needed here, de-duplicate it with the constructor using some
-   * sort of utility function. */
-  /* b_engine.use_highlight_tiles(session_params.progressive_refine == false); */
 
   /* reset time */
   start_resize_time = 0.0;
+
+  {
+    thread_scoped_lock lock(draw_state_.mutex);
+    draw_state_.last_pass_index = -1;
+  }
 }
 
 void BlenderSession::free_session()
@@ -273,49 +275,7 @@ void BlenderSession::free_session()
   delete session;
 }
 
-static ShaderEvalType get_shader_type(const string &pass_type)
-{
-  const char *shader_type = pass_type.c_str();
-
-  /* data passes */
-  if (strcmp(shader_type, "NORMAL") == 0)
-    return SHADER_EVAL_NORMAL;
-  else if (strcmp(shader_type, "UV") == 0)
-    return SHADER_EVAL_UV;
-  else if (strcmp(shader_type, "ROUGHNESS") == 0)
-    return SHADER_EVAL_ROUGHNESS;
-  else if (strcmp(shader_type, "DIFFUSE_COLOR") == 0)
-    return SHADER_EVAL_DIFFUSE_COLOR;
-  else if (strcmp(shader_type, "GLOSSY_COLOR") == 0)
-    return SHADER_EVAL_GLOSSY_COLOR;
-  else if (strcmp(shader_type, "TRANSMISSION_COLOR") == 0)
-    return SHADER_EVAL_TRANSMISSION_COLOR;
-  else if (strcmp(shader_type, "EMIT") == 0)
-    return SHADER_EVAL_EMISSION;
-
-  /* light passes */
-  else if (strcmp(shader_type, "AO") == 0)
-    return SHADER_EVAL_AO;
-  else if (strcmp(shader_type, "COMBINED") == 0)
-    return SHADER_EVAL_COMBINED;
-  else if (strcmp(shader_type, "SHADOW") == 0)
-    return SHADER_EVAL_SHADOW;
-  else if (strcmp(shader_type, "DIFFUSE") == 0)
-    return SHADER_EVAL_DIFFUSE;
-  else if (strcmp(shader_type, "GLOSSY") == 0)
-    return SHADER_EVAL_GLOSSY;
-  else if (strcmp(shader_type, "TRANSMISSION") == 0)
-    return SHADER_EVAL_TRANSMISSION;
-
-  /* extra */
-  else if (strcmp(shader_type, "ENVIRONMENT") == 0)
-    return SHADER_EVAL_ENVIRONMENT;
-
-  else
-    return SHADER_EVAL_BAKE;
-}
-
-void BlenderSession::do_write_update_render_tile(bool do_update_only)
+void BlenderSession::read_render_tile()
 {
   const int2 tile_offset = session->get_render_tile_offset();
   const int2 tile_size = session->get_render_tile_size();
@@ -342,31 +302,45 @@ void BlenderSession::do_write_update_render_tile(bool do_update_only)
 
   BL::RenderLayer b_rlay = *b_single_rlay;
 
-  if (do_update_only) {
-    update_render_result(b_rlay);
-  }
-  else {
-    write_render_result(b_rlay);
-  }
+  vector<float> pixels(tile_size.x * tile_size.y * 4);
 
-  b_engine.end_result(b_rr, true, false, true);
+  /* Copy each pass.
+   * TODO:copy only the required ones for better performance? */
+  for (BL::RenderPass &b_pass : b_rlay.passes) {
+    session->set_render_tile_pixels(b_pass.name(), b_pass.channels(), (float *)b_pass.rect());
+  }
 }
 
 void BlenderSession::write_render_tile()
 {
-  do_write_update_render_tile(false);
-}
+  const int2 tile_offset = session->get_render_tile_offset();
+  const int2 tile_size = session->get_render_tile_size();
 
-void BlenderSession::update_render_tile()
-{
-  /* use final write for preview renders, otherwise render result wouldn't be
-   * be updated in blender side
-   * would need to be investigated a bit further, but for now shall be fine
-   */
-  if (!b_engine.is_preview())
-    do_write_update_render_tile(true);
-  else
-    do_write_update_render_tile(false);
+  /* get render result */
+  BL::RenderResult b_rr = b_engine.begin_result(tile_offset.x,
+                                                tile_offset.y,
+                                                tile_size.x,
+                                                tile_size.y,
+                                                b_rlay_name.c_str(),
+                                                b_rview_name.c_str());
+
+  /* can happen if the intersected rectangle gives 0 width or height */
+  if (b_rr.ptr.data == NULL) {
+    return;
+  }
+
+  BL::RenderResult::layers_iterator b_single_rlay;
+  b_rr.layers.begin(b_single_rlay);
+
+  /* layer will be missing if it was disabled in the UI */
+  if (b_single_rlay == b_rr.layers.end())
+    return;
+
+  BL::RenderLayer b_rlay = *b_single_rlay;
+
+  write_render_result(b_rlay);
+
+  b_engine.end_result(b_rr, true, false, true);
 }
 
 static void add_cryptomatte_layer(BL::RenderResult &b_rr, string name, string manifest)
@@ -439,7 +413,13 @@ void BlenderSession::render(BL::Depsgraph &b_depsgraph_)
 
   /* set callback to write out render results */
   session->write_render_tile_cb = [&]() { write_render_tile(); };
-  session->update_render_tile_cb = [&]() { update_render_tile(); };
+
+  /* Use final write for preview renders, otherwise render result wouldn't be be updated on Blender
+   * side. */
+  /* TODO(sergey): Investigate whether GPUDisplay can be used for the preview as well. */
+  if (b_engine.is_preview()) {
+    session->update_render_tile_cb = [&]() { write_render_tile(); };
+  }
 
   BL::ViewLayer b_view_layer = b_depsgraph.view_layer_eval();
 
@@ -447,14 +427,21 @@ void BlenderSession::render(BL::Depsgraph &b_depsgraph_)
   SessionParams session_params = BlenderSync::get_session_params(
       b_engine, b_userpref, b_scene, background);
   BufferParams buffer_params = BlenderSync::get_buffer_params(
-      b_render, b_v3d, b_rv3d, scene->camera, width, height);
+      b_v3d, b_rv3d, scene->camera, width, height);
 
   /* temporary render result to find needed passes and views */
   BL::RenderResult b_rr = b_engine.begin_result(0, 0, 1, 1, b_view_layer.name().c_str(), NULL);
   BL::RenderResult::layers_iterator b_single_rlay;
   b_rr.layers.begin(b_single_rlay);
   BL::RenderLayer b_rlay = *b_single_rlay;
-  b_rlay_name = b_view_layer.name();
+
+  {
+    thread_scoped_lock lock(draw_state_.mutex);
+    b_rlay_name = b_view_layer.name();
+
+    /* Signal that the display pass is to be updated. */
+    draw_state_.last_pass_index = -1;
+  }
 
   /* Compute render passes and film settings. */
   sync->sync_render_passes(b_rlay, b_view_layer);
@@ -537,7 +524,7 @@ void BlenderSession::render(BL::Depsgraph &b_depsgraph_)
   stamp_view_layer_metadata(scene, b_rlay_name);
 
   /* free result without merging */
-  b_engine.end_result(b_rr, true, true, false);
+  b_engine.end_result(b_rr, true, false, false);
 
   double total_time, render_time;
   session->progress.get_time(total_time, render_time);
@@ -549,51 +536,109 @@ void BlenderSession::render(BL::Depsgraph &b_depsgraph_)
   session->update_render_tile_cb = function_null;
 }
 
-static int bake_pass_filter_get(const int pass_filter)
+static PassType bake_type_to_pass(const string &bake_type_str, const int bake_filter)
 {
-  int flag = BAKE_FILTER_NONE;
+  const char *bake_type = bake_type_str.c_str();
 
-  if ((pass_filter & BL::BakeSettings::pass_filter_DIRECT) != 0)
-    flag |= BAKE_FILTER_DIRECT;
-  if ((pass_filter & BL::BakeSettings::pass_filter_INDIRECT) != 0)
-    flag |= BAKE_FILTER_INDIRECT;
-  if ((pass_filter & BL::BakeSettings::pass_filter_COLOR) != 0)
-    flag |= BAKE_FILTER_COLOR;
+  /* data passes */
+  if (strcmp(bake_type, "POSITION") == 0) {
+    return PASS_POSITION;
+  }
+  else if (strcmp(bake_type, "NORMAL") == 0) {
+    return PASS_NORMAL;
+  }
+  else if (strcmp(bake_type, "UV") == 0) {
+    return PASS_UV;
+  }
+  else if (strcmp(bake_type, "ROUGHNESS") == 0) {
+    return PASS_ROUGHNESS;
+  }
+  else if (strcmp(bake_type, "EMIT") == 0) {
+    return PASS_EMISSION;
+  }
+  /* light passes */
+  else if (strcmp(bake_type, "AO") == 0) {
+    return PASS_AO;
+  }
+  else if (strcmp(bake_type, "COMBINED") == 0) {
+    return PASS_COMBINED;
+  }
+  else if (strcmp(bake_type, "SHADOW") == 0) {
+    return PASS_SHADOW;
+  }
+  else if (strcmp(bake_type, "DIFFUSE") == 0) {
+    if ((bake_filter & BL::BakeSettings::pass_filter_DIRECT) &&
+        bake_filter & BL::BakeSettings::pass_filter_INDIRECT) {
+      return PASS_DIFFUSE;
+    }
+    else if (bake_filter & BL::BakeSettings::pass_filter_DIRECT) {
+      return PASS_DIFFUSE_DIRECT;
+    }
+    else if (bake_filter & BL::BakeSettings::pass_filter_INDIRECT) {
+      return PASS_DIFFUSE_INDIRECT;
+    }
+    else {
+      return PASS_DIFFUSE_COLOR;
+    }
+  }
+  else if (strcmp(bake_type, "GLOSSY") == 0) {
+    if ((bake_filter & BL::BakeSettings::pass_filter_DIRECT) &&
+        bake_filter & BL::BakeSettings::pass_filter_INDIRECT) {
+      return PASS_GLOSSY;
+    }
+    else if (bake_filter & BL::BakeSettings::pass_filter_DIRECT) {
+      return PASS_GLOSSY_DIRECT;
+    }
+    else if (bake_filter & BL::BakeSettings::pass_filter_INDIRECT) {
+      return PASS_GLOSSY_INDIRECT;
+    }
+    else {
+      return PASS_GLOSSY_COLOR;
+    }
+  }
+  else if (strcmp(bake_type, "TRANSMISSION") == 0) {
+    if ((bake_filter & BL::BakeSettings::pass_filter_DIRECT) &&
+        bake_filter & BL::BakeSettings::pass_filter_INDIRECT) {
+      return PASS_TRANSMISSION;
+    }
+    else if (bake_filter & BL::BakeSettings::pass_filter_DIRECT) {
+      return PASS_TRANSMISSION_DIRECT;
+    }
+    else if (bake_filter & BL::BakeSettings::pass_filter_INDIRECT) {
+      return PASS_TRANSMISSION_INDIRECT;
+    }
+    else {
+      return PASS_TRANSMISSION_COLOR;
+    }
+  }
+  /* extra */
+  else if (strcmp(bake_type, "ENVIRONMENT") == 0) {
+    return PASS_BACKGROUND;
+  }
 
-  if ((pass_filter & BL::BakeSettings::pass_filter_DIFFUSE) != 0)
-    flag |= BAKE_FILTER_DIFFUSE;
-  if ((pass_filter & BL::BakeSettings::pass_filter_GLOSSY) != 0)
-    flag |= BAKE_FILTER_GLOSSY;
-  if ((pass_filter & BL::BakeSettings::pass_filter_TRANSMISSION) != 0)
-    flag |= BAKE_FILTER_TRANSMISSION;
-
-  if ((pass_filter & BL::BakeSettings::pass_filter_EMIT) != 0)
-    flag |= BAKE_FILTER_EMISSION;
-  if ((pass_filter & BL::BakeSettings::pass_filter_AO) != 0)
-    flag |= BAKE_FILTER_AO;
-
-  return flag;
+  return PASS_COMBINED;
 }
 
 void BlenderSession::bake(BL::Depsgraph &b_depsgraph_,
                           BL::Object &b_object,
-                          const string &pass_type,
-                          const int pass_filter,
+                          const string &bake_type,
+                          const int bake_filter,
                           const int bake_width,
                           const int bake_height)
 {
   b_depsgraph = b_depsgraph_;
 
-  ShaderEvalType shader_type = get_shader_type(pass_type);
-  int bake_pass_filter = bake_pass_filter_get(pass_filter);
-
   /* Initialize bake manager, before we load the baking kernels. */
-  scene->bake_manager->set(scene, b_object.name(), shader_type, bake_pass_filter);
+  scene->bake_manager->set(scene, b_object.name());
 
-  /* Passes are identified by name, so in order to return the combined pass we need to set the
-   * name. */
-  Pass::add(PASS_COMBINED, scene->passes, "Combined");
+  /* Add render pass that we want to bake, and name it Combined so that it is
+   * used as that on the Blender side. */
+  Pass *pass = scene->create_node<Pass>();
+  pass->set_name(ustring("Combined"));
+  pass->set_type(bake_type_to_pass(bake_type, bake_filter));
+  pass->set_include_albedo((bake_filter & BL::BakeSettings::pass_filter_COLOR));
 
+  session->read_render_tile_cb = [&]() { read_render_tile(); };
   session->write_render_tile_cb = [&]() { write_render_tile(); };
 
   if (!session->progress.get_cancel()) {
@@ -637,11 +682,16 @@ void BlenderSession::bake(BL::Depsgraph &b_depsgraph_,
     session->wait();
   }
 
+  session->read_render_tile_cb = function_null;
   session->write_render_tile_cb = function_null;
 }
 
 void BlenderSession::write_render_result(BL::RenderLayer &b_rlay)
 {
+  if (!session->copy_render_tile_from_device()) {
+    return;
+  }
+
   const int2 tile_size = session->get_render_tile_size();
   vector<float> pixels(tile_size.x * tile_size.y * 4);
 
@@ -657,6 +707,10 @@ void BlenderSession::write_render_result(BL::RenderLayer &b_rlay)
 
 void BlenderSession::update_render_result(BL::RenderLayer &b_rlay)
 {
+  if (!session->copy_render_tile_from_device()) {
+    return;
+  }
+
   const int2 tile_size = session->get_render_tile_size();
   vector<float> pixels(tile_size.x * tile_size.y * 4);
 
@@ -684,8 +738,9 @@ void BlenderSession::synchronize(BL::Depsgraph &b_depsgraph_)
     create_session();
   }
 
-  /* increase samples, but never decrease */
+  /* increase samples and render time, but never decrease */
   session->set_samples(session_params.samples);
+  session->set_time_limit(session_params.time_limit);
   session->set_pause(session_pause);
 
   /* copy recalc flags, outside of mutex so we can decide to do the real
@@ -718,7 +773,7 @@ void BlenderSession::synchronize(BL::Depsgraph &b_depsgraph_)
 
   /* get buffer parameters */
   BufferParams buffer_params = BlenderSync::get_buffer_params(
-      b_render, b_v3d, b_rv3d, scene->camera, width, height);
+      b_v3d, b_rv3d, scene->camera, width, height);
 
   /* reset if needed */
   if (scene->need_reset()) {
@@ -739,7 +794,41 @@ void BlenderSession::synchronize(BL::Depsgraph &b_depsgraph_)
   session->start();
 }
 
-void BlenderSession::draw(int w, int h)
+void BlenderSession::draw(BL::SpaceImageEditor &space_image)
+{
+  if (!session || !session->scene) {
+    /* Offline render drawing does not force the render engine update, which means it's possible
+     * that the Session is not created yet. */
+    return;
+  }
+
+  thread_scoped_lock lock(draw_state_.mutex);
+
+  const int pass_index = space_image.image_user().multilayer_pass();
+  if (pass_index != draw_state_.last_pass_index) {
+    BL::RenderPass b_display_pass(b_engine.pass_by_index_get(b_rlay_name.c_str(), pass_index));
+    if (!b_display_pass) {
+      return;
+    }
+
+    Scene *scene = session->scene;
+
+    thread_scoped_lock lock(scene->mutex);
+
+    const Pass *pass = Pass::find(scene->passes, b_display_pass.name());
+    if (!pass) {
+      return;
+    }
+
+    scene->film->set_display_pass(pass->get_type());
+
+    draw_state_.last_pass_index = pass_index;
+  }
+
+  session->draw();
+}
+
+void BlenderSession::view_draw(int w, int h)
 {
   /* pause in redraw in case update is not being called due to final render */
   session->set_pause(BlenderSync::get_session_pause(b_scene, background));
@@ -788,7 +877,7 @@ void BlenderSession::draw(int w, int h)
       SessionParams session_params = BlenderSync::get_session_params(
           b_engine, b_userpref, b_scene, background);
       BufferParams buffer_params = BlenderSync::get_buffer_params(
-          b_render, b_v3d, b_rv3d, scene->camera, width, height);
+          b_v3d, b_rv3d, scene->camera, width, height);
       bool session_pause = BlenderSync::get_session_pause(b_scene, background);
 
       if (session_pause == false) {
@@ -866,9 +955,9 @@ void BlenderSession::update_status_progress()
   }
 
   double current_time = time_dt();
-  /* When rendering in a window, redraw the status at least once per second to keep the elapsed and
-   * remaining time up-to-date. For headless rendering, only report when something significant
-   * changes to keep the console output readable. */
+  /* When rendering in a window, redraw the status at least once per second to keep the elapsed
+   * and remaining time up-to-date. For headless rendering, only report when something
+   * significant changes to keep the console output readable. */
   if (status != last_status || (!headless && (current_time - last_status_time) > 1.0)) {
     b_engine.update_stats("", (timestatus + scene_status + status).c_str());
     b_engine.update_memory_stats(mem_used, mem_peak);

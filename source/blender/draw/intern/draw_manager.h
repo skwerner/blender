@@ -43,6 +43,10 @@
 
 #include "draw_instance_data.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct DupliObject;
 struct Object;
 
@@ -110,8 +114,8 @@ typedef struct DRWCullingState {
 
 /* Minimum max UBO size is 64KiB. We take the largest
  * UBO struct and alloc the max number.
- * ((1 << 16) / sizeof(DRWObjectMatrix)) = 512
- * Keep in sync with common_view_lib.glsl */
+ * `((1 << 16) / sizeof(DRWObjectMatrix)) = 512`
+ * Keep in sync with `common_view_lib.glsl`. */
 #define DRW_RESOURCE_CHUNK_LEN 512
 
 /**
@@ -172,9 +176,9 @@ typedef struct DRWObjectInfos {
   float orcotexfac[2][4];
   float ob_color[4];
   float ob_index;
-  float pad; /* UNUSED*/
+  float pad; /*UNUSED*/
   float ob_random;
-  float ob_flag; /* sign is negative scaling,  */
+  float ob_flag; /* Sign is negative scaling. */
 } DRWObjectInfos;
 
 BLI_STATIC_ASSERT_ALIGN(DRWObjectMatrix, 16)
@@ -187,6 +191,10 @@ typedef enum {
   DRW_CMD_DRAW_INSTANCE = 2,
   DRW_CMD_DRAW_INSTANCE_RANGE = 3,
   DRW_CMD_DRAW_PROCEDURAL = 4,
+
+  /* Compute Commands. */
+  DRW_CMD_COMPUTE = 8,
+
   /* Other Commands */
   DRW_CMD_CLEAR = 12,
   DRW_CMD_DRWSTATE = 13,
@@ -224,6 +232,12 @@ typedef struct DRWCommandDrawInstanceRange {
   uint inst_count;
 } DRWCommandDrawInstanceRange;
 
+typedef struct DRWCommandCompute {
+  int groups_x_len;
+  int groups_y_len;
+  int groups_z_len;
+} DRWCommandCompute;
+
 typedef struct DRWCommandDrawProcedural {
   GPUBatch *batch;
   DRWResourceHandle handle;
@@ -260,6 +274,7 @@ typedef union DRWCommand {
   DRWCommandDrawInstance instance;
   DRWCommandDrawInstanceRange instance_range;
   DRWCommandDrawProcedural procedural;
+  DRWCommandCompute compute;
   DRWCommandSetMutableState state;
   DRWCommandSetStencil stencil;
   DRWCommandSetSelectID select_id;
@@ -274,6 +289,7 @@ struct DRWCallBuffer {
 };
 
 /** Used by #DRWUniform.type */
+/* TODO(jbakker): rename to DRW_RESOURCE/DRWResourceType. */
 typedef enum {
   DRW_UNIFORM_INT = 0,
   DRW_UNIFORM_INT_COPY,
@@ -286,6 +302,7 @@ typedef enum {
   DRW_UNIFORM_BLOCK,
   DRW_UNIFORM_BLOCK_REF,
   DRW_UNIFORM_TFEEDBACK_TARGET,
+  DRW_UNIFORM_VERTEX_BUFFER_AS_STORAGE,
   /** Per drawcall uniforms/UBO */
   DRW_UNIFORM_BLOCK_OBMATS,
   DRW_UNIFORM_BLOCK_OBINFOS,
@@ -454,7 +471,7 @@ typedef struct DRWCommandSmallChunk {
   uint32_t command_len;
   uint32_t command_used;
   /* 4bits for each command. */
-  /* TODO reduce size of command_type. */
+  /* TODO: reduce size of command_type. */
   uint64_t command_type[6];
   DRWCommand commands[6];
 } DRWCommandSmallChunk;
@@ -480,12 +497,17 @@ typedef struct DRWDebugSphere {
 
 /* ------------- DRAW MANAGER ------------ */
 
+typedef struct DupliKey {
+  struct Object *ob;
+  struct ID *ob_data;
+} DupliKey;
+
 #define DST_MAX_SLOTS 64  /* Cannot be changed without modifying RST.bound_tex_slots */
 #define MAX_CLIP_PLANES 6 /* GL_MAX_CLIP_PLANES is at least 6 */
 #define STENCIL_UNDEFINED 256
 #define DRW_DRAWLIST_LEN 256
 typedef struct DRWManager {
-  /* TODO clean up this struct a bit */
+  /* TODO: clean up this struct a bit. */
   /* Cache generation */
   ViewportMemoryPool *vmempool;
   DRWInstanceDataList *idatalist;
@@ -498,15 +520,19 @@ typedef struct DRWManager {
   /** Handle of next DRWPass to be allocated. */
   DRWResourceHandle pass_handle;
 
-  /** Dupli state. NULL if not dupli. */
+  /** Dupli object that corresponds to the current object. */
   struct DupliObject *dupli_source;
+  /** Object that created the dupli-list the current object is part of. */
   struct Object *dupli_parent;
+  /** Object referenced by the current dupli object. */
   struct Object *dupli_origin;
-  /** Ghash containing original objects. */
+  /** Object-data referenced by the current dupli object. */
+  struct ID *dupli_origin_data;
+  /** Ghash: #DupliKey -> void pointer for each enabled engine. */
   struct GHash *dupli_ghash;
   /** TODO(fclem): try to remove usage of this. */
   DRWInstanceData *object_instance_data[MAX_INSTANCE_DATA_SIZE];
-  /* Array of dupli_data (one for each enabled engine) to handle duplis. */
+  /* Dupli data for the current dupli for each enabled engine. */
   void **dupli_datas;
 
   /* Rendering state */
@@ -527,10 +553,10 @@ typedef struct DRWManager {
 
   struct {
     uint is_select : 1;
+    uint is_material_select : 1;
     uint is_depth : 1;
     uint is_image_render : 1;
     uint is_scene_render : 1;
-    uint do_color_management : 1;
     uint draw_background : 1;
     uint draw_text : 1;
   } options;
@@ -614,3 +640,7 @@ void drw_uniform_attrs_pool_update(struct GHash *table,
                                    struct Object *ob,
                                    struct Object *dupli_parent,
                                    struct DupliObject *dupli_source);
+
+#ifdef __cplusplus
+}
+#endif

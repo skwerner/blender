@@ -61,8 +61,8 @@ const EnumPropertyItem rna_enum_fmodifier_type_items[] = {
      "Reshape F-Curve values, e.g. change amplitude of movements"},
     {FMODIFIER_TYPE_CYCLES, "CYCLES", 0, "Cycles", "Cyclic extend/repeat keyframe sequence"},
     {FMODIFIER_TYPE_NOISE, "NOISE", 0, "Noise", "Add pseudo-random noise on top of F-Curves"},
-    /*{FMODIFIER_TYPE_FILTER, "FILTER", 0, "Filter", ""},*/ /* FIXME: not implemented yet! */
-    /*{FMODIFIER_TYPE_PYTHON, "PYTHON", 0, "Python", ""},*/ /* FIXME: not implemented yet! */
+    // {FMODIFIER_TYPE_FILTER, "FILTER", 0, "Filter", ""}, /* FIXME: not implemented yet! */
+    // {FMODIFIER_TYPE_PYTHON, "PYTHON", 0, "Python", ""}, /* FIXME: not implemented yet! */
     {FMODIFIER_TYPE_LIMITS,
      "LIMITS",
      0,
@@ -263,8 +263,8 @@ static void rna_DriverTarget_update_data(Main *bmain, Scene *scene, PointerRNA *
     fcu->flag &= ~FCURVE_DISABLED;
 
     if (driver) {
-      /* FIXME: need to be able to search targets for required one... */
-      /*BLI_findindex(&driver->targets, ptr->data) != -1)  */
+      /* FIXME: need to be able to search targets for required one. */
+      // BLI_findindex(&driver->targets, ptr->data) != -1)
       RNA_pointer_create(ptr->owner_id, &RNA_Driver, driver, &driverptr);
       rna_ChannelDriver_update_data(bmain, scene, &driverptr);
     }
@@ -281,7 +281,7 @@ static void rna_DriverTarget_update_name(Main *bmain, Scene *scene, PointerRNA *
 
 /* ----------- */
 
-/* note: this function exists only to avoid id refcounting */
+/* NOTE: this function exists only to avoid id refcounting. */
 static void rna_DriverTarget_id_set(PointerRNA *ptr,
                                     PointerRNA value,
                                     struct ReportList *UNUSED(reports))
@@ -543,8 +543,8 @@ static void rna_FCurve_group_set(PointerRNA *ptr,
     return;
   }
   else if (value.data && (pid != vid)) {
-    /* id's differ, cant do this, should raise an error */
-    printf("ERROR: ID's differ - ptr=%p vs value=%p\n", pid, vid);
+    /* ids differ, can't do this, should raise an error */
+    printf("ERROR: IDs differ - ptr=%p vs value=%p\n", pid, vid);
     return;
   }
 
@@ -584,7 +584,7 @@ static void rna_FCurve_group_set(PointerRNA *ptr,
   action_groups_remove_channel(act, fcu);
 
   /* add the F-Curve back to the action now in the right place */
-  /* TODO: make the api function handle the case where there isn't any group to assign to  */
+  /* TODO: make the api function handle the case where there isn't any group to assign to. */
   if (value.data) {
     /* add to its group using API function, which makes sure everything goes ok */
     action_groups_add_channel(act, value.data, fcu);
@@ -809,7 +809,7 @@ static int rna_FModifierGenerator_coefficients_get_length(PointerRNA *ptr,
     length[0] = gen->arraysize;
   }
   else {
-    length[0] = 100; /* for raw_access, untested */
+    length[0] = 0;
   }
 
   return length[0];
@@ -1449,7 +1449,7 @@ static void rna_def_fmodifier_cycles(BlenderRNA *brna)
 static void rna_def_fmodifier_python(BlenderRNA *brna)
 {
   StructRNA *srna;
-  /*PropertyRNA *prop; */
+  // PropertyRNA *prop;
 
   srna = RNA_def_struct(brna, "FModifierPython", "FModifier");
   RNA_def_struct_ui_text(
@@ -1831,7 +1831,7 @@ static void rna_def_drivertarget(BlenderRNA *brna)
   RNA_def_property_flag(prop, PROP_EDITABLE);
   RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
   RNA_def_property_editable_func(prop, "rna_DriverTarget_id_editable");
-  /* note: custom set function is ONLY to avoid rna setting a user for this. */
+  /* NOTE: custom set function is ONLY to avoid rna setting a user for this. */
   RNA_def_property_pointer_funcs(
       prop, NULL, "rna_DriverTarget_id_set", "rna_DriverTarget_id_typef", NULL);
   RNA_def_property_ui_text(prop,
@@ -2432,7 +2432,7 @@ static void rna_def_fcurve(BlenderRNA *brna)
   prop = RNA_def_property(srna, "mute", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flag", FCURVE_MUTED);
   RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
-  RNA_def_property_ui_text(prop, "Muted", "Disable F-Curve Modifier evaluation");
+  RNA_def_property_ui_text(prop, "Muted", "Disable F-Curve evaluation");
   RNA_def_property_update(prop, NC_ANIMATION | ND_ANIMCHAN | NA_EDITED, "rna_FCurve_update_eval");
 
   prop = RNA_def_property(srna, "hide", PROP_BOOLEAN, PROP_NONE);

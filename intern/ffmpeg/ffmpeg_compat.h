@@ -43,41 +43,71 @@
 #  define FFMPEG_INLINE static inline
 #endif
 
+#if (LIBAVFORMAT_VERSION_MAJOR < 58) || \
+    ((LIBAVFORMAT_VERSION_MAJOR == 58) && (LIBAVFORMAT_VERSION_MINOR < 76))
+#  define FFMPEG_USE_DURATION_WORKAROUND 1
+
+/* Before ffmpeg 4.4, package duration calculation used depricated variables to calculate the
+ * packet duration. Use the function from commit
+ * github.com/FFmpeg/FFmpeg/commit/1c0885334dda9ee8652e60c586fa2e3674056586
+ * to calculate the correct framerate for ffmpeg < 4.4.
+ */
+
 FFMPEG_INLINE
-void my_update_cur_dts(AVFormatContext *s, AVStream *ref_st, int64_t timestamp)
+void my_guess_pkt_duration(AVFormatContext *s, AVStream *st, AVPacket *pkt)
 {
-  int i;
+  if (pkt->duration < 0 && st->codecpar->codec_type != AVMEDIA_TYPE_SUBTITLE) {
+    av_log(s,
+           AV_LOG_WARNING,
+           "Packet with invalid duration %" PRId64 " in stream %d\n",
+           pkt->duration,
+           pkt->stream_index);
+    pkt->duration = 0;
+  }
 
-  for (i = 0; i < s->nb_streams; i++) {
-    AVStream *st = s->streams[i];
+  if (pkt->duration) {
+    return;
+  }
 
-    st->cur_dts = av_rescale(timestamp,
-                             st->time_base.den * (int64_t)ref_st->time_base.num,
-                             st->time_base.num * (int64_t)ref_st->time_base.den);
+  switch (st->codecpar->codec_type) {
+    case AVMEDIA_TYPE_VIDEO:
+      if (st->avg_frame_rate.num > 0 && st->avg_frame_rate.den > 0) {
+        pkt->duration = av_rescale_q(1, av_inv_q(st->avg_frame_rate), st->time_base);
+      }
+      else if (st->time_base.num * 1000LL > st->time_base.den) {
+        pkt->duration = 1;
+      }
+      break;
+    case AVMEDIA_TYPE_AUDIO: {
+      int frame_size = av_get_audio_frame_duration2(st->codecpar, pkt->size);
+      if (frame_size && st->codecpar->sample_rate) {
+        pkt->duration = av_rescale_q(
+            frame_size, (AVRational){1, st->codecpar->sample_rate}, st->time_base);
+      }
+      break;
+    }
+    default:
+      break;
   }
 }
+#endif
 
 FFMPEG_INLINE
-void av_update_cur_dts(AVFormatContext *s, AVStream *ref_st, int64_t timestamp)
+int64_t timestamp_from_pts_or_dts(int64_t pts, int64_t dts)
 {
-  my_update_cur_dts(s, ref_st, timestamp);
-}
-
-FFMPEG_INLINE
-int64_t av_get_pts_from_frame(AVFormatContext *avctx, AVFrame *picture)
-{
-  int64_t pts;
-  pts = picture->pts;
-
+  /* Some videos do not have any pts values, use dts instead in those cases if
+   * possible. Usually when this happens dts can act as pts because as all frames
+   * should then be presented in their decoded in order. IE pts == dts. */
   if (pts == AV_NOPTS_VALUE) {
-    pts = picture->pkt_dts;
+    return dts;
   }
-  if (pts == AV_NOPTS_VALUE) {
-    pts = 0;
-  }
-
-  (void)avctx;
   return pts;
+}
+
+FFMPEG_INLINE
+int64_t av_get_pts_from_frame(AVFrame *picture)
+{
+  return timestamp_from_pts_or_dts(picture->pts, picture->pkt_dts);
 }
 
 /* -------------------------------------------------------------------- */

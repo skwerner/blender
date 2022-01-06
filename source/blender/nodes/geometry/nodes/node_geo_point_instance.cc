@@ -24,28 +24,25 @@
 
 #include "node_geometry_util.hh"
 
-static bNodeSocketTemplate geo_node_point_instance_in[] = {
-    {SOCK_GEOMETRY, N_("Geometry")},
-    {SOCK_OBJECT, N_("Object")},
-    {SOCK_COLLECTION, N_("Collection")},
-    {SOCK_INT, N_("Seed"), 0, 0, 0, 0, -10000, 10000},
-    {-1, ""},
-};
+namespace blender::nodes {
 
-static bNodeSocketTemplate geo_node_point_instance_out[] = {
-    {SOCK_GEOMETRY, N_("Geometry")},
-    {-1, ""},
-};
+static void geo_node_point_instance_declare(NodeDeclarationBuilder &b)
+{
+  b.add_input<decl::Geometry>("Geometry");
+  b.add_input<decl::Object>("Object").hide_label(true);
+  b.add_input<decl::Collection>("Collection").hide_label(true);
+  b.add_input<decl::Geometry>("Instance Geometry");
+  b.add_input<decl::Int>("Seed").min(-10000).max(10000);
+  b.add_output<decl::Geometry>("Geometry");
+}
 
 static void geo_node_point_instance_layout(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
 {
-  uiItemR(layout, ptr, "instance_type", UI_ITEM_R_EXPAND, nullptr, ICON_NONE);
+  uiItemR(layout, ptr, "instance_type", 0, "", ICON_NONE);
   if (RNA_enum_get(ptr, "instance_type") == GEO_NODE_POINT_INSTANCE_TYPE_COLLECTION) {
     uiItemR(layout, ptr, "use_whole_collection", 0, nullptr, ICON_NONE);
   }
 }
-
-namespace blender::nodes {
 
 static void geo_node_point_instance_init(bNodeTree *UNUSED(tree), bNode *node)
 {
@@ -60,7 +57,8 @@ static void geo_node_point_instance_update(bNodeTree *UNUSED(tree), bNode *node)
 {
   bNodeSocket *object_socket = (bNodeSocket *)BLI_findlink(&node->inputs, 1);
   bNodeSocket *collection_socket = object_socket->next;
-  bNodeSocket *seed_socket = collection_socket->next;
+  bNodeSocket *instance_geometry_socket = collection_socket->next;
+  bNodeSocket *seed_socket = instance_geometry_socket->next;
 
   NodeGeometryPointInstance *node_storage = (NodeGeometryPointInstance *)node->storage;
   GeometryNodePointInstanceType type = (GeometryNodePointInstanceType)node_storage->instance_type;
@@ -69,6 +67,8 @@ static void geo_node_point_instance_update(bNodeTree *UNUSED(tree), bNode *node)
 
   nodeSetSocketAvailability(object_socket, type == GEO_NODE_POINT_INSTANCE_TYPE_OBJECT);
   nodeSetSocketAvailability(collection_socket, type == GEO_NODE_POINT_INSTANCE_TYPE_COLLECTION);
+  nodeSetSocketAvailability(instance_geometry_socket,
+                            type == GEO_NODE_POINT_INSTANCE_TYPE_GEOMETRY);
   nodeSetSocketAvailability(
       seed_socket, type == GEO_NODE_POINT_INSTANCE_TYPE_COLLECTION && !use_whole_collection);
 }
@@ -118,6 +118,13 @@ static Vector<InstanceReference> get_instance_references__collection(GeoNodeExec
   return references;
 }
 
+static Vector<InstanceReference> get_instance_references__geometry(GeoNodeExecParams &params)
+{
+  GeometrySet geometry_set = params.extract_input<GeometrySet>("Instance Geometry");
+  geometry_set.ensure_owns_direct_data();
+  return {std::move(geometry_set)};
+}
+
 static Vector<InstanceReference> get_instance_references(GeoNodeExecParams &params)
 {
   const bNode &node = params.node();
@@ -131,6 +138,9 @@ static Vector<InstanceReference> get_instance_references(GeoNodeExecParams &para
     }
     case GEO_NODE_POINT_INSTANCE_TYPE_COLLECTION: {
       return get_instance_references__collection(params);
+    }
+    case GEO_NODE_POINT_INSTANCE_TYPE_GEOMETRY: {
+      return get_instance_references__geometry(params);
     }
   }
   return {};
@@ -180,7 +190,7 @@ static void add_instances_from_component(InstancesComponent &instances,
    * (anything except for collection mode with "Whole Collection" turned off). */
   if (possible_handles.size() == 1) {
     const int handle = possible_handles.first();
-    parallel_for(IndexRange(domain_size), 1024, [&](IndexRange range) {
+    threading::parallel_for(IndexRange(domain_size), 1024, [&](IndexRange range) {
       for (const int i : range) {
         handles[i] = handle;
         transforms[i] = float4x4::from_loc_eul_scale(positions[i], rotations[i], scales[i]);
@@ -191,7 +201,7 @@ static void add_instances_from_component(InstancesComponent &instances,
   else {
     const int seed = params.get_input<int>("Seed");
     Array<uint32_t> ids = get_geometry_element_ids_as_uints(src_geometry, ATTR_DOMAIN_POINT);
-    parallel_for(IndexRange(domain_size), 1024, [&](IndexRange range) {
+    threading::parallel_for(IndexRange(domain_size), 1024, [&](IndexRange range) {
       for (const int i : range) {
         const int index = BLI_hash_int_2d(ids[i], seed) % possible_handles.size();
         const int handle = possible_handles[index];
@@ -249,12 +259,13 @@ void register_node_type_geo_point_instance()
 {
   static bNodeType ntype;
 
-  geo_node_type_base(&ntype, GEO_NODE_POINT_INSTANCE, "Point Instance", NODE_CLASS_GEOMETRY, 0);
-  node_type_socket_templates(&ntype, geo_node_point_instance_in, geo_node_point_instance_out);
+  geo_node_type_base(
+      &ntype, GEO_NODE_LEGACY_POINT_INSTANCE, "Point Instance", NODE_CLASS_GEOMETRY, 0);
   node_type_init(&ntype, blender::nodes::geo_node_point_instance_init);
   node_type_storage(
       &ntype, "NodeGeometryPointInstance", node_free_standard_storage, node_copy_standard_storage);
-  ntype.draw_buttons = geo_node_point_instance_layout;
+  ntype.declare = blender::nodes::geo_node_point_instance_declare;
+  ntype.draw_buttons = blender::nodes::geo_node_point_instance_layout;
   node_type_update(&ntype, blender::nodes::geo_node_point_instance_update);
   ntype.geometry_node_execute = blender::nodes::geo_node_point_instance_exec;
   nodeRegisterType(&ntype);

@@ -82,8 +82,8 @@ typedef void (*IDTypeMakeLocalFunction)(struct Main *bmain, struct ID *id, const
 typedef void (*IDTypeForeachIDFunction)(struct ID *id, struct LibraryForeachIDData *data);
 
 typedef enum eIDTypeInfoCacheCallbackFlags {
-  /** Indicates to the callback that that cache may be stored in the .blend file, so its pointer
-   * should not be cleared at read-time. */
+  /** Indicates to the callback that cache may be stored in the .blend file,
+   * so its pointer should not be cleared at read-time. */
   IDTYPE_CACHE_CB_FLAGS_PERSISTENT = 1 << 0,
 } eIDTypeInfoCacheCallbackFlags;
 typedef void (*IDTypeForeachCacheFunctionCallback)(struct ID *id,
@@ -114,8 +114,8 @@ typedef struct IDTypeInfo {
   /* ********** General IDType data. ********** */
 
   /**
-   * Unique identifier of this type, either as a short or an array of two chars, see DNA_ID.h's
-   * ID_XX enums.
+   * Unique identifier of this type, either as a short or an array of two chars, see
+   * DNA_ID_enums.h's ID_XX enums.
    */
   short id_code;
   /**

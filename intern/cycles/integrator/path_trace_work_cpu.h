@@ -40,17 +40,25 @@ class CPUKernels;
 class PathTraceWorkCPU : public PathTraceWork {
  public:
   PathTraceWorkCPU(Device *device,
+                   Film *film,
                    DeviceScene *device_scene,
-                   RenderBuffers *buffers,
                    bool *cancel_requested_flag);
 
   virtual void init_execution() override;
 
   virtual void render_samples(int start_sample, int samples_num) override;
 
-  virtual void copy_to_gpu_display(GPUDisplay *gpu_display, float sample_scale) override;
+  virtual void copy_to_gpu_display(GPUDisplay *gpu_display,
+                                   PassMode pass_mode,
+                                   int num_samples) override;
+  virtual void destroy_gpu_resources(GPUDisplay *gpu_display) override;
+
+  virtual bool copy_render_buffers_from_device() override;
+  virtual bool copy_render_buffers_to_device() override;
+  virtual bool zero_render_buffers() override;
 
   virtual int adaptive_sampling_converge_filter_count_active(float threshold, bool reset) override;
+  virtual void cryptomatte_postproces() override;
 
  protected:
   /* Core path tracing routine. Renders given work time on the given queue. */
@@ -67,9 +75,6 @@ class PathTraceWorkCPU : public PathTraceWork {
    * accessing it, but some "localization" is required to decouple from kernel globals stored
    * on the device level. */
   vector<CPUKernelThreadGlobals> kernel_thread_globals_;
-
-  /* Render output buffers. */
-  RenderBuffers *render_buffers_;
 };
 
 CCL_NAMESPACE_END

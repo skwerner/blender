@@ -22,28 +22,26 @@
 
 #include "node_geometry_util.hh"
 
-static bNodeSocketTemplate geo_node_attribute_map_range_in[] = {
-    {SOCK_GEOMETRY, N_("Geometry")},
-    {SOCK_STRING, N_("Attribute")},
-    {SOCK_STRING, N_("Result")},
-    {SOCK_FLOAT, N_("From Min"), 0.0f, 0.0f, 0.0f, 0.0f, -FLT_MAX, FLT_MAX},
-    {SOCK_FLOAT, N_("From Max"), 1.0f, 0.0f, 0.0f, 0.0f, -FLT_MAX, FLT_MAX},
-    {SOCK_FLOAT, N_("To Min"), 0.0f, 0.0f, 0.0f, 0.0f, -FLT_MAX, FLT_MAX},
-    {SOCK_FLOAT, N_("To Max"), 1.0f, 0.0f, 0.0f, 0.0f, -FLT_MAX, FLT_MAX},
-    {SOCK_FLOAT, N_("Steps"), 4.0f, 4.0f, 4.0f, 0.0f, -FLT_MAX, FLT_MAX},
-    {SOCK_VECTOR, N_("From Min"), 0.0f, 0.0f, 0.0f, 0.0f, -FLT_MAX, FLT_MAX},
-    {SOCK_VECTOR, N_("From Max"), 1.0f, 1.0f, 1.0f, 0.0f, -FLT_MAX, FLT_MAX},
-    {SOCK_VECTOR, N_("To Min"), 0.0f, 0.0f, 0.0f, 0.0f, -FLT_MAX, FLT_MAX},
-    {SOCK_VECTOR, N_("To Max"), 1.0f, 1.0f, 1.0f, 0.0f, -FLT_MAX, FLT_MAX},
-    {SOCK_VECTOR, N_("Steps"), 4.0f, 4.0f, 4.0f, 0.0f, -FLT_MAX, FLT_MAX},
-    {SOCK_BOOLEAN, N_("Clamp")},
-    {-1, ""},
-};
+namespace blender::nodes {
 
-static bNodeSocketTemplate geo_node_attribute_map_range_out[] = {
-    {SOCK_GEOMETRY, N_("Geometry")},
-    {-1, ""},
-};
+static void geo_node_attribute_map_range_declare(NodeDeclarationBuilder &b)
+{
+  b.add_input<decl::Geometry>("Geometry");
+  b.add_input<decl::String>("Attribute");
+  b.add_input<decl::String>("Result");
+  b.add_input<decl::Float>("From Min");
+  b.add_input<decl::Float>("From Max").default_value(1.0f);
+  b.add_input<decl::Float>("To Min");
+  b.add_input<decl::Float>("To Max").default_value(1.0f);
+  b.add_input<decl::Float>("Steps").default_value(4.0f);
+  b.add_input<decl::Vector>("From Min", "From Min_001");
+  b.add_input<decl::Vector>("From Max", "From Max_001").default_value({1.0f, 1.0f, 1.0f});
+  b.add_input<decl::Vector>("To Min", "To Min_001");
+  b.add_input<decl::Vector>("To Max", "To Max_001").default_value({1.0f, 1.0f, 1.0f});
+  b.add_input<decl::Vector>("Steps", "Steps_001").default_value({4.0f, 4.0f, 4.0f});
+  b.add_input<decl::Bool>("Clamp");
+  b.add_output<decl::Geometry>("Geometry");
+}
 
 static void fn_attribute_map_range_layout(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
 {
@@ -100,8 +98,6 @@ static void geo_node_attribute_map_range_update(bNodeTree *UNUSED(ntree), bNode 
                             data_type == CD_PROP_FLOAT3 &&
                                 node_storage.interpolation_type == NODE_MAP_RANGE_STEPPED);
 }
-
-namespace blender::nodes {
 
 static float map_linear(const float value,
                         const float min_from,
@@ -209,7 +205,7 @@ static void map_range_float(const VArray<float> &attribute_input,
 
   switch (interpolation_type) {
     case NODE_MAP_RANGE_LINEAR: {
-      parallel_for(span.index_range(), 2048, [&](IndexRange range) {
+      threading::parallel_for(span.index_range(), 2048, [&](IndexRange range) {
         for (const int i : range) {
           results[i] = map_linear(span[i], min_from, max_from, min_to, max_to);
         }
@@ -218,7 +214,7 @@ static void map_range_float(const VArray<float> &attribute_input,
     }
     case NODE_MAP_RANGE_STEPPED: {
       const float steps = params.get_input<float>("Steps");
-      parallel_for(span.index_range(), 1024, [&](IndexRange range) {
+      threading::parallel_for(span.index_range(), 1024, [&](IndexRange range) {
         for (const int i : range) {
           results[i] = map_stepped(span[i], min_from, max_from, min_to, max_to, steps);
         }
@@ -226,7 +222,7 @@ static void map_range_float(const VArray<float> &attribute_input,
       break;
     }
     case NODE_MAP_RANGE_SMOOTHSTEP: {
-      parallel_for(span.index_range(), 1024, [&](IndexRange range) {
+      threading::parallel_for(span.index_range(), 1024, [&](IndexRange range) {
         for (const int i : range) {
           results[i] = map_smoothstep(span[i], min_from, max_from, min_to, max_to);
         }
@@ -234,7 +230,7 @@ static void map_range_float(const VArray<float> &attribute_input,
       break;
     }
     case NODE_MAP_RANGE_SMOOTHERSTEP: {
-      parallel_for(span.index_range(), 1024, [&](IndexRange range) {
+      threading::parallel_for(span.index_range(), 1024, [&](IndexRange range) {
         for (const int i : range) {
           results[i] = map_smootherstep(span[i], min_from, max_from, min_to, max_to);
         }
@@ -249,7 +245,7 @@ static void map_range_float(const VArray<float> &attribute_input,
     const float clamp_min = min_to < max_to ? min_to : max_to;
     const float clamp_max = min_to < max_to ? max_to : min_to;
 
-    parallel_for(results.index_range(), 2048, [&](IndexRange range) {
+    threading::parallel_for(results.index_range(), 2048, [&](IndexRange range) {
       for (const int i : range) {
         results[i] = std::clamp(results[i], clamp_min, clamp_max);
       }
@@ -273,7 +269,7 @@ static void map_range_float3(const VArray<float3> &attribute_input,
 
   switch (interpolation_type) {
     case NODE_MAP_RANGE_LINEAR: {
-      parallel_for(span.index_range(), 1024, [&](IndexRange range) {
+      threading::parallel_for(span.index_range(), 1024, [&](IndexRange range) {
         for (const int i : range) {
           results[i].x = map_linear(span[i].x, min_from.x, max_from.x, min_to.x, max_to.x);
           results[i].y = map_linear(span[i].y, min_from.y, max_from.y, min_to.y, max_to.y);
@@ -284,7 +280,7 @@ static void map_range_float3(const VArray<float3> &attribute_input,
     }
     case NODE_MAP_RANGE_STEPPED: {
       const float3 steps = params.get_input<float3>("Steps_001");
-      parallel_for(span.index_range(), 1024, [&](IndexRange range) {
+      threading::parallel_for(span.index_range(), 1024, [&](IndexRange range) {
         for (const int i : range) {
           results[i].x = map_stepped(
               span[i].x, min_from.x, max_from.x, min_to.x, max_to.x, steps.x);
@@ -297,7 +293,7 @@ static void map_range_float3(const VArray<float3> &attribute_input,
       break;
     }
     case NODE_MAP_RANGE_SMOOTHSTEP: {
-      parallel_for(span.index_range(), 1024, [&](IndexRange range) {
+      threading::parallel_for(span.index_range(), 1024, [&](IndexRange range) {
         for (const int i : range) {
           results[i].x = map_smoothstep(span[i].x, min_from.x, max_from.x, min_to.x, max_to.x);
           results[i].y = map_smoothstep(span[i].y, min_from.y, max_from.y, min_to.y, max_to.y);
@@ -307,7 +303,7 @@ static void map_range_float3(const VArray<float3> &attribute_input,
       break;
     }
     case NODE_MAP_RANGE_SMOOTHERSTEP: {
-      parallel_for(span.index_range(), 1024, [&](IndexRange range) {
+      threading::parallel_for(span.index_range(), 1024, [&](IndexRange range) {
         for (const int i : range) {
           results[i].x = map_smootherstep(span[i].x, min_from.x, max_from.x, min_to.x, max_to.x);
           results[i].y = map_smootherstep(span[i].y, min_from.y, max_from.y, min_to.y, max_to.y);
@@ -424,14 +420,13 @@ void register_node_type_geo_attribute_map_range()
   static bNodeType ntype;
 
   geo_node_type_base(
-      &ntype, GEO_NODE_ATTRIBUTE_MAP_RANGE, "Attribute Map Range", NODE_CLASS_ATTRIBUTE, 0);
-  node_type_socket_templates(
-      &ntype, geo_node_attribute_map_range_in, geo_node_attribute_map_range_out);
+      &ntype, GEO_NODE_LEGACY_ATTRIBUTE_MAP_RANGE, "Attribute Map Range", NODE_CLASS_ATTRIBUTE, 0);
   ntype.geometry_node_execute = blender::nodes::geo_node_attribute_map_range_exec;
-  node_type_init(&ntype, geo_node_attribute_map_range_init);
-  node_type_update(&ntype, geo_node_attribute_map_range_update);
+  node_type_init(&ntype, blender::nodes::geo_node_attribute_map_range_init);
+  node_type_update(&ntype, blender::nodes::geo_node_attribute_map_range_update);
   node_type_storage(
       &ntype, "NodeAttributeMapRange", node_free_standard_storage, node_copy_standard_storage);
-  ntype.draw_buttons = fn_attribute_map_range_layout;
+  ntype.declare = blender::nodes::geo_node_attribute_map_range_declare;
+  ntype.draw_buttons = blender::nodes::fn_attribute_map_range_layout;
   nodeRegisterType(&ntype);
 }

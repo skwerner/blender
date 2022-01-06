@@ -16,6 +16,7 @@
 
 #include "BLI_array.hh"
 #include "BLI_span.hh"
+#include "BLI_task.hh"
 #include "BLI_timeit.hh"
 
 #include "BKE_spline.hh"
@@ -27,10 +28,70 @@ using blender::float3;
 using blender::IndexRange;
 using blender::MutableSpan;
 using blender::Span;
+using blender::fn::GMutableSpan;
+using blender::fn::GSpan;
+using blender::fn::GVArray;
+using blender::fn::GVArray_For_GSpan;
+using blender::fn::GVArray_Typed;
+using blender::fn::GVArrayPtr;
 
 Spline::Type Spline::type() const
 {
   return type_;
+}
+
+void Spline::copy_base_settings(const Spline &src, Spline &dst)
+{
+  dst.normal_mode = src.normal_mode;
+  dst.is_cyclic_ = src.is_cyclic_;
+}
+
+static SplinePtr create_spline(const Spline::Type type)
+{
+  switch (type) {
+    case Spline::Type::Poly:
+      return std::make_unique<PolySpline>();
+    case Spline::Type::Bezier:
+      return std::make_unique<BezierSpline>();
+    case Spline::Type::NURBS:
+      return std::make_unique<NURBSpline>();
+  }
+  BLI_assert_unreachable();
+  return {};
+}
+
+/**
+ * Return a new spline with the same data, settings, and attributes.
+ */
+SplinePtr Spline::copy() const
+{
+  SplinePtr dst = this->copy_without_attributes();
+  dst->attributes = this->attributes;
+  return dst;
+}
+
+/**
+ * Return a new spline with the same type and settings like "cyclic", but without any data.
+ */
+SplinePtr Spline::copy_only_settings() const
+{
+  SplinePtr dst = create_spline(type_);
+  this->copy_base_settings(*this, *dst);
+  this->copy_settings(*dst);
+  return dst;
+}
+
+/**
+ * The same as #copy, but skips copying dynamic attributes to the new spline.
+ */
+SplinePtr Spline::copy_without_attributes() const
+{
+  SplinePtr dst = this->copy_only_settings();
+  this->copy_data(*dst);
+
+  /* Though the attributes storage is empty, it still needs to know the correct size. */
+  dst->attributes.reallocate(dst->size());
+  return dst;
 }
 
 void Spline::translate(const blender::float3 &translation)
@@ -62,14 +123,14 @@ int Spline::evaluated_edges_size() const
 float Spline::length() const
 {
   Span<float> lengths = this->evaluated_lengths();
-  return (lengths.size() == 0) ? 0 : this->evaluated_lengths().last();
+  return lengths.is_empty() ? 0.0f : this->evaluated_lengths().last();
 }
 
 int Spline::segments_size() const
 {
-  const int points_len = this->size();
+  const int size = this->size();
 
-  return is_cyclic_ ? points_len : points_len - 1;
+  return is_cyclic_ ? size : size - 1;
 }
 
 bool Spline::is_cyclic() const
@@ -128,7 +189,11 @@ static float3 direction_bisect(const float3 &prev, const float3 &middle, const f
   const float3 dir_prev = (middle - prev).normalized();
   const float3 dir_next = (next - middle).normalized();
 
-  return (dir_prev + dir_next).normalized();
+  const float3 result = (dir_prev + dir_next).normalized();
+  if (UNLIKELY(result.is_zero())) {
+    return float3(0.0f, 0.0f, 1.0f);
+  }
+  return result;
 }
 
 static void calculate_tangents(Span<float3> positions,
@@ -136,6 +201,7 @@ static void calculate_tangents(Span<float3> positions,
                                MutableSpan<float3> tangents)
 {
   if (positions.size() == 1) {
+    tangents.first() = float3(0.0f, 0.0f, 1.0f);
     return;
   }
 
@@ -176,13 +242,8 @@ Span<float3> Spline::evaluated_tangents() const
 
   Span<float3> positions = this->evaluated_positions();
 
-  if (eval_size == 1) {
-    evaluated_tangents_cache_.first() = float3(1.0f, 0.0f, 0.0f);
-  }
-  else {
-    calculate_tangents(positions, is_cyclic_, evaluated_tangents_cache_);
-    this->correct_end_tangents();
-  }
+  calculate_tangents(positions, is_cyclic_, evaluated_tangents_cache_);
+  this->correct_end_tangents();
 
   tangent_cache_dirty_ = false;
   return evaluated_tangents_cache_;
@@ -202,10 +263,86 @@ static float3 rotate_direction_around_axis(const float3 &direction,
   return axis_scaled + diff * std::cos(angle) + cross * std::sin(angle);
 }
 
-static void calculate_normals_z_up(Span<float3> tangents, MutableSpan<float3> normals)
+static void calculate_normals_z_up(Span<float3> tangents, MutableSpan<float3> r_normals)
 {
-  for (const int i : normals.index_range()) {
-    normals[i] = float3::cross(tangents[i], float3(0.0f, 0.0f, 1.0f)).normalized();
+  BLI_assert(r_normals.size() == tangents.size());
+
+  /* Same as in `vec_to_quat`. */
+  const float epsilon = 1e-4f;
+  for (const int i : r_normals.index_range()) {
+    const float3 &tangent = tangents[i];
+    if (fabsf(tangent.x) + fabsf(tangent.y) < epsilon) {
+      r_normals[i] = {1.0f, 0.0f, 0.0f};
+    }
+    else {
+      r_normals[i] = float3(tangent.y, -tangent.x, 0.0f).normalized();
+    }
+  }
+}
+
+/**
+ * Rotate the last normal in the same way the tangent has been rotated.
+ */
+static float3 calculate_next_normal(const float3 &last_normal,
+                                    const float3 &last_tangent,
+                                    const float3 &current_tangent)
+{
+  if (last_tangent.is_zero() || current_tangent.is_zero()) {
+    return last_normal;
+  }
+  const float angle = angle_normalized_v3v3(last_tangent, current_tangent);
+  if (angle != 0.0) {
+    const float3 axis = float3::cross(last_tangent, current_tangent).normalized();
+    return rotate_direction_around_axis(last_normal, axis, angle);
+  }
+  return last_normal;
+}
+
+static void calculate_normals_minimum(Span<float3> tangents,
+                                      const bool cyclic,
+                                      MutableSpan<float3> r_normals)
+{
+  BLI_assert(r_normals.size() == tangents.size());
+
+  if (r_normals.is_empty()) {
+    return;
+  }
+
+  const float epsilon = 1e-4f;
+
+  /* Set initial normal. */
+  const float3 &first_tangent = tangents[0];
+  if (fabs(first_tangent.x) + fabs(first_tangent.y) < epsilon) {
+    r_normals[0] = {1.0f, 0.0f, 0.0f};
+  }
+  else {
+    r_normals[0] = float3(first_tangent.y, -first_tangent.x, 0.0f).normalized();
+  }
+
+  /* Forward normal with minimum twist along the entire spline. */
+  for (const int i : IndexRange(1, r_normals.size() - 1)) {
+    r_normals[i] = calculate_next_normal(r_normals[i - 1], tangents[i - 1], tangents[i]);
+  }
+
+  if (!cyclic) {
+    return;
+  }
+
+  /* Compute how much the first normal deviates from the normal that has been forwarded along the
+   * entire cyclic spline. */
+  const float3 uncorrected_last_normal = calculate_next_normal(
+      r_normals.last(), tangents.last(), tangents[0]);
+  float correction_angle = angle_signed_on_axis_v3v3_v3(
+      r_normals[0], uncorrected_last_normal, tangents[0]);
+  if (correction_angle > M_PI) {
+    correction_angle = correction_angle - 2 * M_PI;
+  }
+
+  /* Gradually apply correction by rotating all normals slightly. */
+  const float angle_step = correction_angle / r_normals.size();
+  for (const int i : r_normals.index_range()) {
+    const float angle = angle_step * i;
+    r_normals[i] = rotate_direction_around_axis(r_normals[i], tangents[i], angle);
   }
 }
 
@@ -227,15 +364,28 @@ Span<float3> Spline::evaluated_normals() const
   const int eval_size = this->evaluated_points_size();
   evaluated_normals_cache_.resize(eval_size);
 
-  Span<float3> tangents = evaluated_tangents();
+  Span<float3> tangents = this->evaluated_tangents();
   MutableSpan<float3> normals = evaluated_normals_cache_;
 
   /* Only Z up normals are supported at the moment. */
-  calculate_normals_z_up(tangents, normals);
+  switch (this->normal_mode) {
+    case ZUp: {
+      calculate_normals_z_up(tangents, normals);
+      break;
+    }
+    case Minimum: {
+      calculate_normals_minimum(tangents, is_cyclic_, normals);
+      break;
+    }
+    case Tangent: {
+      /* Tangent mode is not yet supported. */
+      calculate_normals_z_up(tangents, normals);
+      break;
+    }
+  }
 
   /* Rotate the generated normals with the interpolated tilt data. */
-  blender::fn::GVArray_Typed<float> tilts{
-      this->interpolate_to_evaluated_points(blender::fn::GVArray_For_Span(this->tilts()))};
+  GVArray_Typed<float> tilts = this->interpolate_to_evaluated(this->tilts());
   for (const int i : normals.index_range()) {
     normals[i] = rotate_direction_around_axis(normals[i], tangents[i], tilts[i]);
   }
@@ -260,7 +410,7 @@ Spline::LookupResult Spline::lookup_evaluated_length(const float length) const
 
   const float *offset = std::lower_bound(lengths.begin(), lengths.end(), length);
   const int index = offset - lengths.begin();
-  const int next_index = (index == this->size() - 1) ? 0 : index + 1;
+  const int next_index = (index == this->evaluated_points_size() - 1) ? 0 : index + 1;
 
   const float previous_length = (index == 0) ? 0.0f : lengths[index - 1];
   const float factor = (length - previous_length) / (lengths[index] - previous_length);
@@ -315,23 +465,23 @@ Array<float> Spline::sample_uniform_index_factors(const int samples_size) const
 
 Spline::LookupResult Spline::lookup_data_from_index_factor(const float index_factor) const
 {
-  const int points_len = this->evaluated_points_size();
+  const int eval_size = this->evaluated_points_size();
 
   if (is_cyclic_) {
-    if (index_factor < points_len) {
+    if (index_factor < eval_size) {
       const int index = std::floor(index_factor);
-      const int next_index = (index < points_len - 1) ? index + 1 : 0;
+      const int next_index = (index < eval_size - 1) ? index + 1 : 0;
       return LookupResult{index, next_index, index_factor - index};
     }
-    return LookupResult{points_len - 1, 0, 1.0f};
+    return LookupResult{eval_size - 1, 0, 1.0f};
   }
 
-  if (index_factor < points_len - 1) {
+  if (index_factor < eval_size - 1) {
     const int index = std::floor(index_factor);
     const int next_index = index + 1;
     return LookupResult{index, next_index, index_factor - index};
   }
-  return LookupResult{points_len - 2, points_len - 1, 1.0f};
+  return LookupResult{eval_size - 2, eval_size - 1, 1.0f};
 }
 
 void Spline::bounds_min_max(float3 &min, float3 &max, const bool use_evaluated) const
@@ -340,4 +490,39 @@ void Spline::bounds_min_max(float3 &min, float3 &max, const bool use_evaluated) 
   for (const float3 &position : positions) {
     minmax_v3v3_v3(min, max, position);
   }
+}
+
+GVArrayPtr Spline::interpolate_to_evaluated(GSpan data) const
+{
+  return this->interpolate_to_evaluated(GVArray_For_GSpan(data));
+}
+
+/**
+ * Sample any input data with a value for each evaluated point (already interpolated to evaluated
+ * points) to arbitrary parameters in between the evaluated points. The interpolation is quite
+ * simple, but this handles the cyclic and end point special cases.
+ */
+void Spline::sample_with_index_factors(const GVArray &src,
+                                       Span<float> index_factors,
+                                       GMutableSpan dst) const
+{
+  BLI_assert(src.size() == this->evaluated_points_size());
+
+  blender::attribute_math::convert_to_static_type(src.type(), [&](auto dummy) {
+    using T = decltype(dummy);
+    const GVArray_Typed<T> src_typed = src.typed<T>();
+    MutableSpan<T> dst_typed = dst.typed<T>();
+    if (src.size() == 1) {
+      dst_typed.fill(src_typed[0]);
+      return;
+    }
+    blender::threading::parallel_for(dst_typed.index_range(), 1024, [&](IndexRange range) {
+      for (const int i : range) {
+        const LookupResult interp = this->lookup_data_from_index_factor(index_factors[i]);
+        dst_typed[i] = blender::attribute_math::mix2(interp.factor,
+                                                     src_typed[interp.evaluated_index],
+                                                     src_typed[interp.next_evaluated_index]);
+      }
+    });
+  });
 }

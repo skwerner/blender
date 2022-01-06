@@ -80,7 +80,7 @@ static void foreach_nodeclass(Scene *UNUSED(scene), void *calldata, bNodeClassCa
   func(calldata, NODE_CLASS_ATTRIBUTE, N_("Attribute"));
   func(calldata, NODE_CLASS_OP_COLOR, N_("Color"));
   func(calldata, NODE_CLASS_OP_VECTOR, N_("Vector"));
-  func(calldata, NODE_CLASS_CONVERTOR, N_("Convertor"));
+  func(calldata, NODE_CLASS_CONVERTER, N_("Converter"));
   func(calldata, NODE_CLASS_LAYOUT, N_("Layout"));
 }
 
@@ -95,21 +95,21 @@ static bool geometry_node_tree_validate_link(bNodeTree *UNUSED(ntree), bNodeLink
   return (link->tosock->type == link->fromsock->type);
 }
 
-static bool geometry_node_tree_socket_type_valid(eNodeSocketDatatype socket_type,
-                                                 bNodeTreeType *UNUSED(ntreetype))
+static bool geometry_node_tree_socket_type_valid(bNodeTreeType *UNUSED(ntreetype),
+                                                 bNodeSocketType *socket_type)
 {
-  return ELEM(socket_type,
-              SOCK_FLOAT,
-              SOCK_VECTOR,
-              SOCK_RGBA,
-              SOCK_BOOLEAN,
-              SOCK_INT,
-              SOCK_STRING,
-              SOCK_OBJECT,
-              SOCK_GEOMETRY,
-              SOCK_COLLECTION,
-              SOCK_TEXTURE,
-              SOCK_MATERIAL);
+  return nodeIsStaticSocketType(socket_type) && ELEM(socket_type->type,
+                                                     SOCK_FLOAT,
+                                                     SOCK_VECTOR,
+                                                     SOCK_RGBA,
+                                                     SOCK_BOOLEAN,
+                                                     SOCK_INT,
+                                                     SOCK_STRING,
+                                                     SOCK_OBJECT,
+                                                     SOCK_GEOMETRY,
+                                                     SOCK_COLLECTION,
+                                                     SOCK_TEXTURE,
+                                                     SOCK_MATERIAL);
 }
 
 void register_node_tree_type_geo(void)

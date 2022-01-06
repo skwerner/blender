@@ -1848,10 +1848,7 @@ static void ed_surf_delete_selected(Object *obedit)
             nu->pntsv = 1;
             SWAP(short, nu->orderu, nu->orderv);
             BKE_nurb_order_clamp_u(nu);
-            if (nu->knotsv) {
-              MEM_freeN(nu->knotsv);
-            }
-            nu->knotsv = NULL;
+            MEM_SAFE_FREE(nu->knotsv);
           }
           else {
             nu->pntsu = newu;
@@ -1929,7 +1926,7 @@ static void ed_curve_delete_selected(Object *obedit, View3D *v3d)
     }
 
     /* Never allow the order to exceed the number of points
-     * - note, this is ok but changes unselected nurbs, disable for now */
+     * NOTE: this is ok but changes unselected nurbs, disable for now. */
 #if 0
     if ((nu != NULL) && (nu->type == CU_NURBS)) {
       clamp_nurb_order_u(nu);
@@ -1988,7 +1985,7 @@ static void ed_curve_delete_selected(Object *obedit, View3D *v3d)
         nu->bp = bp1;
 
         /* Never allow the order to exceed the number of points
-         * - note, this is ok but changes unselected nurbs, disable for now */
+         * NOTE: this is ok but changes unselected nurbs, disable for now. */
 #if 0
         if (nu->type == CU_NURBS) {
           clamp_nurb_order_u(nu);
@@ -3747,8 +3744,8 @@ static void subdividenurb(Object *obedit, View3D *v3d, int number_cuts)
           }
 
           if (sel) { /* U ! */
-            /* Inserting U points is sort of 'default' Flat curves only get */
-            /* U points inserted in them.                                   */
+            /* Inserting U points is sort of 'default' Flat curves only get
+             * U points inserted in them. */
             bpn = bpnew = MEM_mallocN((sel + nu->pntsu) * nu->pntsv * sizeof(BPoint),
                                       "subdivideNurb4");
             bp = nu->bp;
@@ -3786,7 +3783,7 @@ static void subdividenurb(Object *obedit, View3D *v3d, int number_cuts)
       MEM_freeN(usel);
       MEM_freeN(vsel);
 
-    } /* End of 'if (nu->type == CU_NURBS)'  */
+    } /* End of `if (nu->type == CU_NURBS)`. */
   }
 }
 
@@ -4650,10 +4647,7 @@ static int make_segment_exec(bContext *C, wmOperator *op)
 
           /* now join the knots */
           if (nu1->type == CU_NURBS) {
-            if (nu1->knotsu != NULL) {
-              MEM_freeN(nu1->knotsu);
-              nu1->knotsu = NULL;
-            }
+            MEM_SAFE_FREE(nu1->knotsu);
 
             BKE_nurb_knot_calc_u(nu1);
           }
@@ -6646,7 +6640,7 @@ void CURVE_OT_dissolve_verts(wmOperatorType *ot)
 
 static bool nurb_bezt_flag_any(const Nurb *nu, const char flag_test)
 {
-  BezTriple *bezt = nu->bezt;
+  const BezTriple *bezt;
   int i;
 
   for (i = nu->pntsu, bezt = nu->bezt; i--; bezt++) {
@@ -6877,7 +6871,7 @@ int ED_curve_join_objects_exec(bContext *C, wmOperator *op)
 
           LISTBASE_FOREACH (Nurb *, nu, &cu->nurb) {
             Nurb *newnu = BKE_nurb_duplicate(nu);
-            if (ob_active->totcol) { /* TODO, merge material lists */
+            if (ob_active->totcol) { /* TODO: merge material lists. */
               CLAMP(newnu->mat_nr, 0, ob_active->totcol - 1);
             }
             else {

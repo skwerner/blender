@@ -88,12 +88,15 @@ ccl_device_inline void integrate_light(INTEGRATOR_STATE_ARGS,
   }
 
   /* Write to render buffer. */
-  kernel_accum_emission(INTEGRATOR_STATE_PASS, light_eval, render_buffer);
+  const float3 throughput = INTEGRATOR_STATE(path, throughput);
+  kernel_accum_emission(INTEGRATOR_STATE_PASS, throughput, light_eval, render_buffer);
 }
 
 ccl_device void integrator_shade_light(INTEGRATOR_STATE_ARGS,
                                        ccl_global float *ccl_restrict render_buffer)
 {
+  PROFILING_INIT(kg, PROFILING_SHADE_LIGHT_SETUP);
+
   integrate_light(INTEGRATOR_STATE_PASS, render_buffer);
 
   /* TODO: we could get stuck in an infinite loop if there are precision issues
@@ -106,11 +109,12 @@ ccl_device void integrator_shade_light(INTEGRATOR_STATE_ARGS,
   INTEGRATOR_STATE_WRITE(path, transparent_bounce) = transparent_bounce;
 
   if (transparent_bounce >= kernel_data.integrator.transparent_max_bounce) {
-    INTEGRATOR_PATH_TERMINATE(SHADE_LIGHT);
+    INTEGRATOR_PATH_TERMINATE(DEVICE_KERNEL_INTEGRATOR_SHADE_LIGHT);
     return;
   }
   else {
-    INTEGRATOR_PATH_NEXT(SHADE_LIGHT, INTERSECT_CLOSEST);
+    INTEGRATOR_PATH_NEXT(DEVICE_KERNEL_INTEGRATOR_SHADE_LIGHT,
+                         DEVICE_KERNEL_INTEGRATOR_INTERSECT_CLOSEST);
     return;
   }
 

@@ -141,6 +141,16 @@ if(WITH_ALEMBIC)
   )
 endif()
 
+if(WITH_USD)
+  add_definitions(-DWITH_USD)
+  list(APPEND INC
+    ../io/usd
+  )
+  list(APPEND LIB
+    bf_usd
+  )
+endif()
+
 if(WITH_MOD_REMESH)
   list(APPEND INC
     ../../../intern/dualcon
@@ -195,7 +205,11 @@ endif()
 
 if(WITH_TBB)
   add_definitions(-DWITH_TBB)
-
+  if(WIN32)
+    # TBB includes Windows.h which will define min/max macros
+    # that will collide with the stl versions.
+    add_definitions(-DNOMINMAX)
+  endif()
   list(APPEND INC_SYS
     ${TBB_INCLUDE_DIRS}
   )

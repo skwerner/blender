@@ -18,6 +18,7 @@
 #include <string.h>
 
 #include "device/device.h"
+#include "integrator/pass_accessor_cpu.h"
 #include "integrator/path_trace.h"
 #include "render/bake.h"
 #include "render/buffers.h"
@@ -28,7 +29,6 @@
 #include "render/light.h"
 #include "render/mesh.h"
 #include "render/object.h"
-#include "render/pass_accessor.h"
 #include "render/scene.h"
 #include "render/session.h"
 
@@ -43,37 +43,45 @@
 CCL_NAMESPACE_BEGIN
 
 Session::Session(const SessionParams &params_, const SceneParams &scene_params)
-    : params(params_),
-      tile_manager_(make_int2(4096, 4096)),
-      render_scheduler_(params.headless, params.background, params.pixel_size)
+    : params(params_), render_scheduler_(tile_manager_, params)
 {
   TaskScheduler::init(params.threads);
 
-  session_thread = NULL;
+  session_thread_ = nullptr;
 
-  delayed_reset.do_reset = false;
-  delayed_reset.samples = 0;
+  delayed_reset_.do_reset = false;
+  delayed_reset_.samples = 0;
 
-  pause = false;
+  pause_ = false;
+  cancel_ = false;
+  new_work_added_ = false;
 
   device = Device::create(params.device, stats, profiler);
 
   scene = new Scene(scene_params, device);
 
   /* Configure path tracer. */
-  path_trace_ = make_unique<PathTrace>(device, &scene->dscene, render_scheduler_);
+  path_trace_ = make_unique<PathTrace>(
+      device, scene->film, &scene->dscene, render_scheduler_, tile_manager_);
   path_trace_->set_progress(&progress);
-  path_trace_->buffer_update_cb = [&]() {
+  path_trace_->tile_buffer_update_cb = [&]() {
     if (!update_render_tile_cb) {
       return;
     }
     update_render_tile_cb();
   };
-  path_trace_->buffer_write_cb = [&]() {
+  path_trace_->tile_buffer_write_cb = [&]() {
     if (!write_render_tile_cb) {
       return;
     }
     write_render_tile_cb();
+  };
+  path_trace_->tile_buffer_read_cb = [&]() -> bool {
+    if (!read_render_tile_cb) {
+      return false;
+    }
+    read_render_tile_cb();
+    return true;
   };
   path_trace_->progress_update_cb = [&]() { update_status_time(); };
 }
@@ -106,11 +114,6 @@ Session::~Session()
    * pre-defined order. */
   path_trace_.reset();
 
-#if 0
-  /* clean up */
-  tile_manager_.device_free();
-#endif
-
   delete scene;
   delete device;
 
@@ -119,8 +122,8 @@ Session::~Session()
 
 void Session::start()
 {
-  if (!session_thread) {
-    session_thread = new thread(function_bind(&Session::run, this));
+  if (!session_thread_) {
+    session_thread_ = new thread(function_bind(&Session::run, this));
   }
 }
 
@@ -130,15 +133,16 @@ void Session::cancel(bool quick)
     path_trace_->cancel();
   }
 
-  if (session_thread) {
+  if (session_thread_) {
     /* wait for session thread to end */
     progress.set_cancel("Exiting");
 
     {
-      thread_scoped_lock pause_lock(pause_mutex);
-      pause = false;
+      thread_scoped_lock pause_lock(pause_mutex_);
+      pause_ = false;
+      cancel_ = true;
     }
-    pause_cond.notify_all();
+    pause_cond_.notify_all();
 
     wait();
   }
@@ -151,8 +155,8 @@ bool Session::ready_to_reset()
 
 void Session::run_main_render_loop()
 {
-  while (!progress.get_cancel()) {
-    const RenderWork render_work = run_update_for_next_iteration();
+  while (true) {
+    RenderWork render_work = run_update_for_next_iteration();
 
     if (!render_work) {
       if (VLOG_IS_ON(2)) {
@@ -169,19 +173,22 @@ void Session::run_main_render_loop()
       }
     }
 
-    if (run_wait_for_work(render_work)) {
-      continue;
+    const bool did_cancel = progress.get_cancel();
+    if (did_cancel) {
+      render_scheduler_.render_work_reschedule_on_cancel(render_work);
+      if (!render_work) {
+        break;
+      }
     }
-
-    if (progress.get_cancel()) {
-      break;
+    else if (run_wait_for_work(render_work)) {
+      continue;
     }
 
     {
       /* buffers mutex is locked entirely while rendering each
        * sample, and released/reacquired on each iteration to allow
        * reset and draw in between */
-      thread_scoped_lock buffers_lock(buffers_mutex);
+      thread_scoped_lock buffers_lock(buffers_mutex_);
 
       /* update status and timing */
       update_status_time();
@@ -201,6 +208,10 @@ void Session::run_main_render_loop()
     }
 
     progress.set_update();
+
+    if (did_cancel) {
+      break;
+    }
   }
 }
 
@@ -235,16 +246,18 @@ RenderWork Session::run_update_for_next_iteration()
   RenderWork render_work;
 
   thread_scoped_lock scene_lock(scene->mutex);
-  thread_scoped_lock reset_lock(delayed_reset.mutex);
+  thread_scoped_lock reset_lock(delayed_reset_.mutex);
 
   bool have_tiles = true;
+  bool switched_to_new_tile = false;
 
-  if (delayed_reset.do_reset) {
-    thread_scoped_lock buffers_lock(buffers_mutex);
+  if (delayed_reset_.do_reset) {
+    thread_scoped_lock buffers_lock(buffers_mutex_);
     do_delayed_reset();
 
     /* After reset make sure the tile manager is at the first big tile. */
     have_tiles = tile_manager_.next();
+    switched_to_new_tile = true;
   }
 
   /* Update number of samples in the integrator.
@@ -265,6 +278,7 @@ RenderWork Session::run_update_for_next_iteration()
   }
 
   render_scheduler_.set_num_samples(params.samples);
+  render_scheduler_.set_time_limit(params.time_limit);
 
   while (have_tiles) {
     render_work = render_scheduler_.get_render_work();
@@ -272,12 +286,32 @@ RenderWork Session::run_update_for_next_iteration()
       break;
     }
 
-    /* TODO(sergey): Add support of the multiple big tile. */
-    break;
+    progress.add_finished_tile(false);
+
+    have_tiles = tile_manager_.next();
+    if (have_tiles) {
+      render_scheduler_.reset_for_next_tile();
+      switched_to_new_tile = true;
+    }
   }
 
   if (render_work) {
     scoped_timer update_timer;
+
+    if (switched_to_new_tile) {
+      BufferParams tile_params = buffer_params_;
+
+      const Tile &tile = tile_manager_.get_current_tile();
+      tile_params.width = tile.width;
+      tile_params.height = tile.height;
+      tile_params.full_x = tile.x + buffer_params_.full_x;
+      tile_params.full_y = tile.y + buffer_params_.full_y;
+      tile_params.full_width = buffer_params_.full_width;
+      tile_params.full_height = buffer_params_.full_height;
+      tile_params.update_offset_stride();
+
+      path_trace_->reset(buffer_params_, tile_params);
+    }
 
     const int resolution = render_work.resolution_divider;
     const int width = max(1, buffer_params_.full_width / resolution);
@@ -299,30 +333,37 @@ bool Session::run_wait_for_work(const RenderWork &render_work)
     return false;
   }
 
-  thread_scoped_lock pause_lock(pause_mutex);
+  thread_scoped_lock pause_lock(pause_mutex_);
 
-  const bool no_work = !render_work;
-
-  if (!pause && !no_work) {
+  if (!pause_ && render_work) {
+    /* Rendering is not paused and there is work to be done. No need to wait for anything. */
     return false;
   }
 
-  update_status_time(pause, no_work);
+  const bool no_work = !render_work;
+  update_status_time(pause_, no_work);
 
-  while (true) {
+  /* Only leave the loop when rendering is not paused. But even if the current render is un-paused
+   * but there is nothing to render keep waiting until new work is added. */
+  while (!cancel_) {
     scoped_timer pause_timer;
-    pause_cond.wait(pause_lock);
-    if (pause) {
+
+    if (!pause_ && (render_work || new_work_added_ || delayed_reset_.do_reset)) {
+      break;
+    }
+
+    /* Wait for either pause state changed, or extra samples added to render. */
+    pause_cond_.wait(pause_lock);
+
+    if (pause_) {
       progress.add_skip_time(pause_timer, params.background);
     }
 
-    update_status_time(pause, no_work);
+    update_status_time(pause_, no_work);
     progress.set_update();
-
-    if (!pause) {
-      break;
-    }
   }
+
+  new_work_added_ = false;
 
   return no_work;
 }
@@ -332,22 +373,43 @@ void Session::draw()
   path_trace_->draw();
 }
 
+int2 Session::get_effective_tile_size() const
+{
+  if (!params.use_auto_tile) {
+    return make_int2(buffer_params_.width, buffer_params_.height);
+  }
+
+  /* TODO(sergey): Take available memory into account, and if there is enough memory do not tile
+   * and prefer optimal performance. */
+
+  return make_int2(params.tile_size, params.tile_size);
+}
+
 void Session::do_delayed_reset()
 {
-  if (!delayed_reset.do_reset) {
+  if (!delayed_reset_.do_reset) {
     return;
   }
-  delayed_reset.do_reset = false;
+  delayed_reset_.do_reset = false;
 
-  scene->update_passes();
+  buffer_params_ = delayed_reset_.params;
 
-  buffer_params_ = delayed_reset.params;
+  /* Tile and work scheduling. */
+  tile_manager_.reset(buffer_params_, get_effective_tile_size());
+  render_scheduler_.reset(buffer_params_, delayed_reset_.samples);
+
+  /* Passes. */
+  /* When multiple tiles are used SAMPLE_COUNT pass is used to keep track of possible partial
+   * tile results. It is safe to use generic update function here which checks for changes since
+   * changes in tile settings re-creates session, which ensures film is fully updated on tile
+   * changes. */
+  scene->film->update_passes(scene, tile_manager_.has_multiple_tiles());
+
+  /* Update for new state of passes. */
   buffer_params_.update_passes(scene->passes);
+  tile_manager_.update_passes(buffer_params_, scene->passes);
 
-  render_scheduler_.reset(buffer_params_, delayed_reset.samples);
-  path_trace_->reset(buffer_params_);
-  tile_manager_.reset(buffer_params_);
-
+  /* Progress. */
   progress.reset_sample();
 
   /* TODO(sergey): Progress report needs to be worked on. */
@@ -364,44 +426,68 @@ void Session::do_delayed_reset()
 
 void Session::reset(BufferParams &buffer_params, int samples)
 {
+  {
+    thread_scoped_lock reset_lock(delayed_reset_.mutex);
+    thread_scoped_lock pause_lock(pause_mutex_);
 
-  thread_scoped_lock reset_lock(delayed_reset.mutex);
-  thread_scoped_lock pause_lock(pause_mutex);
+    delayed_reset_.params = buffer_params;
+    delayed_reset_.samples = samples;
+    delayed_reset_.do_reset = true;
 
-  delayed_reset.params = buffer_params;
-  delayed_reset.samples = samples;
-  delayed_reset.do_reset = true;
+    path_trace_->cancel();
+  }
 
-  path_trace_->cancel();
-
-  pause_cond.notify_all();
+  pause_cond_.notify_all();
 }
 
 void Session::set_samples(int samples)
 {
-  if (samples != params.samples) {
-    params.samples = samples;
-
-    pause_cond.notify_all();
+  if (samples == params.samples) {
+    return;
   }
+
+  params.samples = samples;
+
+  {
+    thread_scoped_lock pause_lock(pause_mutex_);
+    new_work_added_ = true;
+  }
+
+  pause_cond_.notify_all();
 }
 
-void Session::set_pause(bool pause_)
+void Session::set_time_limit(double time_limit)
+{
+  if (time_limit == params.time_limit) {
+    return;
+  }
+
+  params.time_limit = time_limit;
+
+  {
+    thread_scoped_lock pause_lock(pause_mutex_);
+    new_work_added_ = true;
+  }
+
+  pause_cond_.notify_all();
+}
+
+void Session::set_pause(bool pause)
 {
   bool notify = false;
 
   {
-    thread_scoped_lock pause_lock(pause_mutex);
+    thread_scoped_lock pause_lock(pause_mutex_);
 
     if (pause != pause_) {
-      pause = pause_;
+      pause_ = pause;
       notify = true;
     }
   }
 
-  if (session_thread) {
+  if (session_thread_) {
     if (notify) {
-      pause_cond.notify_all();
+      pause_cond_.notify_all();
     }
   }
   else if (pause_) {
@@ -416,24 +502,29 @@ void Session::set_gpu_display(unique_ptr<GPUDisplay> gpu_display)
 
 void Session::wait()
 {
-  if (session_thread) {
-    session_thread->join();
-    delete session_thread;
+  if (session_thread_) {
+    session_thread_->join();
+    delete session_thread_;
   }
 
-  session_thread = NULL;
+  session_thread_ = nullptr;
 }
 
 bool Session::update_scene(int width, int height)
 {
-  /* update camera if dimensions changed for progressive render. the camera
+  /* Update camera if dimensions changed for progressive render. the camera
    * knows nothing about progressive or cropped rendering, it just gets the
-   * image dimensions passed in */
+   * image dimensions passed in. */
   Camera *cam = scene->camera;
-
   cam->set_screen_size(width, height);
 
+  /* First detect which kernel features are used and allocate working memory.
+   * This helps estimate how may device memory is available for the scene and
+   * how much we need to allocate on the host instead. */
+  scene->update_kernel_features();
+
   path_trace_->load_kernels();
+  path_trace_->alloc_work_memory();
 
   if (scene->update(progress)) {
     return true;
@@ -442,45 +533,41 @@ bool Session::update_scene(int width, int height)
   return false;
 }
 
+static string status_append(const string &status, const string &suffix)
+{
+  string prefix = status;
+  if (!prefix.empty()) {
+    prefix += ", ";
+  }
+  return prefix + suffix;
+}
+
 void Session::update_status_time(bool show_pause, bool show_done)
 {
-#if 0
-  int progressive_sample = tile_manager_.state.sample;
-  int num_samples = tile_manager_.get_num_effective_samples();
-
-  int tile = progress.get_rendered_tiles();
-  int num_tiles = tile_manager_.state.num_tiles;
-
-  /* update status */
   string status, substatus;
 
-  if (!params.progressive) {
-    const bool is_cpu = params.device.type == DEVICE_CPU;
-    const bool rendering_finished = (tile == num_tiles);
-    const bool is_last_tile = (tile + 1) == num_tiles;
+  const int current_tile = progress.get_rendered_tiles();
+  const int num_tiles = tile_manager_.get_num_tiles();
 
-    substatus = string_printf("Rendered %d/%d Tiles", tile, num_tiles);
+  const int current_sample = progress.get_current_sample();
+  const int num_samples = render_scheduler_.get_num_samples();
 
-    if (!rendering_finished && (device->show_samples() || (is_cpu && is_last_tile))) {
-      /* Some devices automatically support showing the sample number:
-       * - CUDADevice
-       * - OpenCLDevice when using the megakernel (the split kernel renders multiple
-       *   samples at the same time, so the current sample isn't really defined)
-       * - CPUDevice when using one thread
-       * For these devices, the current sample is always shown.
-       *
-       * The other option is when the last tile is currently being rendered by the CPU.
-       */
-      substatus += string_printf(", Sample %d/%d", progress.get_current_sample(), num_samples);
-    }
-    if (params.denoising.use && params.denoising.type != DENOISER_OPENIMAGEDENOISE) {
-      substatus += string_printf(", Denoised %d tiles", progress.get_denoised_tiles());
-    }
+  /* TIle. */
+  if (tile_manager_.has_multiple_tiles()) {
+    substatus = status_append(substatus,
+                              string_printf("Rendered %d/%d Tiles", current_tile, num_tiles));
   }
-  else if (tile_manager_.num_samples == Integrator::MAX_SAMPLES)
-    substatus = string_printf("Path Tracing Sample %d", progressive_sample + 1);
-  else
-    substatus = string_printf("Path Tracing Sample %d/%d", progressive_sample + 1, num_samples);
+
+  /* Sample. */
+  if (num_samples == Integrator::MAX_SAMPLES) {
+    substatus = status_append(substatus, string_printf("Sample %d", current_sample));
+  }
+  else {
+    substatus = status_append(substatus,
+                              string_printf("Sample %d/%d", current_sample, num_samples));
+  }
+
+  /* TODO(sergey): Denoising status from the path trace. */
 
   if (show_pause) {
     status = "Rendering Paused";
@@ -493,27 +580,6 @@ void Session::update_status_time(bool show_pause, bool show_done)
     status = substatus;
     substatus.clear();
   }
-#else
-  string status, substatus;
-
-  /* TODO(sergey): Take number of big tiles into account. */
-  /* TODO(sergey): Take sample range into account. */
-
-  substatus += string_printf("Sample %d/%d", progress.get_current_sample(), params.samples);
-
-  if (show_pause) {
-    status = "Rendering Paused";
-  }
-  else if (show_done) {
-    status = "Rendering Done";
-    progress.set_end_time(); /* Save end time so that further calls to get_time are accurate. */
-  }
-  else {
-    status = substatus;
-    substatus.clear();
-  }
-
-#endif
 
   progress.set_status(status, substatus);
 }
@@ -521,10 +587,6 @@ void Session::update_status_time(bool show_pause, bool show_done)
 void Session::device_free()
 {
   scene->device_free();
-
-#if 0
-  tile_manager_.device_free();
-#endif
 
   /* used from background render only, so no need to
    * re-create render/display buffers here
@@ -545,42 +607,64 @@ void Session::collect_statistics(RenderStats *render_stats)
 
 int2 Session::get_render_tile_size() const
 {
-  const Tile &tile = tile_manager_.get_current_tile();
-
-  return make_int2(tile.width, tile.height);
+  return path_trace_->get_render_tile_size();
 }
 
 int2 Session::get_render_tile_offset() const
 {
-  const Tile &tile = tile_manager_.get_current_tile();
-
-  return make_int2(tile.x - tile.full_x, tile.y - tile.full_y);
+  return path_trace_->get_render_tile_offset();
 }
 
-static const Pass *get_actual_pass_for_pixels(const vector<Pass> &passes, const string &pass_name)
+bool Session::get_render_tile_done() const
 {
-  const Pass *pass = Pass::find(passes, pass_name);
-  if (!pass) {
-    return nullptr;
-  }
+  return path_trace_->get_render_tile_done();
+}
 
-  /* When shadow catcher is used the combined pass is only used to get proper value for the
-   * shadow catcher pass. It is not very useful for artists as it is. What artists expect as a
-   * combined pass is something what is to be alpha-overed onto the footage. So we swap the
-   * combined pass with shadow catcher matte here. */
-  if (pass->type == PASS_COMBINED) {
-    const Pass *matte_pass = Pass::find(passes, PASS_SHADOW_CATCHER_MATTE);
-    if (matte_pass) {
-      return matte_pass;
-    }
-  }
+bool Session::has_multiple_render_tiles() const
+{
+  return tile_manager_.has_multiple_tiles();
+}
 
-  return pass;
+bool Session::copy_render_tile_from_device()
+{
+  return path_trace_->copy_render_tile_from_device();
 }
 
 bool Session::get_render_tile_pixels(const string &pass_name, int num_components, float *pixels)
 {
-  const Pass *pass = get_actual_pass_for_pixels(scene->passes, pass_name);
+  const Pass *pass = Pass::find(scene->passes, pass_name);
+  if (pass == nullptr) {
+    return false;
+  }
+
+  const bool has_denoised_result = path_trace_->has_denoised_result();
+  if (pass->get_mode() == PassMode::DENOISED && !has_denoised_result) {
+    pass = Pass::find(scene->passes, pass->get_type());
+    if (pass == nullptr) {
+      /* Happens when denoised result pass is requested but is never written by the kernel. */
+      return false;
+    }
+  }
+
+  pass = scene->film->get_actual_display_pass(scene, pass);
+
+  const float exposure = scene->film->get_exposure();
+  const int num_samples = path_trace_->get_num_render_tile_samples();
+
+  const PassAccessor::PassAccessInfo pass_access_info(
+      *pass, *scene->film, *scene->background, scene->passes);
+  const PassAccessorCPU pass_accessor(pass_access_info, exposure, num_samples);
+  const PassAccessor::Destination destination(pixels, num_components);
+
+  return path_trace_->get_render_tile_pixels(pass_accessor, destination);
+}
+
+bool Session::set_render_tile_pixels(const string &pass_name,
+                                     int num_components,
+                                     const float *pixels)
+{
+  /* TODO(sergey): Do we write to alias? */
+  const Pass *pass = Pass::find(scene->passes, pass_name);
   if (!pass) {
     return false;
   }
@@ -588,10 +672,12 @@ bool Session::get_render_tile_pixels(const string &pass_name, int num_components
   const float exposure = scene->film->get_exposure();
   const int num_samples = render_scheduler_.get_num_rendered_samples();
 
-  PassAccessor pass_accessor(
-      scene->film, scene->passes, pass, num_components, exposure, num_samples);
+  const PassAccessor::PassAccessInfo pass_access_info(
+      *pass, *scene->film, *scene->background, scene->passes);
+  PassAccessorCPU pass_accessor(pass_access_info, exposure, num_samples);
+  PassAccessor::Source source(pixels, num_components);
 
-  return path_trace_->get_render_tile_pixels(pass_accessor, pixels);
+  return path_trace_->set_render_tile_pixels(pass_accessor, source);
 }
 
 CCL_NAMESPACE_END

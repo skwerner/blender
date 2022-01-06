@@ -73,13 +73,16 @@ class BlenderSession {
   /* update functions are used to update display buffer only after sample was rendered
    * only needed for better visual feedback */
   void update_render_result(BL::RenderLayer &b_rlay);
-  void update_render_tile();
+
+  /* read functions for baking input */
+  void read_render_tile();
 
   /* interactive updates */
   void synchronize(BL::Depsgraph &b_depsgraph);
 
   /* drawing */
-  void draw(int w, int h);
+  void draw(BL::SpaceImageEditor &space_image);
+  void view_draw(int w, int h);
   void tag_redraw();
   void tag_update();
   void get_status(string &status, string &substatus);
@@ -149,8 +152,6 @@ class BlenderSession {
  protected:
   void stamp_view_layer_metadata(Scene *scene, const string &view_layer_name);
 
-  void do_write_update_render_tile(bool do_update_only);
-
   void builtin_images_load();
 
   /* Update tile manager to reflect resumable render settings. */
@@ -161,6 +162,11 @@ class BlenderSession {
    * example, dependency graph).
    */
   void free_blender_memory_if_possible();
+
+  struct {
+    thread_mutex mutex;
+    int last_pass_index = -1;
+  } draw_state_;
 };
 
 CCL_NAMESPACE_END

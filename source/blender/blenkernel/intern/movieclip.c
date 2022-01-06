@@ -206,36 +206,35 @@ static void write_movieReconstruction(BlendWriter *writer,
 static void movieclip_blend_write(BlendWriter *writer, ID *id, const void *id_address)
 {
   MovieClip *clip = (MovieClip *)id;
-  if (clip->id.us > 0 || BLO_write_is_undo(writer)) {
-    /* Clean up, important in undo case to reduce false detection of changed datablocks. */
-    clip->anim = NULL;
-    clip->tracking_context = NULL;
-    clip->tracking.stats = NULL;
 
-    MovieTracking *tracking = &clip->tracking;
-    MovieTrackingObject *object;
+  /* Clean up, important in undo case to reduce false detection of changed datablocks. */
+  clip->anim = NULL;
+  clip->tracking_context = NULL;
+  clip->tracking.stats = NULL;
 
-    BLO_write_id_struct(writer, MovieClip, id_address, &clip->id);
-    BKE_id_blend_write(writer, &clip->id);
+  MovieTracking *tracking = &clip->tracking;
+  MovieTrackingObject *object;
 
-    if (clip->adt) {
-      BKE_animdata_blend_write(writer, clip->adt);
-    }
+  BLO_write_id_struct(writer, MovieClip, id_address, &clip->id);
+  BKE_id_blend_write(writer, &clip->id);
 
-    write_movieTracks(writer, &tracking->tracks);
-    write_moviePlaneTracks(writer, &tracking->plane_tracks);
-    write_movieReconstruction(writer, &tracking->reconstruction);
+  if (clip->adt) {
+    BKE_animdata_blend_write(writer, clip->adt);
+  }
 
-    object = tracking->objects.first;
-    while (object) {
-      BLO_write_struct(writer, MovieTrackingObject, object);
+  write_movieTracks(writer, &tracking->tracks);
+  write_moviePlaneTracks(writer, &tracking->plane_tracks);
+  write_movieReconstruction(writer, &tracking->reconstruction);
 
-      write_movieTracks(writer, &object->tracks);
-      write_moviePlaneTracks(writer, &object->plane_tracks);
-      write_movieReconstruction(writer, &object->reconstruction);
+  object = tracking->objects.first;
+  while (object) {
+    BLO_write_struct(writer, MovieTrackingObject, object);
 
-      object = object->next;
-    }
+    write_movieTracks(writer, &object->tracks);
+    write_moviePlaneTracks(writer, &object->plane_tracks);
+    write_movieReconstruction(writer, &object->reconstruction);
+
+    object = object->next;
   }
 }
 
@@ -287,7 +286,7 @@ static void movieclip_blend_read_data(BlendDataReader *reader, ID *id)
   clip->tracking_context = NULL;
   clip->tracking.stats = NULL;
 
-  /* TODO we could store those in undo cache storage as well, and preserve them instead of
+  /* TODO: we could store those in undo cache storage as well, and preserve them instead of
    * re-creating them... */
   BLI_listbase_clear(&clip->runtime.gputextures);
 
@@ -1320,7 +1319,7 @@ static ImBuf *movieclip_get_postprocessed_ibuf(
     clip->lastframe = framenr;
     real_ibuf_size(clip, user, ibuf, &clip->lastsize[0], &clip->lastsize[1]);
 
-    /* postprocess frame and put to cache if needed*/
+    /* Post-process frame and put to cache if needed. */
     if (need_postprocess) {
       ImBuf *tmpibuf = ibuf;
       ibuf = postprocess_frame(clip, user, tmpibuf, flag, postprocess_flag);
@@ -1849,7 +1848,7 @@ static void movieclip_build_proxy_ibuf(
   IMB_freeImBuf(scaleibuf);
 }
 
-/* note: currently used by proxy job for movies, threading happens within single frame
+/* NOTE: currently used by proxy job for movies, threading happens within single frame
  * (meaning scaling shall be threaded)
  */
 void BKE_movieclip_build_proxy_frame(MovieClip *clip,
@@ -1893,7 +1892,7 @@ void BKE_movieclip_build_proxy_frame(MovieClip *clip,
   }
 }
 
-/* note: currently used by proxy job for sequences, threading happens within sequence
+/* NOTE: currently used by proxy job for sequences, threading happens within sequence
  * (different threads handles different frames, no threading within frame is needed)
  */
 void BKE_movieclip_build_proxy_frame_for_ibuf(MovieClip *clip,
@@ -2128,9 +2127,9 @@ GPUTexture *BKE_movieclip_get_gpu_texture(MovieClip *clip, MovieClipUser *cuser)
 
 void BKE_movieclip_free_gputexture(struct MovieClip *clip)
 {
-  /* number of gpu textures to keep around as cache
+  /* Number of gpu textures to keep around as cache.
    * We don't want to keep too many GPU textures for
-   * movie clips around, as they can be large.*/
+   * movie clips around, as they can be large. */
   const int MOVIECLIP_NUM_GPUTEXTURES = 1;
 
   while (BLI_listbase_count(&clip->runtime.gputextures) > MOVIECLIP_NUM_GPUTEXTURES) {

@@ -128,7 +128,7 @@ class DeviceScene {
   device_vector<float> lookup_table;
 
   /* integrator */
-  device_vector<uint> sample_pattern_lut;
+  device_vector<float> sample_pattern_lut;
 
   /* ies lights */
   device_vector<float> ies_lights;
@@ -233,7 +233,7 @@ class SceneParams {
 
   int curve_subdivisions()
   {
-    /* Matching the tesselation rate limit in Embree. */
+    /* Matching the tessellation rate limit in Embree. */
     return clamp(1 << hair_subdivisions, 1, 16);
   }
 };
@@ -260,7 +260,7 @@ class Scene : public NodeOwner {
   vector<Shader *> shaders;
   vector<Light *> lights;
   vector<ParticleSystem *> particle_systems;
-  vector<Pass> passes;
+  vector<Pass *> passes;
   vector<Procedural *> procedurals;
 
   /* data managers */
@@ -315,12 +315,11 @@ class Scene : public NodeOwner {
 
   void enable_update_stats();
 
+  void update_kernel_features();
   bool update(Progress &progress);
 
-  /* Update passes so that they contain all passes required for the configured functionality. */
-  void update_passes();
-
-  bool has_shadow_catcher() const;
+  bool has_shadow_catcher();
+  void tag_shadow_catcher_modified();
 
   /* This function is used to create a node of a specified type instead of
    * calling 'new', and sets the scene as the owner of the node.
@@ -328,7 +327,7 @@ class Scene : public NodeOwner {
    * node array (e.g. Scene::geometry for Geometry nodes) and tag the appropriate
    * manager for an update.
    */
-  template<typename T, typename... Args> T *create_node(Args &&... args)
+  template<typename T, typename... Args> T *create_node(Args &&...args)
   {
     T *node = new T(args...);
     node->set_owner(this);
@@ -377,13 +376,12 @@ class Scene : public NodeOwner {
   void free_memory(bool final);
 
   bool kernels_loaded;
-  DeviceRequestedFeatures loaded_kernel_features;
+  uint loaded_kernel_features;
 
   bool load_kernels(Progress &progress, bool lock_scene = true);
 
-  /* ** Split kernel routines ** */
-
-  DeviceRequestedFeatures get_requested_device_features();
+  bool has_shadow_catcher_ = false;
+  bool shadow_catcher_modified_ = true;
 
   /* Maximum number of closure during session lifetime. */
   int max_closure_global;
@@ -413,6 +411,8 @@ template<> Shader *Scene::create_node<Shader>();
 
 template<> AlembicProcedural *Scene::create_node<AlembicProcedural>();
 
+template<> Pass *Scene::create_node<Pass>();
+
 template<> void Scene::delete_node_impl(Light *node);
 
 template<> void Scene::delete_node_impl(Mesh *node);
@@ -433,6 +433,8 @@ template<> void Scene::delete_node_impl(Procedural *node);
 
 template<> void Scene::delete_node_impl(AlembicProcedural *node);
 
+template<> void Scene::delete_node_impl(Pass *node);
+
 template<> void Scene::delete_nodes(const set<Light *> &nodes, const NodeOwner *owner);
 
 template<> void Scene::delete_nodes(const set<Geometry *> &nodes, const NodeOwner *owner);
@@ -444,6 +446,8 @@ template<> void Scene::delete_nodes(const set<ParticleSystem *> &nodes, const No
 template<> void Scene::delete_nodes(const set<Shader *> &nodes, const NodeOwner *owner);
 
 template<> void Scene::delete_nodes(const set<Procedural *> &nodes, const NodeOwner *owner);
+
+template<> void Scene::delete_nodes(const set<Pass *> &nodes, const NodeOwner *owner);
 
 CCL_NAMESPACE_END
 

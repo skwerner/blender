@@ -258,7 +258,7 @@ static Panel *panel_add_instanced(ARegion *region,
   /* Make sure the panel is added to the end of the display-order as well. This is needed for
    * loading existing files.
    *
-   * Note: We could use special behavior to place it after the panel that starts the list of
+   * NOTE: We could use special behavior to place it after the panel that starts the list of
    * instanced panels, but that would add complexity that isn't needed for now. */
   int max_sortorder = 0;
   LISTBASE_FOREACH (Panel *, existing_panel, panels) {
@@ -674,7 +674,7 @@ static bool panel_type_context_poll(ARegion *region,
                                     const PanelType *panel_type,
                                     const char *context)
 {
-  if (UI_panel_category_is_visible(region)) {
+  if (!BLI_listbase_is_empty(&region->panels_category)) {
     return STREQ(panel_type->category, UI_panel_category_active_get(region, false));
   }
 
@@ -1188,7 +1188,6 @@ static void panel_draw_aligned_widgets(const uiStyle *style,
 
   /* Draw text label. */
   if (panel->drawname[0] != '\0') {
-    /* + 0.001f to avoid flirting with float inaccuracy .*/
     const rcti title_rect = {
         .xmin = widget_rect.xmin + (panel->labelofs / aspect) + scaled_unit * 1.1f,
         .xmax = widget_rect.xmax,
@@ -1448,10 +1447,6 @@ void UI_panel_category_draw_all(ARegion *region, const char *category_id_active)
 
   is_alpha = (region->overlap && (theme_col_back[3] != 255));
 
-  if (fstyle->kerning == 1) {
-    BLF_enable(fstyle->uifont_id, BLF_KERNING_DEFAULT);
-  }
-
   BLF_enable(fontid, BLF_ROTATION);
   BLF_rotation(fontid, M_PI_2);
   // UI_fontstyle_set(&style->widget);
@@ -1621,10 +1616,6 @@ void UI_panel_category_draw_all(ARegion *region, const char *category_id_active)
   GPU_line_smooth(false);
 
   BLF_disable(fontid, BLF_ROTATION);
-
-  if (fstyle->kerning == 1) {
-    BLF_disable(fstyle->uifont_id, BLF_KERNING_DEFAULT);
-  }
 }
 
 #undef TABS_PADDING_BETWEEN_FACTOR
@@ -1893,7 +1884,7 @@ static void ui_do_animate(bContext *C, Panel *panel)
   }
   else {
     if (UI_panel_is_dragging(panel)) {
-      /* Note: doing this in #panel_activate_state would require
+      /* NOTE: doing this in #panel_activate_state would require
        * removing `const` for context in many other places. */
       reorder_instanced_panel_list(C, region, panel);
     }
@@ -2564,7 +2555,7 @@ PointerRNA *UI_region_panel_custom_data_under_cursor(const bContext *C, const wm
 /** \name Window Level Modal Panel Interaction
  * \{ */
 
-/* Note, this is modal handler and should not swallow events for animation. */
+/* NOTE: this is modal handler and should not swallow events for animation. */
 static int ui_handler_panel(bContext *C, const wmEvent *event, void *userdata)
 {
   Panel *panel = userdata;
@@ -2654,7 +2645,7 @@ static void panel_activate_state(const bContext *C, Panel *panel, const uiHandle
 
     /* Initiate edge panning during drags for scrolling beyond the initial region view. */
     wmOperatorType *ot = WM_operatortype_find("VIEW2D_OT_edge_pan", true);
-    ui_handle_afterfunc_add_operator(ot, WM_OP_INVOKE_DEFAULT, true);
+    ui_handle_afterfunc_add_operator(ot, WM_OP_INVOKE_DEFAULT);
   }
   else if (state == PANEL_STATE_ANIMATION) {
     panel_set_flag_recursive(panel, PNL_SELECT, false);

@@ -63,11 +63,18 @@ bool GPUDisplay::update_begin(int texture_width, int texture_height)
     return false;
   }
 
-  mutex_.lock();
+  /* Get parameters within a mutex lock, to avoid reset() modifying them at the same time.
+   * The update itself is non-blocking however, for better performance and to avoid
+   * potential deadlocks due to locks held by the subclass. */
+  GPUDisplayParams params;
+  {
+    thread_scoped_lock lock(mutex_);
+    params = params_;
+    texture_state_.size = make_int2(texture_width, texture_height);
+  }
 
-  if (!do_update_begin(texture_width, texture_height)) {
-    LOG(ERROR) << "GPUDisplay implementation could not begin updater.";
-    mutex_.unlock();
+  if (!do_update_begin(params, texture_width, texture_height)) {
+    LOG(ERROR) << "GPUDisplay implementation could not begin update.";
     return false;
   }
 
@@ -88,14 +95,19 @@ void GPUDisplay::update_end()
   do_update_end();
 
   update_state_.is_active = false;
-  mutex_.unlock();
+}
+
+int2 GPUDisplay::get_texture_size() const
+{
+  return texture_state_.size;
 }
 
 /* --------------------------------------------------------------------
  * Texture update from CPU buffer.
  */
 
-void GPUDisplay::copy_pixels_to_texture(const half4 *rgba_pixels)
+void GPUDisplay::copy_pixels_to_texture(
+    const half4 *rgba_pixels, int texture_x, int texture_y, int pixels_width, int pixels_height)
 {
   DCHECK(update_state_.is_active);
 
@@ -105,7 +117,7 @@ void GPUDisplay::copy_pixels_to_texture(const half4 *rgba_pixels)
   }
 
   mark_texture_updated();
-  do_copy_pixels_to_texture(rgba_pixels);
+  do_copy_pixels_to_texture(rgba_pixels, texture_x, texture_y, pixels_width, pixels_height);
 }
 
 /* --------------------------------------------------------------------
@@ -177,19 +189,39 @@ DeviceGraphicsInteropDestination GPUDisplay::graphics_interop_get()
   return do_graphics_interop_get();
 }
 
+void GPUDisplay::graphics_interop_activate()
+{
+}
+
+void GPUDisplay::graphics_interop_deactivate()
+{
+}
+
 /* --------------------------------------------------------------------
  * Drawing.
  */
 
 bool GPUDisplay::draw()
 {
-  thread_scoped_lock lock(mutex_);
+  /* Get parameters within a mutex lock, to avoid reset() modifying them at the same time.
+   * The drawing itself is non-blocking however, for better performance and to avoid
+   * potential deadlocks due to locks held by the subclass. */
+  GPUDisplayParams params;
+  bool is_usable;
+  bool is_outdated;
 
-  if (texture_state_.is_usable) {
-    do_draw();
+  {
+    thread_scoped_lock lock(mutex_);
+    params = params_;
+    is_usable = texture_state_.is_usable;
+    is_outdated = texture_state_.is_outdated;
   }
 
-  return !texture_state_.is_outdated;
+  if (is_usable) {
+    do_draw(params);
+  }
+
+  return !is_outdated;
 }
 
 CCL_NAMESPACE_END

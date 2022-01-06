@@ -18,10 +18,8 @@
 // clang-format off
 #include "kernel/device/optix/compat.h"
 #include "kernel/device/optix/globals.h"
-#include "kernel/device/cuda/image.h"  // Texture lookup uses normal CUDA intrinsics
-#include "kernel/device/cuda/parallel_active_index.h"
-#include "kernel/device/cuda/parallel_prefix_sum.h"
-#include "kernel/device/cuda/parallel_sorted_index.h"
+
+#include "kernel/device/gpu/image.h"  // Texture lookup uses normal CUDA intrinsics
 
 #include "kernel/integrator/integrator_state.h"
 #include "kernel/integrator/integrator_state_flow.h"
@@ -30,11 +28,8 @@
 #include "kernel/integrator/integrator_intersect_closest.h"
 #include "kernel/integrator/integrator_intersect_shadow.h"
 #include "kernel/integrator/integrator_intersect_subsurface.h"
+#include "kernel/integrator/integrator_intersect_volume_stack.h"
 
-#include "kernel/kernel_adaptive_sampling.h"
-#include "kernel/kernel_bake.h"
-#include "kernel/kernel_film.h"
-#include "kernel/kernel_work_stealing.h"
 // clang-format on
 
 template<typename T> ccl_device_forceinline T *get_payload_ptr_0()
@@ -67,31 +62,33 @@ template<bool always = false> ccl_device_forceinline uint get_object_id()
 extern "C" __global__ void __raygen__kernel_optix_integrator_intersect_closest()
 {
   const int global_index = optixGetLaunchIndex().x;
-
-  KernelGlobals kg;
   const int path_index = (__params.path_index_array) ? __params.path_index_array[global_index] :
                                                        global_index;
-  integrator_intersect_closest(&kg, path_index);
+  integrator_intersect_closest(nullptr, path_index);
 }
 
 extern "C" __global__ void __raygen__kernel_optix_integrator_intersect_shadow()
 {
   const int global_index = optixGetLaunchIndex().x;
-
-  KernelGlobals kg;
   const int path_index = (__params.path_index_array) ? __params.path_index_array[global_index] :
                                                        global_index;
-  integrator_intersect_shadow(&kg, path_index);
+  integrator_intersect_shadow(nullptr, path_index);
 }
 
 extern "C" __global__ void __raygen__kernel_optix_integrator_intersect_subsurface()
 {
   const int global_index = optixGetLaunchIndex().x;
-
-  KernelGlobals kg;
   const int path_index = (__params.path_index_array) ? __params.path_index_array[global_index] :
                                                        global_index;
-  integrator_intersect_subsurface(&kg, path_index);
+  integrator_intersect_subsurface(nullptr, path_index);
+}
+
+extern "C" __global__ void __raygen__kernel_optix_integrator_intersect_volume_stack()
+{
+  const int global_index = optixGetLaunchIndex().x;
+  const int path_index = (__params.path_index_array) ? __params.path_index_array[global_index] :
+                                                       global_index;
+  integrator_intersect_volume_stack(nullptr, path_index);
 }
 
 extern "C" __global__ void __miss__kernel_optix_miss()
@@ -341,12 +338,5 @@ extern "C" __global__ void __intersection__curve_ribbon()
   if (type & (PRIMITIVE_CURVE_RIBBON | PRIMITIVE_MOTION_CURVE_RIBBON)) {
     optix_intersection_curve(prim, type);
   }
-}
-
-extern "C" __global__ void __intersection__curve_all()
-{
-  const uint prim = optixGetPrimitiveIndex();
-  const uint type = kernel_tex_fetch(__prim_type, prim);
-  optix_intersection_curve(prim, type);
 }
 #endif

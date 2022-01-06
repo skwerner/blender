@@ -21,10 +21,12 @@
 
 #  include "bvh/bvh.h"
 #  include "bvh/bvh_optix.h"
+#  include "integrator/pass_accessor_gpu.h"
 #  include "render/buffers.h"
 #  include "render/hair.h"
 #  include "render/mesh.h"
 #  include "render/object.h"
+#  include "render/pass.h"
 #  include "render/scene.h"
 
 #  include "util/util_debug.h"
@@ -40,8 +42,8 @@
 
 CCL_NAMESPACE_BEGIN
 
-OptiXDevice::Denoiser::Denoiser(CUDADevice *device)
-    : device(device), state(device, "__denoiser_state")
+OptiXDevice::Denoiser::Denoiser(OptiXDevice *device)
+    : device(device), queue(device), state(device, "__denoiser_state")
 {
 }
 
@@ -87,9 +89,9 @@ OptiXDevice::OptiXDevice(const DeviceInfo &info, Stats &stats, Profiler &profile
     }
   };
 #  endif
-#  if OPTIX_ABI_VERSION >= 41 && defined(WITH_CYCLES_DEBUG)
-  options.validationMode = OPTIX_DEVICE_CONTEXT_VALIDATION_MODE_ALL;
-#  endif
+  if (DebugFlags().optix.use_debug) {
+    options.validationMode = OPTIX_DEVICE_CONTEXT_VALIDATION_MODE_ALL;
+  }
   optix_assert(optixDeviceContextCreate(cuContext, &options, &context));
 #  ifdef WITH_CYCLES_LOGGING
   optix_assert(optixDeviceContextSetLogCallback(
@@ -139,19 +141,13 @@ unique_ptr<DeviceQueue> OptiXDevice::gpu_queue_create()
 
 BVHLayoutMask OptiXDevice::get_bvh_layout_mask() const
 {
-  /* CUDA kernels are used when doing baking, so need to build a BVH those can understand too! */
-  if (optix_module == NULL) {
-    return CUDADevice::get_bvh_layout_mask();
-  }
-
   /* OptiX has its own internal acceleration structure format. */
   return BVH_LAYOUT_OPTIX;
 }
 
-string OptiXDevice::compile_kernel_get_common_cflags(
-    const DeviceRequestedFeatures &requested_features)
+string OptiXDevice::compile_kernel_get_common_cflags(const uint kernel_features)
 {
-  string common_cflags = CUDADevice::compile_kernel_get_common_cflags(requested_features);
+  string common_cflags = CUDADevice::compile_kernel_get_common_cflags(kernel_features);
 
   /* Add OptiX SDK include directory to include paths. */
   const char *optix_sdk_path = getenv("OPTIX_ROOT_DIR");
@@ -160,17 +156,14 @@ string OptiXDevice::compile_kernel_get_common_cflags(
   }
 
   /* Specialization for shader raytracing. */
-  if (requested_features.use_shader_raytrace) {
+  if (kernel_features & KERNEL_FEATURE_NODE_RAYTRACE) {
     common_cflags += " --keep-device-functions";
-  }
-  else {
-    common_cflags += " -D __NO_SHADER_RAYTRACE__";
   }
 
   return common_cflags;
 }
 
-bool OptiXDevice::load_kernels(const DeviceRequestedFeatures &requested_features)
+bool OptiXDevice::load_kernels(const uint kernel_features)
 {
   if (have_error()) {
     /* Abort early if context creation failed already. */
@@ -178,21 +171,13 @@ bool OptiXDevice::load_kernels(const DeviceRequestedFeatures &requested_features
   }
 
   /* Load CUDA modules because we need some of the utility kernels. */
-  if (!CUDADevice::load_kernels(requested_features)) {
+  if (!CUDADevice::load_kernels(kernel_features)) {
     return false;
   }
 
-  /* Baking is currently performed using CUDA, so no need to load OptiX kernels.
-   * Can also skip creating OptiX module if only doing denoising (no path tracing).
-   */
-  if (requested_features.use_baking || !requested_features.use_path_tracing) {
+  /* Skip creating OptiX module if only doing denoising. */
+  if (!(kernel_features & (KERNEL_FEATURE_PATH_TRACING | KERNEL_FEATURE_BAKING))) {
     return true;
-  }
-
-  /* TODO: Shader raytracing requires OptiX to overwrite the shading kernels too! */
-  if (requested_features.use_shader_raytrace) {
-    set_error("AO and Bevel shader nodes are not currently supported with OptiX");
-    return false;
   }
 
   const CUDAContextScope scope(this);
@@ -217,18 +202,18 @@ bool OptiXDevice::load_kernels(const DeviceRequestedFeatures &requested_features
 
   OptixModuleCompileOptions module_options = {};
   module_options.maxRegisterCount = 0; /* Do not set an explicit register limit. */
-#  ifdef WITH_CYCLES_DEBUG
-  module_options.optLevel = OPTIX_COMPILE_OPTIMIZATION_LEVEL_0;
-  module_options.debugLevel = OPTIX_COMPILE_DEBUG_LEVEL_FULL;
-#  else
-  module_options.optLevel = OPTIX_COMPILE_OPTIMIZATION_LEVEL_3;
-  module_options.debugLevel = OPTIX_COMPILE_DEBUG_LEVEL_LINEINFO;
-#  endif
 
-#  if OPTIX_ABI_VERSION >= 41
+  if (DebugFlags().optix.use_debug) {
+    module_options.optLevel = OPTIX_COMPILE_OPTIMIZATION_LEVEL_0;
+    module_options.debugLevel = OPTIX_COMPILE_DEBUG_LEVEL_FULL;
+  }
+  else {
+    module_options.optLevel = OPTIX_COMPILE_OPTIMIZATION_LEVEL_3;
+    module_options.debugLevel = OPTIX_COMPILE_DEBUG_LEVEL_LINEINFO;
+  }
+
   module_options.boundValues = nullptr;
   module_options.numBoundValues = 0;
-#  endif
 
   OptixPipelineCompileOptions pipeline_options = {};
   /* Default to no motion blur and two-level graph, since it is the fastest option. */
@@ -240,22 +225,19 @@ bool OptiXDevice::load_kernels(const DeviceRequestedFeatures &requested_features
   pipeline_options.exceptionFlags = OPTIX_EXCEPTION_FLAG_NONE;
   pipeline_options.pipelineLaunchParamsVariableName = "__params"; /* See globals.h */
 
-#  if OPTIX_ABI_VERSION >= 36
   pipeline_options.usesPrimitiveTypeFlags = OPTIX_PRIMITIVE_TYPE_FLAGS_TRIANGLE;
-  if (requested_features.use_hair) {
-    if (DebugFlags().optix.curves_api && requested_features.use_hair_thick) {
+  if (kernel_features & KERNEL_FEATURE_HAIR) {
+    if (kernel_features & KERNEL_FEATURE_HAIR_THICK) {
       pipeline_options.usesPrimitiveTypeFlags |= OPTIX_PRIMITIVE_TYPE_FLAGS_ROUND_CUBIC_BSPLINE;
     }
-    else {
+    else
       pipeline_options.usesPrimitiveTypeFlags |= OPTIX_PRIMITIVE_TYPE_FLAGS_CUSTOM;
-    }
   }
-#  endif
 
   /* Keep track of whether motion blur is enabled, so to enable/disable motion in BVH builds
    * This is necessary since objects may be reported to have motion if the Vector pass is
    * active, but may still need to be rendered without motion blur if that isn't active as well. */
-  motion_blur = requested_features.use_object_motion;
+  motion_blur = (kernel_features & KERNEL_FEATURE_OBJECT_MOTION) != 0;
 
   if (motion_blur) {
     pipeline_options.usesMotionBlur = true;
@@ -265,7 +247,7 @@ bool OptiXDevice::load_kernels(const DeviceRequestedFeatures &requested_features
   }
 
   { /* Load and compile PTX module with OptiX kernels. */
-    string ptx_data, ptx_filename = path_get(requested_features.use_shader_raytrace ?
+    string ptx_data, ptx_filename = path_get((kernel_features & KERNEL_FEATURE_NODE_RAYTRACE) ?
                                                  "lib/kernel_optix_shader_raytrace.ptx" :
                                                  "lib/kernel_optix.ptx");
     if (use_adaptive_compilation() || path_file_size(ptx_filename) == -1) {
@@ -275,7 +257,11 @@ bool OptiXDevice::load_kernels(const DeviceRequestedFeatures &requested_features
             "the Optix SDK to be able to compile Optix kernels on demand).");
         return false;
       }
-      ptx_filename = compile_kernel(requested_features, "kernel", "optix", true);
+      ptx_filename = compile_kernel(
+          kernel_features,
+          (kernel_features & KERNEL_FEATURE_NODE_RAYTRACE) ? "kernel_shader_raytrace" : "kernel",
+          "optix",
+          true);
     }
     if (ptx_filename.empty() || !path_read_text(ptx_filename, ptx_data)) {
       set_error(string_printf("Failed to load OptiX kernel from '%s'", ptx_filename.c_str()));
@@ -314,6 +300,10 @@ bool OptiXDevice::load_kernels(const DeviceRequestedFeatures &requested_features
   group_descs[PG_RGEN_INTERSECT_SUBSURFACE].raygen.module = optix_module;
   group_descs[PG_RGEN_INTERSECT_SUBSURFACE].raygen.entryFunctionName =
       "__raygen__kernel_optix_integrator_intersect_subsurface";
+  group_descs[PG_RGEN_INTERSECT_VOLUME_STACK].kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN;
+  group_descs[PG_RGEN_INTERSECT_VOLUME_STACK].raygen.module = optix_module;
+  group_descs[PG_RGEN_INTERSECT_VOLUME_STACK].raygen.entryFunctionName =
+      "__raygen__kernel_optix_integrator_intersect_volume_stack";
   group_descs[PG_MISS].kind = OPTIX_PROGRAM_GROUP_KIND_MISS;
   group_descs[PG_MISS].miss.module = optix_module;
   group_descs[PG_MISS].miss.entryFunctionName = "__miss__kernel_optix_miss";
@@ -326,24 +316,9 @@ bool OptiXDevice::load_kernels(const DeviceRequestedFeatures &requested_features
   group_descs[PG_HITS].hitgroup.moduleAH = optix_module;
   group_descs[PG_HITS].hitgroup.entryFunctionNameAH = "__anyhit__kernel_optix_shadow_all_hit";
 
-  if (requested_features.use_hair) {
-    group_descs[PG_HITD].hitgroup.moduleIS = optix_module;
-    group_descs[PG_HITS].hitgroup.moduleIS = optix_module;
-
-    /* Add curve intersection programs. */
-    if (requested_features.use_hair_thick) {
-      /* Slower programs for thick hair since that also slows down ribbons.
-       * Ideally this should not be needed. */
-      group_descs[PG_HITD].hitgroup.entryFunctionNameIS = "__intersection__curve_all";
-      group_descs[PG_HITS].hitgroup.entryFunctionNameIS = "__intersection__curve_all";
-    }
-    else {
-      group_descs[PG_HITD].hitgroup.entryFunctionNameIS = "__intersection__curve_ribbon";
-      group_descs[PG_HITS].hitgroup.entryFunctionNameIS = "__intersection__curve_ribbon";
-    }
-
-#  if OPTIX_ABI_VERSION >= 36
-    if (DebugFlags().optix.curves_api && requested_features.use_hair_thick) {
+  if (kernel_features & KERNEL_FEATURE_HAIR) {
+    if (kernel_features & KERNEL_FEATURE_HAIR_THICK) {
+      /* Built-in thick curve intersection. */
       OptixBuiltinISOptions builtin_options = {};
       builtin_options.builtinISModuleType = OPTIX_PRIMITIVE_TYPE_ROUND_CUBIC_BSPLINE;
       builtin_options.usesMotionBlur = false;
@@ -368,10 +343,16 @@ bool OptiXDevice::load_kernels(const DeviceRequestedFeatures &requested_features
         group_descs[PG_HITS_MOTION].hitgroup.moduleIS = builtin_modules[1];
       }
     }
-#  endif
+    else {
+      /* Custom ribbon intersection. */
+      group_descs[PG_HITD].hitgroup.moduleIS = optix_module;
+      group_descs[PG_HITS].hitgroup.moduleIS = optix_module;
+      group_descs[PG_HITD].hitgroup.entryFunctionNameIS = "__intersection__curve_ribbon";
+      group_descs[PG_HITS].hitgroup.entryFunctionNameIS = "__intersection__curve_ribbon";
+    }
   }
 
-  if (requested_features.use_subsurface || requested_features.use_shader_raytrace) {
+  if (kernel_features & (KERNEL_FEATURE_SUBSURFACE | KERNEL_FEATURE_NODE_RAYTRACE)) {
     /* Add hit group for local intersections. */
     group_descs[PG_HITL].kind = OPTIX_PROGRAM_GROUP_KIND_HITGROUP;
     group_descs[PG_HITL].hitgroup.moduleAH = optix_module;
@@ -379,18 +360,21 @@ bool OptiXDevice::load_kernels(const DeviceRequestedFeatures &requested_features
   }
 
   /* Shader raytracing replaces some functions with direct callables. */
-  if (requested_features.use_shader_raytrace) {
-    group_descs[PG_CALL + 0].kind = OPTIX_PROGRAM_GROUP_KIND_CALLABLES;
-    group_descs[PG_CALL + 0].callables.moduleDC = optix_module;
-    group_descs[PG_CALL + 0].callables.entryFunctionNameDC = "__direct_callable__svm_eval_nodes";
-    group_descs[PG_CALL + 1].kind = OPTIX_PROGRAM_GROUP_KIND_CALLABLES;
-    group_descs[PG_CALL + 1].callables.moduleDC = optix_module;
-    group_descs[PG_CALL + 1].callables.entryFunctionNameDC =
-        "__direct_callable__kernel_volume_shadow";
-    group_descs[PG_CALL + 2].kind = OPTIX_PROGRAM_GROUP_KIND_CALLABLES;
-    group_descs[PG_CALL + 2].callables.moduleDC = optix_module;
-    group_descs[PG_CALL + 2].callables.entryFunctionNameDC =
-        "__direct_callable__subsurface_scatter_multi_setup";
+  if (kernel_features & KERNEL_FEATURE_NODE_RAYTRACE) {
+    group_descs[PG_RGEN_SHADE_SURFACE_RAYTRACE].kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN;
+    group_descs[PG_RGEN_SHADE_SURFACE_RAYTRACE].raygen.module = optix_module;
+    group_descs[PG_RGEN_SHADE_SURFACE_RAYTRACE].raygen.entryFunctionName =
+        "__raygen__kernel_optix_integrator_shade_surface_raytrace";
+    group_descs[PG_CALL_SVM_AO].kind = OPTIX_PROGRAM_GROUP_KIND_CALLABLES;
+    group_descs[PG_CALL_SVM_AO].callables.moduleDC = optix_module;
+    group_descs[PG_CALL_SVM_AO].callables.entryFunctionNameDC = "__direct_callable__svm_node_ao";
+    group_descs[PG_CALL_SVM_BEVEL].kind = OPTIX_PROGRAM_GROUP_KIND_CALLABLES;
+    group_descs[PG_CALL_SVM_BEVEL].callables.moduleDC = optix_module;
+    group_descs[PG_CALL_SVM_BEVEL].callables.entryFunctionNameDC =
+        "__direct_callable__svm_node_bevel";
+    group_descs[PG_CALL_AO_PASS].kind = OPTIX_PROGRAM_GROUP_KIND_CALLABLES;
+    group_descs[PG_CALL_AO_PASS].callables.moduleDC = optix_module;
+    group_descs[PG_CALL_AO_PASS].callables.entryFunctionNameDC = "__direct_callable__ao_pass";
   }
 
   optix_assert(optixProgramGroupCreate(
@@ -413,23 +397,56 @@ bool OptiXDevice::load_kernels(const DeviceRequestedFeatures &requested_features
   trace_css = std::max(trace_css, stack_size[PG_HITD].cssIS + stack_size[PG_HITD].cssAH);
   trace_css = std::max(trace_css, stack_size[PG_HITS].cssIS + stack_size[PG_HITS].cssAH);
   trace_css = std::max(trace_css, stack_size[PG_HITL].cssIS + stack_size[PG_HITL].cssAH);
-#  if OPTIX_ABI_VERSION >= 36
   trace_css = std::max(trace_css,
                        stack_size[PG_HITD_MOTION].cssIS + stack_size[PG_HITD_MOTION].cssAH);
   trace_css = std::max(trace_css,
                        stack_size[PG_HITS_MOTION].cssIS + stack_size[PG_HITS_MOTION].cssAH);
-#  endif
 
   OptixPipelineLinkOptions link_options = {};
   link_options.maxTraceDepth = 1;
-#  ifdef WITH_CYCLES_DEBUG
-  link_options.debugLevel = OPTIX_COMPILE_DEBUG_LEVEL_FULL;
-#  else
-  link_options.debugLevel = OPTIX_COMPILE_DEBUG_LEVEL_LINEINFO;
-#  endif
-#  if OPTIX_ABI_VERSION < 24
-  link_options.overrideUsesMotionBlur = motion_blur;
-#  endif
+
+  if (DebugFlags().optix.use_debug) {
+    link_options.debugLevel = OPTIX_COMPILE_DEBUG_LEVEL_FULL;
+  }
+  else {
+    link_options.debugLevel = OPTIX_COMPILE_DEBUG_LEVEL_LINEINFO;
+  }
+
+  if (kernel_features & KERNEL_FEATURE_NODE_RAYTRACE) {
+    /* Create shader raytracing pipeline. */
+    vector<OptixProgramGroup> pipeline_groups;
+    pipeline_groups.reserve(NUM_PROGRAM_GROUPS);
+    pipeline_groups.push_back(groups[PG_RGEN_SHADE_SURFACE_RAYTRACE]);
+    pipeline_groups.push_back(groups[PG_MISS]);
+    pipeline_groups.push_back(groups[PG_HITD]);
+    pipeline_groups.push_back(groups[PG_HITS]);
+    pipeline_groups.push_back(groups[PG_HITL]);
+    if (motion_blur) {
+      pipeline_groups.push_back(groups[PG_HITD_MOTION]);
+      pipeline_groups.push_back(groups[PG_HITS_MOTION]);
+    }
+    pipeline_groups.push_back(groups[PG_CALL_SVM_AO]);
+    pipeline_groups.push_back(groups[PG_CALL_SVM_BEVEL]);
+
+    optix_assert(optixPipelineCreate(context,
+                                     &pipeline_options,
+                                     &link_options,
+                                     pipeline_groups.data(),
+                                     pipeline_groups.size(),
+                                     nullptr,
+                                     0,
+                                     &pipelines[PIP_SHADE_RAYTRACE]));
+
+    /* Combine ray generation and trace continuation stack size. */
+    const unsigned int css = stack_size[PG_RGEN_SHADE_SURFACE_RAYTRACE].cssRG +
+                             link_options.maxTraceDepth * trace_css;
+    const unsigned int dss = std::max(stack_size[PG_CALL_SVM_AO].dssDC,
+                                      stack_size[PG_CALL_SVM_BEVEL].dssDC);
+
+    /* Set stack size depending on pipeline options. */
+    optix_assert(optixPipelineSetStackSize(
+        pipelines[PIP_SHADE_RAYTRACE], 0, dss, css, motion_blur ? 3 : 2));
+  }
 
   { /* Create intersection-only pipeline. */
     vector<OptixProgramGroup> pipeline_groups;
@@ -437,16 +454,15 @@ bool OptiXDevice::load_kernels(const DeviceRequestedFeatures &requested_features
     pipeline_groups.push_back(groups[PG_RGEN_INTERSECT_CLOSEST]);
     pipeline_groups.push_back(groups[PG_RGEN_INTERSECT_SHADOW]);
     pipeline_groups.push_back(groups[PG_RGEN_INTERSECT_SUBSURFACE]);
+    pipeline_groups.push_back(groups[PG_RGEN_INTERSECT_VOLUME_STACK]);
     pipeline_groups.push_back(groups[PG_MISS]);
     pipeline_groups.push_back(groups[PG_HITD]);
     pipeline_groups.push_back(groups[PG_HITS]);
     pipeline_groups.push_back(groups[PG_HITL]);
-#  if OPTIX_ABI_VERSION >= 36
     if (motion_blur) {
       pipeline_groups.push_back(groups[PG_HITD_MOTION]);
       pipeline_groups.push_back(groups[PG_HITS_MOTION]);
     }
-#  endif
 
     optix_assert(optixPipelineCreate(context,
                                      &pipeline_options,
@@ -458,10 +474,12 @@ bool OptiXDevice::load_kernels(const DeviceRequestedFeatures &requested_features
                                      &pipelines[PIP_INTERSECT]));
 
     /* Calculate continuation stack size based on the maximum of all ray generation stack sizes. */
-    const unsigned int css = std::max(stack_size[PG_RGEN_INTERSECT_CLOSEST].cssRG,
-                                      std::max(stack_size[PG_RGEN_INTERSECT_SHADOW].cssRG,
-                                               stack_size[PG_RGEN_INTERSECT_SUBSURFACE].cssRG)) +
-                             link_options.maxTraceDepth * trace_css;
+    const unsigned int css =
+        std::max(stack_size[PG_RGEN_INTERSECT_CLOSEST].cssRG,
+                 std::max(stack_size[PG_RGEN_INTERSECT_SHADOW].cssRG,
+                          std::max(stack_size[PG_RGEN_INTERSECT_SUBSURFACE].cssRG,
+                                   stack_size[PG_RGEN_INTERSECT_VOLUME_STACK].cssRG))) +
+        link_options.maxTraceDepth * trace_css;
 
     optix_assert(
         optixPipelineSetStackSize(pipelines[PIP_INTERSECT], 0, 0, css, motion_blur ? 3 : 2));
@@ -479,126 +497,324 @@ bool OptiXDevice::load_kernels(const DeviceRequestedFeatures &requested_features
  * Buffer denoising.
  */
 
-/* Calculate number of passes used by the denoiser. */
-static int denoise_buffer_num_passes(const DenoiseParams &params)
-{
-  int num_passes = 1;
-
-  if (params.use_pass_albedo) {
-    num_passes += 1;
-
-    if (params.use_pass_normal) {
-      num_passes += 1;
+class OptiXDevice::DenoiseContext {
+ public:
+  explicit DenoiseContext(OptiXDevice *device, const DeviceDenoiseTask &task)
+      : denoise_params(task.params),
+        render_buffers(task.render_buffers),
+        buffer_params(task.buffer_params),
+        guiding_buffer(device, "denoiser guiding passes buffer"),
+        num_samples(task.num_samples)
+  {
+    num_input_passes = 1;
+    if (denoise_params.use_pass_albedo) {
+      num_input_passes += 1;
+      use_pass_albedo = true;
+      pass_denoising_albedo = buffer_params.get_pass_offset(PASS_DENOISING_ALBEDO);
+      if (denoise_params.use_pass_normal) {
+        num_input_passes += 1;
+        use_pass_normal = true;
+        pass_denoising_normal = buffer_params.get_pass_offset(PASS_DENOISING_NORMAL);
+      }
     }
+
+    const int num_guiding_passes = num_input_passes - 1;
+
+    if (num_guiding_passes) {
+      if (task.allow_inplace_modification) {
+        guiding_params.device_pointer = render_buffers->buffer.device_pointer;
+
+        guiding_params.pass_albedo = pass_denoising_albedo;
+        guiding_params.pass_normal = pass_denoising_normal;
+
+        guiding_params.stride = buffer_params.stride;
+        guiding_params.pass_stride = buffer_params.pass_stride;
+      }
+      else {
+        guiding_params.pass_stride = 0;
+        if (use_pass_albedo) {
+          guiding_params.pass_albedo = guiding_params.pass_stride;
+          guiding_params.pass_stride += 3;
+        }
+        if (use_pass_normal) {
+          guiding_params.pass_normal = guiding_params.pass_stride;
+          guiding_params.pass_stride += 3;
+        }
+
+        guiding_params.stride = buffer_params.width;
+
+        guiding_buffer.alloc_to_device(buffer_params.width * buffer_params.height *
+                                       guiding_params.pass_stride);
+        guiding_params.device_pointer = guiding_buffer.device_pointer;
+      }
+    }
+
+    pass_sample_count = buffer_params.get_pass_offset(PASS_SAMPLE_COUNT);
   }
 
-  return num_passes;
-}
+  const DenoiseParams &denoise_params;
 
-/* Calculate number of floats per pixel for the input buffer used by the OptiX. */
-static int denoise_buffer_pass_stride(const DenoiseParams &params)
-{
-  return denoise_buffer_num_passes(params) * 3;
-}
+  RenderBuffers *render_buffers = nullptr;
+  const BufferParams &buffer_params;
 
-void OptiXDevice::denoise_buffer(const DeviceDenoiseTask &task)
+  /* Device-side storage of the guiding passes. */
+  device_only_memory<float> guiding_buffer;
+
+  struct {
+    device_ptr device_pointer = 0;
+
+    /* NOTE: Are only initialized when the corresponding guiding pass is enabled. */
+    int pass_albedo = PASS_UNUSED;
+    int pass_normal = PASS_UNUSED;
+
+    int stride = -1;
+    int pass_stride = -1;
+  } guiding_params;
+
+  /* Number of input passes. Including the color and extra auxillary passes. */
+  int num_input_passes = 0;
+  bool use_pass_albedo = false;
+  bool use_pass_normal = false;
+
+  int num_samples = 0;
+
+  int pass_sample_count = PASS_UNUSED;
+
+  /* NOTE: Are only initialized when the corresponding guiding pass is enabled. */
+  int pass_denoising_albedo = PASS_UNUSED;
+  int pass_denoising_normal = PASS_UNUSED;
+
+  /* For passes which don't need albedo channel for denoising we replace the actual albedo with
+   * the (0.5, 0.5, 0.5). This flag indicates that the real albedo pass has been replaced with
+   * the fake values and denoising of passes which do need albedo can no longer happen. */
+  bool albedo_replaced_with_fake = false;
+};
+
+class OptiXDevice::DenoisePass {
+ public:
+  DenoisePass(const PassType type, const BufferParams &buffer_params) : type(type)
+  {
+    noisy_offset = buffer_params.get_pass_offset(type, PassMode::NOISY);
+    denoised_offset = buffer_params.get_pass_offset(type, PassMode::DENOISED);
+
+    const PassInfo pass_info = Pass::get_info(type);
+    num_components = pass_info.num_components;
+    use_compositing = pass_info.use_compositing;
+    use_denoising_albedo = pass_info.use_denoising_albedo;
+  }
+
+  PassType type;
+
+  int noisy_offset;
+  int denoised_offset;
+
+  int num_components;
+  bool use_compositing;
+  bool use_denoising_albedo;
+};
+
+bool OptiXDevice::denoise_buffer(const DeviceDenoiseTask &task)
 {
   const CUDAContextScope scope(this);
 
-  if (!denoise_ensure(task)) {
+  DenoiseContext context(this, task);
+
+  if (!denoise_ensure(context)) {
+    return false;
+  }
+
+  if (!denoise_filter_guiding_preprocess(context)) {
+    LOG(ERROR) << "Error preprocessing guiding passes.";
+    return false;
+  }
+
+  /* Passes which will use real albedo when it is available. */
+  denoise_pass(context, PASS_COMBINED);
+  denoise_pass(context, PASS_SHADOW_CATCHER_MATTE);
+
+  /* Passes which do not need albedo and hence if real is present it needs to become fake. */
+  denoise_pass(context, PASS_SHADOW_CATCHER);
+
+  return true;
+}
+
+DeviceQueue *OptiXDevice::get_denoise_queue()
+{
+  return &denoiser_.queue;
+}
+
+bool OptiXDevice::denoise_filter_guiding_preprocess(DenoiseContext &context)
+{
+  const BufferParams &buffer_params = context.buffer_params;
+
+  const int work_size = buffer_params.width * buffer_params.height;
+
+  void *args[] = {const_cast<device_ptr *>(&context.guiding_params.device_pointer),
+                  const_cast<int *>(&context.guiding_params.pass_stride),
+                  const_cast<int *>(&context.guiding_params.pass_albedo),
+                  const_cast<int *>(&context.guiding_params.pass_normal),
+                  &context.render_buffers->buffer.device_pointer,
+                  const_cast<int *>(&buffer_params.offset),
+                  const_cast<int *>(&buffer_params.stride),
+                  const_cast<int *>(&buffer_params.pass_stride),
+                  const_cast<int *>(&context.pass_sample_count),
+                  const_cast<int *>(&context.pass_denoising_albedo),
+                  const_cast<int *>(&context.pass_denoising_normal),
+                  const_cast<int *>(&buffer_params.full_x),
+                  const_cast<int *>(&buffer_params.full_y),
+                  const_cast<int *>(&buffer_params.width),
+                  const_cast<int *>(&buffer_params.height),
+                  const_cast<int *>(&context.num_samples)};
+
+  return denoiser_.queue.enqueue(DEVICE_KERNEL_FILTER_GUIDING_PREPROCESS, work_size, args);
+}
+
+bool OptiXDevice::denoise_filter_guiding_set_fake_albedo(DenoiseContext &context)
+{
+  const BufferParams &buffer_params = context.buffer_params;
+
+  const int work_size = buffer_params.width * buffer_params.height;
+
+  void *args[] = {const_cast<device_ptr *>(&context.guiding_params.device_pointer),
+                  const_cast<int *>(&context.guiding_params.pass_stride),
+                  const_cast<int *>(&context.guiding_params.pass_albedo),
+                  const_cast<int *>(&buffer_params.width),
+                  const_cast<int *>(&buffer_params.height)};
+
+  return denoiser_.queue.enqueue(DEVICE_KERNEL_FILTER_GUIDING_SET_FAKE_ALBEDO, work_size, args);
+}
+
+void OptiXDevice::denoise_pass(DenoiseContext &context, PassType pass_type)
+{
+  const BufferParams &buffer_params = context.buffer_params;
+
+  const DenoisePass pass(pass_type, buffer_params);
+
+  if (pass.noisy_offset == PASS_UNUSED) {
+    return;
+  }
+  if (pass.denoised_offset == PASS_UNUSED) {
+    LOG(DFATAL) << "Missing denoised pass " << pass_type_as_string(pass_type);
     return;
   }
 
-  const int input_pass_stride = denoise_buffer_pass_stride(task.params);
+  if (pass.use_denoising_albedo) {
+    if (context.albedo_replaced_with_fake) {
+      LOG(ERROR) << "Pass which requires albedo is denoised after fake albedo has been set.";
+      return;
+    }
+  }
+  else if (!context.albedo_replaced_with_fake) {
+    context.albedo_replaced_with_fake = true;
+    if (!denoise_filter_guiding_set_fake_albedo(context)) {
+      LOG(ERROR) << "Error replacing real albedo with the fake one.";
+      return;
+    }
+  }
 
-  device_only_memory<float> input_rgb(this, "denoiser input rgb");
-  input_rgb.alloc_to_device(task.width * task.height * input_pass_stride);
-
-  OptiXDeviceQueue queue(this);
-
-  /* Make sure input data is in [0 .. 10000] range by scaling the input buffer by the number of
-   *
-   * samples in the buffer. This will do (scaled) copy of the noisy image and needed passes into
-   * an input buffer for the OptiX denoiser. */
-  if (!denoise_filter_convert_to_rgb(&queue, task, input_rgb.device_pointer)) {
+  /* Read and preprocess noisy color input pass. */
+  denoise_color_read(context, pass);
+  if (!denoise_filter_color_preprocess(context, pass)) {
     LOG(ERROR) << "Error connverting denoising passes to RGB buffer.";
     return;
   }
 
-  if (!denoise_run(&queue, task, input_rgb.device_pointer)) {
+  if (!denoise_run(context, pass)) {
     LOG(ERROR) << "Error running OptiX denoiser.";
     return;
   }
 
   /* Store result in the combined pass of the render buffer.
    *
-   * This will scale the denoiser result up to match the number of samples ans store the result in
-   * the combined pass. */
-  if (!denoise_filter_convert_from_rgb(&queue, task, input_rgb.device_pointer)) {
-    LOG(ERROR) << "Error copying denoiser result to the combined pass.";
+   * This will scale the denoiser result up to match the number of, possibly per-pixel, samples. */
+  if (!denoise_filter_color_postprocess(context, pass)) {
+    LOG(ERROR) << "Error copying denoiser result to the denoised pass.";
     return;
   }
 
-  queue.synchronize();
+  denoiser_.queue.synchronize();
 }
 
-bool OptiXDevice::denoise_filter_convert_to_rgb(OptiXDeviceQueue *queue,
-                                                const DeviceDenoiseTask &task,
-                                                const device_ptr d_input_rgb)
+void OptiXDevice::denoise_color_read(DenoiseContext &context, const DenoisePass &pass)
 {
-  const int work_size = task.width * task.height;
+  PassAccessor::PassAccessInfo pass_access_info;
+  pass_access_info.type = pass.type;
+  pass_access_info.mode = PassMode::NOISY;
+  pass_access_info.offset = pass.noisy_offset;
 
-  const int pass_offset[3] = {
-      task.pass_denoising_color, task.pass_denoising_albedo, task.pass_denoising_normal};
+  /* Denoiser operates on passes which are used to calculate the approximation, and is never used
+   * on the approximation. The latter is not even possible because OptiX does not support
+   * denoising of semi-transparent pixels. */
+  pass_access_info.use_approximate_shadow_catcher = false;
+  pass_access_info.use_approximate_shadow_catcher_background = false;
+  pass_access_info.show_active_pixels = false;
 
-  const int input_passes = denoise_buffer_num_passes(task.params);
+  /* TODO(sergey): Consider adding support of actual exposure, to avoid clamping in extreme cases.
+   */
+  const PassAccessorGPU pass_accessor(
+      &denoiser_.queue, pass_access_info, 1.0f, context.num_samples);
 
-  void *args[] = {const_cast<device_ptr *>(&d_input_rgb),
-                  const_cast<device_ptr *>(&task.buffer),
-                  const_cast<int *>(&task.x),
-                  const_cast<int *>(&task.y),
-                  const_cast<int *>(&task.width),
-                  const_cast<int *>(&task.height),
-                  const_cast<int *>(&task.offset),
-                  const_cast<int *>(&task.stride),
-                  const_cast<int *>(&task.pass_stride),
-                  const_cast<int *>(pass_offset),
-                  const_cast<int *>(&input_passes),
-                  const_cast<int *>(&task.num_samples),
-                  const_cast<int *>(&task.pass_sample_count)};
+  PassAccessor::Destination destination(pass_access_info.type);
+  destination.d_pixels = context.render_buffers->buffer.device_pointer +
+                         pass.denoised_offset * sizeof(float);
+  destination.num_components = 3;
+  destination.pixel_stride = context.buffer_params.pass_stride;
 
-  return queue->enqueue(DEVICE_KERNEL_FILTER_CONVERT_TO_RGB, work_size, args);
+  pass_accessor.get_render_tile_pixels(context.render_buffers, context.buffer_params, destination);
 }
 
-bool OptiXDevice::denoise_filter_convert_from_rgb(OptiXDeviceQueue *queue,
-                                                  const DeviceDenoiseTask &task,
-                                                  const device_ptr d_input_rgb)
+bool OptiXDevice::denoise_filter_color_preprocess(DenoiseContext &context, const DenoisePass &pass)
 {
-  const int work_size = task.width * task.height;
+  const BufferParams &buffer_params = context.buffer_params;
 
-  void *args[] = {const_cast<device_ptr *>(&d_input_rgb),
-                  const_cast<device_ptr *>(&task.buffer),
-                  const_cast<int *>(&task.x),
-                  const_cast<int *>(&task.y),
-                  const_cast<int *>(&task.width),
-                  const_cast<int *>(&task.height),
-                  const_cast<int *>(&task.offset),
-                  const_cast<int *>(&task.stride),
-                  const_cast<int *>(&task.pass_stride),
-                  const_cast<int *>(&task.num_samples),
-                  const_cast<int *>(&task.pass_sample_count)};
+  const int work_size = buffer_params.width * buffer_params.height;
 
-  return queue->enqueue(DEVICE_KERNEL_FILTER_CONVERT_FROM_RGB, work_size, args);
+  void *args[] = {&context.render_buffers->buffer.device_pointer,
+                  const_cast<int *>(&buffer_params.full_x),
+                  const_cast<int *>(&buffer_params.full_y),
+                  const_cast<int *>(&buffer_params.width),
+                  const_cast<int *>(&buffer_params.height),
+                  const_cast<int *>(&buffer_params.offset),
+                  const_cast<int *>(&buffer_params.stride),
+                  const_cast<int *>(&buffer_params.pass_stride),
+                  const_cast<int *>(&pass.denoised_offset)};
+
+  return denoiser_.queue.enqueue(DEVICE_KERNEL_FILTER_COLOR_PREPROCESS, work_size, args);
 }
 
-bool OptiXDevice::denoise_ensure(const DeviceDenoiseTask &task)
+bool OptiXDevice::denoise_filter_color_postprocess(DenoiseContext &context,
+                                                   const DenoisePass &pass)
 {
-  if (!denoise_create_if_needed(task.params)) {
+  const BufferParams &buffer_params = context.buffer_params;
+
+  const int work_size = buffer_params.width * buffer_params.height;
+
+  void *args[] = {&context.render_buffers->buffer.device_pointer,
+                  const_cast<int *>(&buffer_params.full_x),
+                  const_cast<int *>(&buffer_params.full_y),
+                  const_cast<int *>(&buffer_params.width),
+                  const_cast<int *>(&buffer_params.height),
+                  const_cast<int *>(&buffer_params.offset),
+                  const_cast<int *>(&buffer_params.stride),
+                  const_cast<int *>(&buffer_params.pass_stride),
+                  const_cast<int *>(&context.num_samples),
+                  const_cast<int *>(&pass.noisy_offset),
+                  const_cast<int *>(&pass.denoised_offset),
+                  const_cast<int *>(&context.pass_sample_count),
+                  const_cast<int *>(&pass.num_components),
+                  const_cast<bool *>(&pass.use_compositing)};
+
+  return denoiser_.queue.enqueue(DEVICE_KERNEL_FILTER_COLOR_POSTPROCESS, work_size, args);
+}
+
+bool OptiXDevice::denoise_ensure(DenoiseContext &context)
+{
+  if (!denoise_create_if_needed(context)) {
     LOG(ERROR) << "OptiX denoiser creation has failed.";
     return false;
   }
 
-  if (!denoise_configure_if_needed(task)) {
+  if (!denoise_configure_if_needed(context)) {
     LOG(ERROR) << "OptiX denoiser configuration has failed.";
     return false;
   }
@@ -606,12 +822,11 @@ bool OptiXDevice::denoise_ensure(const DeviceDenoiseTask &task)
   return true;
 }
 
-bool OptiXDevice::denoise_create_if_needed(const DenoiseParams &params)
+bool OptiXDevice::denoise_create_if_needed(DenoiseContext &context)
 {
-  const int input_passes = denoise_buffer_num_passes(params);
-
   const bool recreate_denoiser = (denoiser_.optix_denoiser == nullptr) ||
-                                 (input_passes != denoiser_.input_passes);
+                                 (denoiser_.use_pass_albedo != context.use_pass_albedo) ||
+                                 (denoiser_.use_pass_normal != context.use_pass_normal);
   if (!recreate_denoiser) {
     return true;
   }
@@ -623,34 +838,19 @@ bool OptiXDevice::denoise_create_if_needed(const DenoiseParams &params)
 
   /* Create OptiX denoiser handle on demand when it is first used. */
   OptixDenoiserOptions denoiser_options = {};
-#  if OPTIX_ABI_VERSION >= 47
-  denoiser_options.guideAlbedo = input_passes >= 2;
-  denoiser_options.guideNormal = input_passes >= 3;
+  denoiser_options.guideAlbedo = context.use_pass_albedo;
+  denoiser_options.guideNormal = context.use_pass_normal;
   const OptixResult result = optixDenoiserCreate(
-      context, OPTIX_DENOISER_MODEL_KIND_HDR, &denoiser_options, &denoiser_.optix_denoiser);
-#  else
-  denoiser_options.inputKind = static_cast<OptixDenoiserInputKind>(OPTIX_DENOISER_INPUT_RGB +
-                                                                   (input_passes - 1));
-#    if OPTIX_ABI_VERSION < 28
-  denoiser_options.pixelFormat = OPTIX_PIXEL_FORMAT_FLOAT3;
-#    endif
-
-  const OptixResult result = optixDenoiserCreate(
-      context, &denoiser_options, &denoiser_.optix_denoiser);
-#  endif
+      this->context, OPTIX_DENOISER_MODEL_KIND_HDR, &denoiser_options, &denoiser_.optix_denoiser);
 
   if (result != OPTIX_SUCCESS) {
     set_error("Failed to create OptiX denoiser");
     return false;
   }
 
-#  if OPTIX_ABI_VERSION < 47
-  optix_assert(
-      optixDenoiserSetModel(denoiser_.optix_denoiser, OPTIX_DENOISER_MODEL_KIND_HDR, nullptr, 0));
-#  endif
-
   /* OptiX denoiser handle was created with the requested number of input passes. */
-  denoiser_.input_passes = input_passes;
+  denoiser_.use_pass_albedo = context.use_pass_albedo;
+  denoiser_.use_pass_normal = context.use_pass_normal;
 
   /* OptiX denoiser has been created, but it needs configuration. */
   denoiser_.is_configured = false;
@@ -658,22 +858,20 @@ bool OptiXDevice::denoise_create_if_needed(const DenoiseParams &params)
   return true;
 }
 
-bool OptiXDevice::denoise_configure_if_needed(const DeviceDenoiseTask &task)
+bool OptiXDevice::denoise_configure_if_needed(DenoiseContext &context)
 {
-  if (denoiser_.is_configured &&
-      (denoiser_.configured_size.x == task.width && denoiser_.configured_size.y == task.height)) {
+  if (denoiser_.is_configured && (denoiser_.configured_size.x == context.buffer_params.width &&
+                                  denoiser_.configured_size.y == context.buffer_params.height)) {
     return true;
   }
 
+  const BufferParams &buffer_params = context.buffer_params;
+
   OptixDenoiserSizes sizes = {};
   optix_assert(optixDenoiserComputeMemoryResources(
-      denoiser_.optix_denoiser, task.width, task.height, &sizes));
+      denoiser_.optix_denoiser, buffer_params.width, buffer_params.height, &sizes));
 
-#  if OPTIX_ABI_VERSION < 28
-  denoiser_.scratch_size = sizes.recommendedScratchSizeInBytes;
-#  else
   denoiser_.scratch_size = sizes.withOverlapScratchSizeInBytes;
-#  endif
   denoiser_.scratch_offset = sizes.stateSizeInBytes;
 
   /* Allocate denoiser state if tile size has changed since last setup. */
@@ -681,9 +879,9 @@ bool OptiXDevice::denoise_configure_if_needed(const DeviceDenoiseTask &task)
 
   /* Initialize denoiser state for the current tile size. */
   const OptixResult result = optixDenoiserSetup(denoiser_.optix_denoiser,
-                                                0,
-                                                task.width,
-                                                task.height,
+                                                denoiser_.queue.stream(),
+                                                buffer_params.width,
+                                                buffer_params.height,
                                                 denoiser_.state.device_pointer,
                                                 denoiser_.scratch_offset,
                                                 denoiser_.state.device_pointer +
@@ -695,52 +893,81 @@ bool OptiXDevice::denoise_configure_if_needed(const DeviceDenoiseTask &task)
   }
 
   denoiser_.is_configured = true;
-  denoiser_.configured_size.x = task.width;
-  denoiser_.configured_size.y = task.height;
+  denoiser_.configured_size.x = buffer_params.width;
+  denoiser_.configured_size.y = buffer_params.height;
 
   return true;
 }
 
-bool OptiXDevice::denoise_run(OptiXDeviceQueue *queue,
-                              const DeviceDenoiseTask &task,
-                              const device_ptr d_input_rgb)
+bool OptiXDevice::denoise_run(DenoiseContext &context, const DenoisePass &pass)
 {
-  const int pixel_stride = 3 * sizeof(float);
-  const int input_stride = task.width * pixel_stride;
+  const BufferParams &buffer_params = context.buffer_params;
+  const int width = buffer_params.width;
+  const int height = buffer_params.height;
 
   /* Set up input and output layer information. */
-  OptixImage2D input_layers[3] = {};
-  OptixImage2D output_layers[1] = {};
+  OptixImage2D color_layer = {0};
+  OptixImage2D albedo_layer = {0};
+  OptixImage2D normal_layer = {0};
 
-  for (int i = 0; i < 3; ++i) {
-    input_layers[i].data = d_input_rgb + (task.width * task.height * pixel_stride * i);
-    input_layers[i].width = task.width;
-    input_layers[i].height = task.height;
-    input_layers[i].rowStrideInBytes = input_stride;
-    input_layers[i].pixelStrideInBytes = pixel_stride;
-    input_layers[i].format = OPTIX_PIXEL_FORMAT_FLOAT3;
+  OptixImage2D output_layer = {0};
+
+  /* Color pass. */
+  {
+    const int pass_denoised = pass.denoised_offset;
+    const int64_t pass_stride_in_bytes = context.buffer_params.pass_stride * sizeof(float);
+
+    color_layer.data = context.render_buffers->buffer.device_pointer +
+                       pass_denoised * sizeof(float);
+    color_layer.width = width;
+    color_layer.height = height;
+    color_layer.rowStrideInBytes = pass_stride_in_bytes * context.buffer_params.stride;
+    color_layer.pixelStrideInBytes = pass_stride_in_bytes;
+    color_layer.format = OPTIX_PIXEL_FORMAT_FLOAT3;
   }
 
-  output_layers[0].data = d_input_rgb;
-  output_layers[0].width = task.width;
-  output_layers[0].height = task.height;
-  output_layers[0].rowStrideInBytes = input_stride;
-  output_layers[0].pixelStrideInBytes = pixel_stride;
-  output_layers[0].format = OPTIX_PIXEL_FORMAT_FLOAT3;
+  device_vector<float> fake_albedo(this, "fake_albedo", MEM_READ_WRITE);
+
+  /* Optional albedo and color passes. */
+  if (context.num_input_passes > 1) {
+    const device_ptr d_guiding_buffer = context.guiding_params.device_pointer;
+    const int64_t pixel_stride_in_bytes = context.guiding_params.pass_stride * sizeof(float);
+    const int64_t row_stride_in_bytes = context.guiding_params.stride * pixel_stride_in_bytes;
+
+    if (context.use_pass_albedo) {
+      albedo_layer.data = d_guiding_buffer + context.guiding_params.pass_albedo * sizeof(float);
+      albedo_layer.width = width;
+      albedo_layer.height = height;
+      albedo_layer.rowStrideInBytes = row_stride_in_bytes;
+      albedo_layer.pixelStrideInBytes = pixel_stride_in_bytes;
+      albedo_layer.format = OPTIX_PIXEL_FORMAT_FLOAT3;
+    }
+
+    if (context.use_pass_normal) {
+      normal_layer.data = d_guiding_buffer + context.guiding_params.pass_normal * sizeof(float);
+      normal_layer.width = width;
+      normal_layer.height = height;
+      normal_layer.rowStrideInBytes = row_stride_in_bytes;
+      normal_layer.pixelStrideInBytes = pixel_stride_in_bytes;
+      normal_layer.format = OPTIX_PIXEL_FORMAT_FLOAT3;
+    }
+  }
+
+  /* Denoise in-place of the noisy input in the render buffers. */
+  output_layer = color_layer;
 
   /* Finally run denonising. */
   OptixDenoiserParams params = {}; /* All parameters are disabled/zero. */
-#  if OPTIX_ABI_VERSION >= 47
   OptixDenoiserLayer image_layers = {};
-  image_layers.input = input_layers[0];
-  image_layers.output = output_layers[0];
+  image_layers.input = color_layer;
+  image_layers.output = output_layer;
 
   OptixDenoiserGuideLayer guide_layers = {};
-  guide_layers.albedo = input_layers[1];
-  guide_layers.normal = input_layers[2];
+  guide_layers.albedo = albedo_layer;
+  guide_layers.normal = normal_layer;
 
   optix_assert(optixDenoiserInvoke(denoiser_.optix_denoiser,
-                                   queue->stream(),
+                                   denoiser_.queue.stream(),
                                    &params,
                                    denoiser_.state.device_pointer,
                                    denoiser_.scratch_offset,
@@ -751,22 +978,6 @@ bool OptiXDevice::denoise_run(OptiXDeviceQueue *queue,
                                    0,
                                    denoiser_.state.device_pointer + denoiser_.scratch_offset,
                                    denoiser_.scratch_size));
-#  else
-  const int input_passes = denoise_buffer_num_passes(task.params);
-
-  optix_assert(optixDenoiserInvoke(denoiser_.optix_denoiser,
-                                   queue->stream(),
-                                   &params,
-                                   denoiser_.state.device_pointer,
-                                   denoiser_.scratch_offset,
-                                   input_layers,
-                                   input_passes,
-                                   0,
-                                   0,
-                                   output_layers,
-                                   denoiser_.state.device_pointer + denoiser_.scratch_offset,
-                                   denoiser_.scratch_size));
-#  endif
 
   return true;
 }
@@ -880,12 +1091,6 @@ bool OptiXDevice::build_optix_bvh(BVHOptiX *bvh,
 
 void OptiXDevice::build_bvh(BVH *bvh, Progress &progress, bool refit)
 {
-  if (bvh->params.bvh_layout == BVH_LAYOUT_BVH2) {
-    /* For baking CUDA is used, build appropriate BVH for that. */
-    Device::build_bvh(bvh, progress, refit);
-    return;
-  }
-
   const bool use_fast_trace_bvh = (bvh->params.bvh_type == BVH_TYPE_STATIC);
 
   free_bvh_memory_delayed();
@@ -927,17 +1132,15 @@ void OptiXDevice::build_bvh(BVH *bvh, Progress &progress, bool refit)
       }
 
       device_vector<OptixAabb> aabb_data(this, "optix temp aabb data", MEM_READ_ONLY);
-#  if OPTIX_ABI_VERSION >= 36
       device_vector<int> index_data(this, "optix temp index data", MEM_READ_ONLY);
       device_vector<float4> vertex_data(this, "optix temp vertex data", MEM_READ_ONLY);
       /* Four control points for each curve segment. */
       const size_t num_vertices = num_segments * 4;
-      if (DebugFlags().optix.curves_api && hair->curve_shape == CURVE_THICK) {
+      if (hair->curve_shape == CURVE_THICK) {
         index_data.alloc(num_segments);
         vertex_data.alloc(num_vertices * num_motion_steps);
       }
       else
-#  endif
         aabb_data.alloc(num_segments * num_motion_steps);
 
       /* Get AABBs for each motion step. */
@@ -953,13 +1156,10 @@ void OptiXDevice::build_bvh(BVH *bvh, Progress &progress, bool refit)
 
         for (size_t j = 0, i = 0; j < hair->num_curves(); ++j) {
           const Hair::Curve curve = hair->get_curve(j);
-#  if OPTIX_ABI_VERSION >= 36
           const array<float> &curve_radius = hair->get_curve_radius();
-#  endif
 
           for (int segment = 0; segment < curve.num_segments(); ++segment, ++i) {
-#  if OPTIX_ABI_VERSION >= 36
-            if (DebugFlags().optix.curves_api && hair->curve_shape == CURVE_THICK) {
+            if (hair->curve_shape == CURVE_THICK) {
               int k0 = curve.first_key + segment;
               int k1 = k0 + 1;
               int ka = max(k0 - 1, curve.first_key);
@@ -988,9 +1188,7 @@ void OptiXDevice::build_bvh(BVH *bvh, Progress &progress, bool refit)
               v[3] = make_float4(
                   dot(cr2bsp3, px), dot(cr2bsp3, py), dot(cr2bsp3, pz), dot(cr2bsp3, pw));
             }
-            else
-#  endif
-            {
+            else {
               BoundBox bounds = BoundBox::empty;
               curve.bounds_grow(segment, keys, hair->get_curve_radius().data(), bounds);
 
@@ -1008,34 +1206,27 @@ void OptiXDevice::build_bvh(BVH *bvh, Progress &progress, bool refit)
 
       /* Upload AABB data to GPU. */
       aabb_data.copy_to_device();
-#  if OPTIX_ABI_VERSION >= 36
       index_data.copy_to_device();
       vertex_data.copy_to_device();
-#  endif
 
       vector<device_ptr> aabb_ptrs;
       aabb_ptrs.reserve(num_motion_steps);
-#  if OPTIX_ABI_VERSION >= 36
       vector<device_ptr> width_ptrs;
       vector<device_ptr> vertex_ptrs;
       width_ptrs.reserve(num_motion_steps);
       vertex_ptrs.reserve(num_motion_steps);
-#  endif
       for (size_t step = 0; step < num_motion_steps; ++step) {
         aabb_ptrs.push_back(aabb_data.device_pointer + step * num_segments * sizeof(OptixAabb));
-#  if OPTIX_ABI_VERSION >= 36
         const device_ptr base_ptr = vertex_data.device_pointer +
                                     step * num_vertices * sizeof(float4);
         width_ptrs.push_back(base_ptr + 3 * sizeof(float)); /* Offset by vertex size. */
         vertex_ptrs.push_back(base_ptr);
-#  endif
       }
 
       /* Force a single any-hit call, so shadow record-all behavior works correctly. */
       unsigned int build_flags = OPTIX_GEOMETRY_FLAG_REQUIRE_SINGLE_ANYHIT_CALL;
       OptixBuildInput build_input = {};
-#  if OPTIX_ABI_VERSION >= 36
-      if (DebugFlags().optix.curves_api && hair->curve_shape == CURVE_THICK) {
+      if (hair->curve_shape == CURVE_THICK) {
         build_input.type = OPTIX_BUILD_INPUT_TYPE_CURVES;
         build_input.curveArray.curveType = OPTIX_PRIMITIVE_TYPE_ROUND_CUBIC_BSPLINE;
         build_input.curveArray.numPrimitives = num_segments;
@@ -1049,29 +1240,18 @@ void OptiXDevice::build_bvh(BVH *bvh, Progress &progress, bool refit)
         build_input.curveArray.flag = build_flags;
         build_input.curveArray.primitiveIndexOffset = hair->optix_prim_offset;
       }
-      else
-#  endif
-      {
+      else {
         /* Disable visibility test any-hit program, since it is already checked during
          * intersection. Those trace calls that require anyhit can force it with a ray flag. */
         build_flags |= OPTIX_GEOMETRY_FLAG_DISABLE_ANYHIT;
 
         build_input.type = OPTIX_BUILD_INPUT_TYPE_CUSTOM_PRIMITIVES;
-#  if OPTIX_ABI_VERSION < 23
-        build_input.aabbArray.aabbBuffers = (CUdeviceptr *)aabb_ptrs.data();
-        build_input.aabbArray.numPrimitives = num_segments;
-        build_input.aabbArray.strideInBytes = sizeof(OptixAabb);
-        build_input.aabbArray.flags = &build_flags;
-        build_input.aabbArray.numSbtRecords = 1;
-        build_input.aabbArray.primitiveIndexOffset = hair->optix_prim_offset;
-#  else
         build_input.customPrimitiveArray.aabbBuffers = (CUdeviceptr *)aabb_ptrs.data();
         build_input.customPrimitiveArray.numPrimitives = num_segments;
         build_input.customPrimitiveArray.strideInBytes = sizeof(OptixAabb);
         build_input.customPrimitiveArray.flags = &build_flags;
         build_input.customPrimitiveArray.numSbtRecords = 1;
         build_input.customPrimitiveArray.primitiveIndexOffset = hair->optix_prim_offset;
-#  endif
       }
 
       if (!build_optix_bvh(bvh_optix, operation, build_input, num_motion_steps)) {
@@ -1098,7 +1278,7 @@ void OptiXDevice::build_bvh(BVH *bvh, Progress &progress, bool refit)
       memcpy(index_data.data(),
              mesh->get_triangles().data(),
              mesh->get_triangles().size() * sizeof(int));
-      device_vector<float3> vertex_data(this, "optix temp vertex data", MEM_READ_ONLY);
+      device_vector<float4> vertex_data(this, "optix temp vertex data", MEM_READ_ONLY);
       vertex_data.alloc(num_verts * num_motion_steps);
 
       for (size_t step = 0; step < num_motion_steps; ++step) {
@@ -1130,7 +1310,7 @@ void OptiXDevice::build_bvh(BVH *bvh, Progress &progress, bool refit)
       build_input.triangleArray.vertexBuffers = (CUdeviceptr *)vertex_ptrs.data();
       build_input.triangleArray.numVertices = num_verts;
       build_input.triangleArray.vertexFormat = OPTIX_VERTEX_FORMAT_FLOAT3;
-      build_input.triangleArray.vertexStrideInBytes = sizeof(float3);
+      build_input.triangleArray.vertexStrideInBytes = sizeof(float4);
       build_input.triangleArray.indexBuffer = index_data.device_pointer;
       build_input.triangleArray.numIndexTriplets = mesh->num_triangles();
       build_input.triangleArray.indexFormat = OPTIX_INDICES_FORMAT_UNSIGNED_INT3;
@@ -1168,10 +1348,6 @@ void OptiXDevice::build_bvh(BVH *bvh, Progress &progress, bool refit)
     }
 
     /* Fill instance descriptions. */
-#  if OPTIX_ABI_VERSION < 41
-    device_vector<OptixAabb> aabbs(this, "optix tlas aabbs", MEM_READ_ONLY);
-    aabbs.alloc(bvh->objects.size());
-#  endif
     device_vector<OptixInstance> instances(this, "optix tlas instances", MEM_READ_ONLY);
     instances.alloc(bvh->objects.size());
 
@@ -1203,16 +1379,6 @@ void OptiXDevice::build_bvh(BVH *bvh, Progress &progress, bool refit)
       BVHOptiX *const blas = static_cast<BVHOptiX *>(ob->get_geometry()->bvh);
       OptixTraversableHandle handle = blas->traversable_handle;
 
-#  if OPTIX_ABI_VERSION < 41
-      OptixAabb &aabb = aabbs[num_instances];
-      aabb.minX = ob->bounds.min.x;
-      aabb.minY = ob->bounds.min.y;
-      aabb.minZ = ob->bounds.min.z;
-      aabb.maxX = ob->bounds.max.x;
-      aabb.maxY = ob->bounds.max.y;
-      aabb.maxZ = ob->bounds.max.z;
-#  endif
-
       OptixInstance &instance = instances[num_instances++];
       memset(&instance, 0, sizeof(instance));
 
@@ -1237,14 +1403,11 @@ void OptiXDevice::build_bvh(BVH *bvh, Progress &progress, bool refit)
         /* Same applies to curves (so they can be skipped in local trace calls). */
         instance.visibilityMask |= 4;
 
-#  if OPTIX_ABI_VERSION >= 36
         if (motion_blur && ob->get_geometry()->has_motion_blur() &&
-            DebugFlags().optix.curves_api &&
             static_cast<const Hair *>(ob->get_geometry())->curve_shape == CURVE_THICK) {
           /* Select between motion blur and non-motion blur built-in intersection module. */
           instance.sbtOffset = PG_HITD_MOTION - PG_HITD;
         }
-#  endif
       }
 
       /* Insert motion traversable if object has motion. */
@@ -1337,20 +1500,12 @@ void OptiXDevice::build_bvh(BVH *bvh, Progress &progress, bool refit)
     }
 
     /* Upload instance descriptions. */
-#  if OPTIX_ABI_VERSION < 41
-    aabbs.resize(num_instances);
-    aabbs.copy_to_device();
-#  endif
     instances.resize(num_instances);
     instances.copy_to_device();
 
     /* Build top-level acceleration structure (TLAS) */
     OptixBuildInput build_input = {};
     build_input.type = OPTIX_BUILD_INPUT_TYPE_INSTANCES;
-#  if OPTIX_ABI_VERSION < 41 /* Instance AABBs no longer need to be set since OptiX 7.2 */
-    build_input.instanceArray.aabbs = aabbs.device_pointer;
-    build_input.instanceArray.numAabbs = num_instances;
-#  endif
     build_input.instanceArray.instances = instances.device_pointer;
     build_input.instanceArray.numInstances = num_instances;
 
@@ -1401,7 +1556,7 @@ void OptiXDevice::const_copy_to(const char *name, void *host, size_t size)
       update_launch_params(offsetof(KernelParamsOptiX, tex_name), host, size); \
       return; \
     }
-  KERNEL_TEX(IntegratorState, __integrator_state)
+  KERNEL_TEX(IntegratorStateGPU, __integrator_state)
 #  include "kernel/kernel_textures.h"
 #  undef KERNEL_TEX
 }

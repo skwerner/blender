@@ -76,8 +76,13 @@ TileSize tile_calculate_best_size(const int2 &image_size,
    * The idea here is to keep tiles as small as possible, and keep device occupied by scheduling
    * multiple tiles with the same coordinates rendering different samples. */
   const int num_path_states_per_sample = max_num_path_states / num_samples;
-  tile_size.width = round_down_to_power_of_two(lround(sqrt(num_path_states_per_sample)));
-  tile_size.height = tile_size.width;
+  if (num_path_states_per_sample != 0) {
+    tile_size.width = round_down_to_power_of_two(lround(sqrt(num_path_states_per_sample)));
+    tile_size.height = tile_size.width;
+  }
+  else {
+    tile_size.width = tile_size.height = 1;
+  }
 
   if (num_samples == 1) {
     tile_size.num_samples = 1;
@@ -87,8 +92,14 @@ TileSize tile_calculate_best_size(const int2 &image_size,
      * [32 <38 times>, 8] over [1024, 200]. This allows to greedily add more tiles early on. */
     tile_size.num_samples = min(round_up_to_power_of_two(lround(sqrt(num_samples / 2))),
                                 static_cast<uint>(num_samples));
+
+    const int tile_area = tile_size.width / tile_size.height;
+    tile_size.num_samples = min(tile_size.num_samples, max_num_path_states / tile_area);
   }
 
+  DCHECK_GE(tile_size.width, 1);
+  DCHECK_GE(tile_size.height, 1);
+  DCHECK_GE(tile_size.num_samples, 1);
   DCHECK_LE(tile_size.width * tile_size.height * tile_size.num_samples, max_num_path_states);
 
   return tile_size;

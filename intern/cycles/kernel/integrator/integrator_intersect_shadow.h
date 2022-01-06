@@ -35,8 +35,6 @@ ccl_device bool integrate_intersect_shadow_opaque(INTEGRATOR_STATE_ARGS,
                                                   const Ray *ray,
                                                   const uint visibility)
 {
-  PROFILING_INIT(kg, PROFILING_SCENE_INTERSECT);
-
   /* Mask which will pick only opaque visibility bits from the `visibility`.
    * Calculate the mask at compile time: the visibility will either be a high bits for the shadow
    * catcher objects, or lower bits for the regular objects (there is no need to check the path
@@ -67,8 +65,6 @@ ccl_device bool integrate_intersect_shadow_transparent(INTEGRATOR_STATE_ARGS,
                                                        const Ray *ray,
                                                        const uint visibility)
 {
-  PROFILING_INIT(kg, PROFILING_SCENE_INTERSECT);
-
   Intersection isect[INTEGRATOR_SHADOW_ISECT_SIZE];
 
   /* Limit the number hits to the max transparent bounces allowed and the size that we
@@ -97,6 +93,9 @@ ccl_device bool integrate_intersect_shadow_transparent(INTEGRATOR_STATE_ARGS,
 
     INTEGRATOR_STATE_WRITE(shadow_path, num_hits) = num_hits;
   }
+  else {
+    INTEGRATOR_STATE_WRITE(shadow_path, num_hits) = 0;
+  }
 
   return opaque_hit;
 }
@@ -104,6 +103,8 @@ ccl_device bool integrate_intersect_shadow_transparent(INTEGRATOR_STATE_ARGS,
 
 ccl_device void integrator_intersect_shadow(INTEGRATOR_STATE_ARGS)
 {
+  PROFILING_INIT(kg, PROFILING_INTERSECT_SHADOW);
+
   /* Read ray from integrator state into local memory. */
   Ray ray ccl_optional_struct_init;
   integrator_state_read_shadow_ray(INTEGRATOR_STATE_PASS, &ray);
@@ -125,7 +126,7 @@ ccl_device void integrator_intersect_shadow(INTEGRATOR_STATE_ARGS)
 
   if (opaque_hit) {
     /* Hit an opaque surface, shadow path ends here. */
-    INTEGRATOR_SHADOW_PATH_TERMINATE(INTERSECT_SHADOW);
+    INTEGRATOR_SHADOW_PATH_TERMINATE(DEVICE_KERNEL_INTEGRATOR_INTERSECT_SHADOW);
     return;
   }
   else {
@@ -134,7 +135,8 @@ ccl_device void integrator_intersect_shadow(INTEGRATOR_STATE_ARGS)
      *
      * TODO: could also write to render buffer directly if no transparent shadows?
      * Could save a kernel execution for the common case. */
-    INTEGRATOR_SHADOW_PATH_NEXT(INTERSECT_SHADOW, SHADE_SHADOW);
+    INTEGRATOR_SHADOW_PATH_NEXT(DEVICE_KERNEL_INTEGRATOR_INTERSECT_SHADOW,
+                                DEVICE_KERNEL_INTEGRATOR_SHADE_SHADOW);
     return;
   }
 }

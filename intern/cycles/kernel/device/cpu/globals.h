@@ -21,9 +21,6 @@
 #include "kernel/kernel_profiling.h"
 #include "kernel/kernel_types.h"
 
-#include "util/util_map.h"
-#include "util/util_vector.h"
-
 CCL_NAMESPACE_BEGIN
 
 /* On the CPU, we pass along the struct KernelGlobals to nearly everywhere in
@@ -36,12 +33,10 @@ struct OSLGlobals;
 struct OSLThreadData;
 struct OSLShadingSystem;
 #endif
+
 #ifdef __OIIO__
 struct OIIOGlobals;
-struct OIIOThreadData;
 #endif
-
-typedef unordered_map<float, float> CoverageMap;
 
 typedef struct KernelGlobals {
 #define KERNEL_TEX(type, name) texture<type> name;
@@ -62,11 +57,6 @@ typedef struct KernelGlobals {
 #endif
 
   /* **** Run-time data ****  */
-
-  /* A buffer for storing per-pixel coverage for Cryptomatte. */
-  CoverageMap *coverage_object;
-  CoverageMap *coverage_material;
-  CoverageMap *coverage_asset;
 
   ProfilingState profiler;
 } KernelGlobals;

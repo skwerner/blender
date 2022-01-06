@@ -211,8 +211,17 @@ static bool is_cursor_visible_2d(const DRWContextState *draw_ctx)
     return false;
   }
   SpaceImage *sima = (SpaceImage *)space_data;
-  if (sima->mode != SI_MODE_UV) {
-    return false;
+  switch (sima->mode) {
+    case SI_MODE_VIEW:
+      return false;
+      break;
+    case SI_MODE_PAINT:
+      return false;
+      break;
+    case SI_MODE_MASK:
+      break;
+    case SI_MODE_UV:
+      break;
   }
   return (sima->overlay.flag & SI_OVERLAY_SHOW_OVERLAYS) != 0;
 }
@@ -266,7 +275,7 @@ void DRW_draw_gizmo_3d(void)
   ARegion *region = draw_ctx->region;
 
   /* draw depth culled gizmos - gizmos need to be updated *after* view matrix was set up */
-  /* TODO depth culling gizmos is not yet supported, just drawing _3D here, should
+  /* TODO: depth culling gizmos is not yet supported, just drawing _3D here, should
    * later become _IN_SCENE (and draw _3D separate) */
   WM_gizmomap_draw(region->gizmo_map, draw_ctx->evil_C, WM_GIZMOMAP_DRAWSTEP_3D);
 }

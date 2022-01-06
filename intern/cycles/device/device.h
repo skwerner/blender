@@ -22,7 +22,6 @@
 #include "bvh/bvh_params.h"
 
 #include "device/device_denoise.h"
-#include "device/device_graphics_interop.h"
 #include "device/device_memory.h"
 
 #include "util/util_function.h"
@@ -49,7 +48,6 @@ class CPUKernelThreadGlobals;
 enum DeviceType {
   DEVICE_NONE = 0,
   DEVICE_CPU,
-  DEVICE_OPENCL,
   DEVICE_CUDA,
   DEVICE_MULTI,
   DEVICE_OPTIX,
@@ -58,7 +56,6 @@ enum DeviceType {
 
 enum DeviceTypeMask {
   DEVICE_MASK_CPU = (1 << DEVICE_CPU),
-  DEVICE_MASK_OPENCL = (1 << DEVICE_OPENCL),
   DEVICE_MASK_CUDA = (1 << DEVICE_CUDA),
   DEVICE_MASK_OPTIX = (1 << DEVICE_OPTIX),
   DEVICE_MASK_ALL = ~0
@@ -75,10 +72,10 @@ class DeviceInfo {
   bool display_device;        /* GPU is used as a display device. */
   bool has_nanovdb;           /* Support NanoVDB volumes. */
   bool has_half_images;       /* Support half-float textures. */
-  bool has_volume_decoupled;  /* Decoupled volume shading. */
   bool has_osl;               /* Support Open Shading Language. */
   bool has_profiling;         /* Supports runtime collection of profiling info. */
   bool has_peer_memory;       /* GPU has P2P access to memory of another GPU. */
+  bool has_gpu_queue;         /* Device supports GPU queue. */
   DenoiserTypeMask denoisers; /* Supported denoiser types. */
   int cpu_threads;
   vector<DeviceInfo> multi_devices;
@@ -93,10 +90,10 @@ class DeviceInfo {
     display_device = false;
     has_half_images = false;
     has_nanovdb = false;
-    has_volume_decoupled = false;
     has_osl = false;
     has_profiling = false;
     has_peer_memory = false;
+    has_gpu_queue = false;
     denoisers = DENOISER_NONE;
   }
 
@@ -108,163 +105,6 @@ class DeviceInfo {
     return id == info.id;
   }
 };
-
-class DeviceRequestedFeatures {
- public:
-  /* Use experimental feature set. */
-  bool experimental;
-
-  /* Selective nodes compilation. */
-
-  /* Identifier of a node group up to which all the nodes needs to be
-   * compiled in. Nodes from higher group indices will be ignores.
-   */
-  int max_nodes_group;
-
-  /* Features bitfield indicating which features from the requested group
-   * will be compiled in. Nodes which corresponds to features which are not
-   * in this bitfield will be ignored even if they're in the requested group.
-   */
-  int nodes_features;
-
-  /* BVH/sampling kernel features. */
-  bool use_hair;
-  bool use_hair_thick;
-  bool use_object_motion;
-  bool use_camera_motion;
-
-  /* Denotes whether baking functionality is needed. */
-  bool use_baking;
-
-  /* Use subsurface scattering materials. */
-  bool use_subsurface;
-
-  /* Use volume materials. */
-  bool use_volume;
-
-  /* Use OpenSubdiv patch evaluation */
-  bool use_patch_evaluation;
-
-  /* Use Transparent shadows */
-  bool use_transparent;
-
-  /* Use shadow catcher. */
-  bool use_shadow_catcher;
-
-  /* Per-uber shader usage flags. */
-  bool use_principled;
-
-  /* Denoising features. */
-  bool use_denoising;
-
-  /* Use raytracing in shaders. */
-  bool use_shader_raytrace;
-
-  /* Use true displacement */
-  bool use_true_displacement;
-
-  /* Use background lights */
-  bool use_background_light;
-
-  /* Use path tracing kernels. */
-  bool use_path_tracing;
-
-  DeviceRequestedFeatures()
-  {
-    /* TODO(sergey): Find more meaningful defaults. */
-    max_nodes_group = 0;
-    nodes_features = 0;
-    use_hair = false;
-    use_hair_thick = false;
-    use_object_motion = false;
-    use_camera_motion = false;
-    use_baking = false;
-    use_subsurface = false;
-    use_volume = false;
-    use_patch_evaluation = false;
-    use_transparent = false;
-    use_shadow_catcher = false;
-    use_principled = false;
-    use_denoising = false;
-    use_shader_raytrace = false;
-    use_true_displacement = false;
-    use_background_light = false;
-    use_path_tracing = true;
-  }
-
-  bool modified(const DeviceRequestedFeatures &requested_features)
-  {
-    return !(max_nodes_group == requested_features.max_nodes_group &&
-             nodes_features == requested_features.nodes_features &&
-             use_hair == requested_features.use_hair &&
-             use_hair_thick == requested_features.use_hair_thick &&
-             use_object_motion == requested_features.use_object_motion &&
-             use_camera_motion == requested_features.use_camera_motion &&
-             use_baking == requested_features.use_baking &&
-             use_subsurface == requested_features.use_subsurface &&
-             use_volume == requested_features.use_volume &&
-             use_patch_evaluation == requested_features.use_patch_evaluation &&
-             use_transparent == requested_features.use_transparent &&
-             use_shadow_catcher == requested_features.use_shadow_catcher &&
-             use_principled == requested_features.use_principled &&
-             use_denoising == requested_features.use_denoising &&
-             use_shader_raytrace == requested_features.use_shader_raytrace &&
-             use_true_displacement == requested_features.use_true_displacement &&
-             use_background_light == requested_features.use_background_light);
-  }
-
-  /* Convert the requested features structure to a build options,
-   * which could then be passed to compilers.
-   */
-  string get_build_options() const
-  {
-    string build_options = "";
-    if (experimental) {
-      build_options += "-D__KERNEL_EXPERIMENTAL__ ";
-    }
-    build_options += "-D__NODES_MAX_GROUP__=" + string_printf("%d", max_nodes_group);
-    build_options += " -D__NODES_FEATURES__=" + string_printf("%d", nodes_features);
-    if (!use_hair) {
-      build_options += " -D__NO_HAIR__";
-    }
-    if (!use_object_motion) {
-      build_options += " -D__NO_OBJECT_MOTION__";
-    }
-    if (!use_camera_motion) {
-      build_options += " -D__NO_CAMERA_MOTION__";
-    }
-    if (!use_baking) {
-      build_options += " -D__NO_BAKING__";
-    }
-    if (!use_volume) {
-      build_options += " -D__NO_VOLUME__";
-    }
-    if (!use_subsurface) {
-      build_options += " -D__NO_SUBSURFACE__";
-    }
-    if (!use_patch_evaluation) {
-      build_options += " -D__NO_PATCH_EVAL__";
-    }
-    if (!use_transparent && !use_volume) {
-      build_options += " -D__NO_TRANSPARENT__";
-    }
-    if (!use_shadow_catcher) {
-      build_options += " -D__NO_SHADOW_CATCHER__";
-    }
-    if (!use_principled) {
-      build_options += " -D__NO_PRINCIPLED__";
-    }
-    if (!use_denoising) {
-      build_options += " -D__NO_DENOISING__";
-    }
-    if (!use_shader_raytrace) {
-      build_options += " -D__NO_SHADER_RAYTRACE__";
-    }
-    return build_options;
-  }
-};
-
-std::ostream &operator<<(std::ostream &os, const DeviceRequestedFeatures &requested_features);
 
 /* Device */
 
@@ -323,7 +163,7 @@ class Device {
   virtual void const_copy_to(const char *name, void *host, size_t size) = 0;
 
   /* load/compile kernels, must be called before adding tasks */
-  virtual bool load_kernels(const DeviceRequestedFeatures & /*requested_features*/)
+  virtual bool load_kernels(uint /*kernel_features*/)
   {
     return true;
   }
@@ -383,20 +223,19 @@ class Device {
     return false;
   }
 
-  /* Create graphics interoperability context which will be taking care of mapping graphics
-   * resource as a buffer writable by kernels of this device. */
-  virtual unique_ptr<DeviceGraphicsInterop> graphics_interop_create()
-  {
-    LOG(FATAL) << "Request of GPU interop of a device which does not support it.";
-    return nullptr;
-  }
-
   /* Buffer denoising. */
 
-  /* TODO(sergey): Need to pass real parameters needed for denoising. */
-  virtual void denoise_buffer(const DeviceDenoiseTask & /*task*/)
+  /* Returns true if task is fully handled. */
+  virtual bool denoise_buffer(const DeviceDenoiseTask & /*task*/)
   {
     LOG(ERROR) << "Request buffer denoising from a device which does not support it.";
+    return false;
+  }
+
+  virtual DeviceQueue *get_denoise_queue()
+  {
+    LOG(ERROR) << "Request denoising queue from a device which does not support it.";
+    return nullptr;
   }
 
   /* Sub-devices */
@@ -445,7 +284,6 @@ class Device {
   static thread_mutex device_mutex;
   static vector<DeviceInfo> cuda_devices;
   static vector<DeviceInfo> optix_devices;
-  static vector<DeviceInfo> opencl_devices;
   static vector<DeviceInfo> cpu_devices;
   static uint devices_initialized_mask;
 };

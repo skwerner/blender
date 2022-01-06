@@ -230,7 +230,7 @@ static wmKeyMapItem *rna_KeyMap_item_new(wmKeyMap *km,
                                          bool repeat,
                                          bool head)
 {
-  /*  wmWindowManager *wm = CTX_wm_manager(C); */
+  // wmWindowManager *wm = CTX_wm_manager(C);
   wmKeyMapItem *kmi = NULL;
   char idname_bl[OP_MAX_TYPENAME];
   int modifier = 0;
@@ -641,7 +641,7 @@ static wmEvent *rna_Window_event_add_simulate(wmWindow *win,
   e.is_repeat = false;
   e.x = x;
   e.y = y;
-  /* Note: KM_MOD_FIRST, KM_MOD_SECOND aren't used anywhere, set as bools */
+  /* NOTE: KM_MOD_FIRST, KM_MOD_SECOND aren't used anywhere, set as bools. */
   e.shift = shift;
   e.ctrl = ctrl;
   e.alt = alt;

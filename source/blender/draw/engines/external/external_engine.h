@@ -22,4 +22,8 @@
 
 #pragma once
 
+extern DrawEngineType draw_engine_external_type;
 extern RenderEngineType DRW_engine_viewport_external_type;
+
+/* Check whether an external engine is to be used to draw content of an image editor. */
+bool DRW_engine_external_use_for_image_editor(void);

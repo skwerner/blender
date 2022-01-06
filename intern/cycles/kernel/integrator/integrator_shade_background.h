@@ -23,8 +23,8 @@
 
 CCL_NAMESPACE_BEGIN
 
-ccl_device_noinline_cpu float3 integrator_eval_background_shader(
-    INTEGRATOR_STATE_ARGS, ccl_global float *ccl_restrict render_buffer)
+ccl_device float3 integrator_eval_background_shader(INTEGRATOR_STATE_ARGS,
+                                                    ccl_global float *ccl_restrict render_buffer)
 {
 #ifdef __BACKGROUND__
   const int shader = kernel_data.background.surface_shader;
@@ -54,12 +54,16 @@ ccl_device_noinline_cpu float3 integrator_eval_background_shader(
     ShaderDataTinyStorage emission_sd_storage;
     ShaderData *emission_sd = AS_SHADER_DATA(&emission_sd_storage);
 
+    PROFILING_INIT_FOR_SHADER(kg, PROFILING_SHADE_LIGHT_SETUP);
     shader_setup_from_background(kg,
                                  emission_sd,
                                  INTEGRATOR_STATE(ray, P),
                                  INTEGRATOR_STATE(ray, D),
                                  INTEGRATOR_STATE(ray, time));
-    shader_eval_surface<NODE_FEATURE_MASK_LIGHT>(
+
+    PROFILING_SHADER(emission_sd->object, emission_sd->shader);
+    PROFILING_EVENT(PROFILING_SHADE_LIGHT_EVAL);
+    shader_eval_surface<KERNEL_FEATURE_NODE_MASK_SURFACE_LIGHT>(
         INTEGRATOR_STATE_PASS, emission_sd, render_buffer, path_flag | PATH_RAY_EMISSION);
 
     L = shader_background_eval(emission_sd);
@@ -97,8 +101,11 @@ ccl_device_inline void integrate_background(INTEGRATOR_STATE_ARGS,
   bool eval_background = true;
   float transparent = 0.0f;
 
-  if (kernel_data.background.transparent &&
-      (INTEGRATOR_STATE(path, flag) & PATH_RAY_TRANSPARENT_BACKGROUND)) {
+  const bool is_transparent_background_ray = kernel_data.background.transparent &&
+                                             (INTEGRATOR_STATE(path, flag) &
+                                              PATH_RAY_TRANSPARENT_BACKGROUND);
+
+  if (is_transparent_background_ray) {
     transparent = average(INTEGRATOR_STATE(path, throughput));
 
 #ifdef __PASSES__
@@ -116,11 +123,12 @@ ccl_device_inline void integrate_background(INTEGRATOR_STATE_ARGS,
   /* When using the ao bounces approximation, adjust background
    * shader intensity with ao factor. */
   if (path_state_ao_bounce(INTEGRATOR_STATE_PASS)) {
-    L *= kernel_data.background.ao_bounces_factor;
+    L *= kernel_data.integrator.ao_bounces_factor;
   }
 
   /* Write to render buffer. */
-  kernel_accum_background(INTEGRATOR_STATE_PASS, L, transparent, render_buffer);
+  kernel_accum_background(
+      INTEGRATOR_STATE_PASS, L, transparent, is_transparent_background_ray, render_buffer);
 }
 
 ccl_device_inline void integrate_distant_lights(INTEGRATOR_STATE_ARGS,
@@ -141,6 +149,7 @@ ccl_device_inline void integrate_distant_lights(INTEGRATOR_STATE_ARGS,
              ((path_flag & (PATH_RAY_GLOSSY | PATH_RAY_REFLECT)) ==
               (PATH_RAY_GLOSSY | PATH_RAY_REFLECT))) ||
             ((ls.shader & SHADER_EXCLUDE_TRANSMIT) && (path_flag & PATH_RAY_TRANSMIT)) ||
+            ((ls.shader & SHADER_EXCLUDE_CAMERA) && (path_flag & PATH_RAY_CAMERA)) ||
             ((ls.shader & SHADER_EXCLUDE_SCATTER) && (path_flag & PATH_RAY_VOLUME_SCATTER)))
           return;
       }
@@ -166,7 +175,8 @@ ccl_device_inline void integrate_distant_lights(INTEGRATOR_STATE_ARGS,
       }
 
       /* Write to render buffer. */
-      kernel_accum_emission(INTEGRATOR_STATE_PASS, light_eval, render_buffer);
+      const float3 throughput = INTEGRATOR_STATE(path, throughput);
+      kernel_accum_emission(INTEGRATOR_STATE_PASS, throughput, light_eval, render_buffer);
     }
   }
 }
@@ -174,12 +184,35 @@ ccl_device_inline void integrate_distant_lights(INTEGRATOR_STATE_ARGS,
 ccl_device void integrator_shade_background(INTEGRATOR_STATE_ARGS,
                                             ccl_global float *ccl_restrict render_buffer)
 {
-  // TODO: unify these in a single loop to only have a single shader evaluation call
+  PROFILING_INIT(kg, PROFILING_SHADE_LIGHT_SETUP);
+
+  /* TODO: unify these in a single loop to only have a single shader evaluation call. */
   integrate_distant_lights(INTEGRATOR_STATE_PASS, render_buffer);
   integrate_background(INTEGRATOR_STATE_PASS, render_buffer);
 
-  /* Path ends here. */
-  INTEGRATOR_PATH_TERMINATE(SHADE_BACKGROUND);
+#ifdef __SHADOW_CATCHER__
+  if (INTEGRATOR_STATE(path, flag) & PATH_RAY_SHADOW_CATCHER_BACKGROUND) {
+    INTEGRATOR_STATE_WRITE(path, flag) &= ~PATH_RAY_SHADOW_CATCHER_BACKGROUND;
+
+    const int isect_prim = INTEGRATOR_STATE(isect, prim);
+    const int shader = intersection_get_shader_from_isect_prim(kg, isect_prim);
+    const int shader_flags = kernel_tex_fetch(__shaders, shader).flags;
+
+    if ((shader_flags & SD_HAS_RAYTRACE) || (kernel_data.film.pass_ao != PASS_UNUSED)) {
+      INTEGRATOR_PATH_NEXT_SORTED(DEVICE_KERNEL_INTEGRATOR_SHADE_BACKGROUND,
+                                  DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE_RAYTRACE,
+                                  shader);
+    }
+    else {
+      INTEGRATOR_PATH_NEXT_SORTED(DEVICE_KERNEL_INTEGRATOR_SHADE_BACKGROUND,
+                                  DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE,
+                                  shader);
+    }
+    return;
+  }
+#endif
+
+  INTEGRATOR_PATH_TERMINATE(DEVICE_KERNEL_INTEGRATOR_SHADE_BACKGROUND);
 }
 
 CCL_NAMESPACE_END

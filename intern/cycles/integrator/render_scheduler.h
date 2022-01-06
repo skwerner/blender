@@ -23,9 +23,17 @@
 
 CCL_NAMESPACE_BEGIN
 
+class SessionParams;
+class TileManager;
+
 class RenderWork {
  public:
   int resolution_divider = 1;
+
+  /* Initialize render buffers.
+   * Includes steps like zero-ing the buffer on the device, and optional reading of pixels from the
+   * baking target. */
+  bool init_render_buffers = false;
 
   /* Path tracing samples information. */
   struct {
@@ -43,38 +51,80 @@ class RenderWork {
     bool reset = false;
   } adaptive_sampling;
 
-  bool denoise = false;
+  struct {
+    bool postprocess = false;
+  } cryptomatte;
+
+  /* Work related on the current tile. */
+  struct {
+    /* Write render buffers of the current tile.
+     *
+     * It is up to the path trace to decide whether writing should happen via user-provided
+     * callback into the rendering software, or via tile manager into a partial file. */
+    bool write = false;
+
+    bool denoise = false;
+  } tile;
+
+  /* Work related on the full-frame render buffer. */
+  struct {
+    /* Write full render result.
+     * Implies reading the partial file from disk. */
+    bool write = false;
+
+    bool denoise = false;
+  } full;
 
   /* Display which is used to visualize render result is to be updated for the new render. */
   bool update_display = false;
+
+  /* Re-balance multi-device scheduling after rendering this work.
+   * Note that the scheduler does not know anything abouce devices, so if there is only a single
+   * device used, then it is up for the PathTracer to ignore the balancing. */
+  bool rebalance = false;
 
   /* Conversion to bool, to simplify checks about whether there is anything to be done for this
    * work. */
   inline operator bool() const
   {
-    return path_trace.num_samples || adaptive_sampling.filter || denoise || update_display;
+    return path_trace.num_samples || adaptive_sampling.filter || update_display || tile.denoise ||
+           tile.write || full.write || full.denoise;
   }
 };
 
 class RenderScheduler {
  public:
-  RenderScheduler(bool headless, bool background, int pixel_size);
+  RenderScheduler(TileManager &tile_manager, const SessionParams &params);
+
+  /* Specify whether cryptomatte-related works are to be scheduled. */
+  void set_need_schedule_cryptomatte(bool need_schedule_cryptomatte);
+
+  /* Allows to disable work re-balancing works, allowing to schedule as much to a single device
+   * as possible. */
+  void set_need_schedule_rebalance(bool need_schedule_rebalance);
 
   bool is_background() const;
 
   void set_denoiser_params(const DenoiseParams &params);
   void set_adaptive_sampling(const AdaptiveSampling &adaptive_sampling);
 
+  bool is_adaptive_sampling_used() const;
+
   /* Start sample for path tracing.
    * The scheduler will schedule work using this sample as the first one. */
   void set_start_sample(int start_sample);
   int get_start_sample() const;
 
-  /* Number of sampels to render, starting from start sample.
+  /* Number of samples to render, starting from start sample.
    * The scheduler will schedule work in the range of
    * [start_sample, start_sample + num_samples - 1], inclusively. */
   void set_num_samples(int num_samples);
   int get_num_samples() const;
+
+  /* Time limit for the path tracing tasks, in minutes.
+   * Zero disables the limit. */
+  void set_time_limit(double time_limit);
+  double get_time_limit() const;
 
   /* Get sample up to which rendering has been done.
    * This is an absolute 0-based value.
@@ -98,6 +148,11 @@ class RenderScheduler {
    * Resets current rendered state, as well as scheduling information. */
   void reset(const BufferParams &buffer_params, int num_samples);
 
+  /* Reset scheduler upon switching to a next tile.
+   * Will keep the same number of samples and full-frame render parameters, but will reset progress
+   * and allow schedule renders works from the beginning of the new tile. */
+  void reset_for_next_tile();
+
   /* Reschedule adaptive sampling work when all pixels did converge.
    * If there is nothing else to be done for the adaptive sampling (pixels did converge to the
    * final threshold) then false is returned and the render scheduler will stop scheduling path
@@ -111,22 +166,49 @@ class RenderScheduler {
    * the path tracer is to finish the current pixels) then false is returned. */
   bool render_work_reschedule_on_idle(RenderWork &render_work);
 
-  /* Check whether all work has been scheduled. */
-  bool done() const;
+  /* Reschedule work when rendering has been requested to cancel.
+   *
+   * Will skip all work which is not needed anymore because no more samples will be added (for
+   * example, adaptive sampling filtering and convergence check will be skipped).
+   * Will enable all work needed to make sure all passes are communicated to the software.
+   *
+   * NOTE: Should be used before passing work to `PathTrace::render_samples()`. */
+  void render_work_reschedule_on_cancel(RenderWork &render_work);
 
   RenderWork get_render_work();
+
+  /* Report that the path tracer started to work, after scene update and loading kernels. */
+  void report_work_begin(const RenderWork &render_work);
 
   /* Report time (in seconds) which corresponding part of work took. */
   void report_path_trace_time(const RenderWork &render_work, double time, bool is_cancelled);
   void report_adaptive_filter_time(const RenderWork &render_work, double time, bool is_cancelled);
   void report_denoise_time(const RenderWork &render_work, double time);
   void report_display_update_time(const RenderWork &render_work, double time);
+  void report_rebalance_time(const RenderWork &render_work, double time, bool balance_changed);
 
   /* Generate full multi-line report of the rendering process, including rendering parameters,
    * times, and so on. */
   string full_report() const;
 
  protected:
+  /* Check whether all work has been scheduled and time limit was not exceeded.
+   *
+   * NOTE: Tricky bit: if the time limit was reached the done() is considered to be true, but some
+   * extra work needs to be scheduled to denoise and write final result. */
+  bool done() const;
+
+  /* Update scheduling state for a newely scheduled work.
+   * Takes care of things like checking whether work was ever denoised, tile was written and states
+   * like that. */
+  void update_state_for_render_work(const RenderWork &render_work);
+
+  /* Returns true if any work was scheduled. */
+  bool set_postprocess_render_work(RenderWork *render_work);
+
+  /*  Set work which is to be performed after all tiles has been rendered. */
+  void set_full_frame_render_work(RenderWork *render_work);
+
   /* Update start resolution divider based on the accumulated timing information, preserving nice
    * feeling navigation feel. */
   void update_start_resolution_divider();
@@ -140,10 +222,13 @@ class RenderScheduler {
   bool is_denoise_active_during_update() const;
 
   /* Heuristic which aims to give perceptually pleasant update of display interval in a way that at
-   * lower samples updates happens more often, but with higher number of samples updates happens
-   * less often but the device occupancy goes higher. */
+   * lower samples and near the beginning of rendering, updates happen more often, but with higher
+   * number of samples and later in the render, updates happen less often but device occupancy
+   * goes higher. */
   double guess_display_update_interval_in_seconds() const;
   double guess_display_update_interval_in_seconds_for_num_samples(int num_rendered_samples) const;
+  double guess_display_update_interval_in_seconds_for_num_samples_no_limit(
+      int num_rendered_samples) const;
 
   /* Calculate number of samples which can be rendered within current desred update interval which
    * is calculated by `guess_update_interval_in_seconds()`. */
@@ -176,9 +261,20 @@ class RenderScheduler {
    * The `denoiser_delayed` is what `work_need_denoise()` returned as delayed denoiser flag. */
   bool work_need_update_display(const bool denoiser_delayed);
 
+  /* Check whether it is time to perform rebalancing for the render work, */
+  bool work_need_rebalance();
+
   /* Check whether timing of the given work are usable to store timings in the `first_render_time_`
    * for the resolution divider calculation. */
   bool work_is_usable_for_first_render_estimation(const RenderWork &render_work);
+
+  /* Check whether timing report about the given work need to reset accumulated average time. */
+  bool work_report_reset_average(const RenderWork &render_work);
+
+  /* CHeck whether render time limit has been reached (or exceeded), and if so store related
+   * information in the state so that rendering is considered finished, and is possible to report
+   * average render time information. */
+  void check_time_limit_reached();
 
   /* Helper class to keep track of task timing.
    *
@@ -221,6 +317,12 @@ class RenderScheduler {
       return average_time_accumulator_ / num_average_times_;
     }
 
+    inline void reset_average()
+    {
+      average_time_accumulator_ = 0.0;
+      num_average_times_ = 0;
+    }
+
    protected:
     double total_wall_time_ = 0.0;
 
@@ -239,11 +341,38 @@ class RenderScheduler {
     /* Value of -1 means display was never updated. */
     int last_display_update_sample = -1;
 
+    /* Point in time at which last rebalance has been performed. */
+    double last_rebalance_time = 0.0;
+
+    /* Number of rebalance works which has been requested to be performed.
+     * The path tracer might ignore the work if there is a single device rendering. */
+    int num_rebalance_requested = 0;
+
+    /* Number of rebalance works handled which did change balance across devices. */
+    int num_rebalance_changes = 0;
+
+    bool need_rebalance_at_next_work = false;
+
+    /* Denotes whether the latest performed rebalance work cause an actual rebalance of work across
+     * devices. */
+    bool last_rebalance_changed = false;
+
     /* Threshold for adaptive sampling which will be scheduled to work when not using progressive
      * noise floor. */
     float adaptive_sampling_threshold = 0.0f;
 
+    bool last_work_tile_was_denoised = false;
+    bool tile_result_was_written = false;
+    bool postprocess_work_scheduled = false;
+    bool full_frame_work_scheduled = false;
+    bool full_frame_was_written = false;
+
     bool path_trace_finished = false;
+    bool time_limit_reached = false;
+
+    /* Time at which rendering started and finished. */
+    double start_render_time = 0.0;
+    double end_render_time = 0.0;
   } state_;
 
   /* Timing of tasks which were performed at the very first render work at 100% of the
@@ -259,11 +388,25 @@ class RenderScheduler {
   TimeWithAverage adaptive_filter_time_;
   TimeWithAverage denoise_time_;
   TimeWithAverage display_update_time_;
+  TimeWithAverage rebalance_time_;
+
+  /* Whether cryptomatte-related work will be scheduled. */
+  bool need_schedule_cryptomatte_ = false;
+
+  /* Whether to schedule device load rebalance works.
+   * Rebalancing requires some special treatment for update intervals and such, so if it's known
+   * that the rebalance will be ignored (due to single-device rendering i.e.) is better to fully
+   * ignore rebalancing logic. */
+  bool need_schedule_rebalance_works_ = false;
 
   /* Path tracing work will be scheduled for samples from within
    * [start_sample_, start_sample_ + num_samples_ - 1] range, inclusively. */
   int start_sample_ = 0;
   int num_samples_ = 0;
+
+  /* Limit in seconds for how long path tracing is allowed to happen.
+   * Zero means no limit is applied. */
+  double time_limit_ = 0.0;
 
   /* Headless rendering without interface. */
   bool headless_;
@@ -274,6 +417,8 @@ class RenderScheduler {
   /* Pixel size is used to force lower resolution render for final pass. Useful for retina or other
    * types of hi-dpi displays. */
   int pixel_size_ = 1;
+
+  TileManager &tile_manager_;
 
   BufferParams buffer_params_;
   DenoiseParams denoiser_params_;
@@ -291,13 +436,13 @@ class RenderScheduler {
 
   /* Initial resolution divider which will be used on render scheduler reset. */
   int start_resolution_divider_ = 0;
-};
 
-/* Calculate smallest resolution divider which will bring down actual rendering time below the
- * desired one. This call assumes linear dependency of render time from number of pixel (quadratic
- * dependency from the resolution divider): resolution divider of 2 beings render time down by a
- * factor of 4. */
-int calculate_resolution_divider_for_time(double desired_time, double actual_time);
+  /* Calculate smallest resolution divider which will bring down actual rendering time below the
+   * desired one. This call assumes linear dependency of render time from number of pixels
+   * (quadratic dependency from the resolution divider): resolution divider of 2 brings render time
+   * down by a factor of 4. */
+  int calculate_resolution_divider_for_time(double desired_time, double actual_time);
+};
 
 int calculate_resolution_divider_for_resolution(int width, int height, int resolution);
 

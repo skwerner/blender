@@ -69,16 +69,19 @@ set(SRC
   intern/CCGSubSurf_util.c
   intern/DerivedMesh.cc
   intern/action.c
+  intern/action_bones.cc
   intern/action_mirror.c
   intern/addon.c
   intern/anim_data.c
   intern/anim_path.c
   intern/anim_sys.c
   intern/anim_visualization.c
+  intern/anonymous_attribute.cc
   intern/appdir.c
   intern/armature.c
   intern/armature_deform.c
   intern/armature_pose.cc
+  intern/armature_selection.cc
   intern/armature_update.c
   intern/asset.cc
   intern/attribute.c
@@ -93,7 +96,7 @@ set(SRC
   intern/boids.c
   intern/bpath.c
   intern/brush.c
-  intern/bvhutils.c
+  intern/bvhutils.cc
   intern/cachefile.c
   intern/callbacks.c
   intern/camera.c
@@ -143,7 +146,7 @@ set(SRC
   intern/geometry_set_instances.cc
   intern/gpencil.c
   intern/gpencil_curve.c
-  intern/gpencil_geom.c
+  intern/gpencil_geom.cc
   intern/gpencil_modifier.c
   intern/hair.c
   intern/icons.cc
@@ -165,6 +168,7 @@ set(SRC
   intern/layer_utils.c
   intern/lib_id.c
   intern/lib_id_delete.c
+  intern/lib_id_eval.c
   intern/lib_override.c
   intern/lib_query.c
   intern/lib_remap.c
@@ -183,17 +187,19 @@ set(SRC
   intern/mesh.c
   intern/mesh_boolean_convert.cc
   intern/mesh_convert.c
-  intern/mesh_evaluate.c
+  intern/mesh_evaluate.cc
   intern/mesh_fair.cc
   intern/mesh_iterators.c
   intern/mesh_mapping.c
   intern/mesh_merge.c
   intern/mesh_mirror.c
+  intern/mesh_normals.cc
   intern/mesh_remap.c
-  intern/mesh_remesh_voxel.c
+  intern/mesh_remesh_voxel.cc
   intern/mesh_runtime.c
   intern/mesh_sample.cc
   intern/mesh_tangent.c
+  intern/mesh_tessellate.c
   intern/mesh_validate.c
   intern/mesh_validate.cc
   intern/mesh_wrapper.c
@@ -212,7 +218,6 @@ set(SRC
   intern/multires_versioning.c
   intern/nla.c
   intern/node.cc
-  intern/node_ui_storage.cc
   intern/object.c
   intern/object_deform.c
   intern/object_dupli.cc
@@ -285,13 +290,17 @@ set(SRC
 
   BKE_DerivedMesh.h
   BKE_action.h
+  BKE_action.hh
   BKE_addon.h
   BKE_anim_data.h
   BKE_anim_path.h
   BKE_anim_visualization.h
   BKE_animsys.h
+  BKE_anonymous_attribute.h
+  BKE_anonymous_attribute.hh
   BKE_appdir.h
   BKE_armature.h
+  BKE_armature.hh
   BKE_asset.h
   BKE_attribute.h
   BKE_attribute_access.hh
@@ -328,7 +337,6 @@ set(SRC
   BKE_customdata_file.h
   BKE_data_transfer.h
   BKE_deform.h
-  BKE_spline.hh
   BKE_displist.h
   BKE_displist_tangent.h
   BKE_duplilist.h
@@ -396,7 +404,6 @@ set(SRC
   BKE_multires.h
   BKE_nla.h
   BKE_node.h
-  BKE_node_ui_storage.hh
   BKE_object.h
   BKE_object_deform.h
   BKE_object_facemap.h
@@ -420,6 +427,7 @@ set(SRC
   BKE_softbody.h
   BKE_sound.h
   BKE_speaker.h
+  BKE_spline.hh
   BKE_studiolight.h
   BKE_subdiv.h
   BKE_subdiv_ccg.h
@@ -693,6 +701,13 @@ if(WITH_ALEMBIC)
   add_definitions(-DWITH_ALEMBIC)
 endif()
 
+if(WITH_USD)
+  list(APPEND INC
+    ../io/usd
+  )
+  add_definitions(-DWITH_USD)
+endif()
+
 if(WITH_OPENSUBDIV)
   list(APPEND INC_SYS
     ${OPENSUBDIV_INCLUDE_DIRS}
@@ -764,6 +779,7 @@ add_dependencies(bf_blenkernel bf_dna)
 
 if(WITH_GTESTS)
   set(TEST_SRC
+    intern/action_test.cc
     intern/armature_test.cc
     intern/cryptomatte_test.cc
     intern/fcurve_test.cc

@@ -95,10 +95,6 @@ set(ADDON_FILES
 
 add_definitions(${GL_DEFINITIONS})
 
-if(WITH_CYCLES_DEVICE_OPENCL)
-  add_definitions(-DWITH_OPENCL)
-endif()
-
 if(WITH_MOD_FLUID)
   add_definitions(-DWITH_FLUID)
 endif()
@@ -110,6 +106,16 @@ if(WITH_OPENVDB)
   )
   list(APPEND LIB
     ${OPENVDB_LIBRARIES}
+  )
+endif()
+
+if(WITH_ALEMBIC)
+  add_definitions(-DWITH_ALEMBIC)
+  list(APPEND INC_SYS
+    ${ALEMBIC_INCLUDE_DIRS}
+  )
+  list(APPEND LIB
+    ${ALEMBIC_LIBRARIES}
   )
 endif()
 

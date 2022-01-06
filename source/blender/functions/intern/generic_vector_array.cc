@@ -43,7 +43,7 @@ void GVectorArray::append(const int64_t index, const void *value)
   }
 
   void *dst = POINTER_OFFSET(item.start, element_size_ * item.length);
-  type_.copy_to_uninitialized(value, dst);
+  type_.copy_construct(value, dst);
   item.length++;
 }
 
@@ -78,6 +78,15 @@ void GVectorArray::extend(IndexMask mask, const GVectorArray &values)
   this->extend(mask, virtual_values);
 }
 
+void GVectorArray::clear(IndexMask mask)
+{
+  for (const int64_t i : mask) {
+    Item &item = items_[i];
+    type_.destruct_n(item.start, item.length);
+    item.length = 0;
+  }
+}
+
 GMutableSpan GVectorArray::operator[](const int64_t index)
 {
   Item &item = items_[index];
@@ -95,7 +104,7 @@ void GVectorArray::realloc_to_at_least(Item &item, int64_t min_capacity)
   const int64_t new_capacity = std::max(min_capacity, item.length * 2);
 
   void *new_buffer = allocator_.allocate(element_size_ * new_capacity, type_.alignment());
-  type_.relocate_to_initialized_n(item.start, new_buffer, item.length);
+  type_.relocate_assign_n(item.start, new_buffer, item.length);
 
   item.start = new_buffer;
   item.capacity = new_capacity;

@@ -388,7 +388,6 @@ void DenoiseTask::create_task(DeviceTask &task)
   task.denoising = denoiser->params;
   task.denoising.type = DENOISER_NLM;
   task.denoising.use = true;
-  task.denoising.store_passes = false;
   task.denoising_from_render = false;
 
   task.denoising_frames.resize(neighbor_frames.size());
@@ -878,9 +877,7 @@ DenoiserPipeline::DenoiserPipeline(DeviceInfo &device_info)
   /* Initialize device. */
   device = Device::create(device_info, stats, profiler, true);
 
-  DeviceRequestedFeatures req;
-  req.use_denoising = true;
-  device->load_kernels(req);
+  device->load_kernels(KERNEL_FEATURE_DENOISING);
 }
 
 DenoiserPipeline::~DenoiserPipeline()

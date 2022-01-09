@@ -69,7 +69,8 @@ ccl_device int bsdf_refraction_sample(const ShaderClosure *sc,
                                       float3 *omega_in,
                                       float3 *domega_in_dx,
                                       float3 *domega_in_dy,
-                                      float *pdf)
+                                      float *pdf,
+                                      ShaderData *sd)
 {
   const MicrofacetBsdf *bsdf = (const MicrofacetBsdf *)sc;
   float m_eta = bsdf->ior;
@@ -87,6 +88,10 @@ ccl_device int bsdf_refraction_sample(const ShaderClosure *sc,
                                &R,
                                &T,
 #ifdef __RAY_DIFFERENTIALS__
+#  ifdef __DNDU__
+                               sd->dNdx,
+                               sd->dNdy,
+#  endif
                                dIdx,
                                dIdy,
                                &dRdx,

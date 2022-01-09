@@ -681,6 +681,40 @@ class CYCLES_RENDER_PT_performance_final_render(CyclesButtonsPanel, Panel):
 
         col.prop(rd, "use_persistent_data", text="Persistent Data")
 
+class CYCLES_RENDER_PT_texture_cache(CyclesButtonsPanel, Panel):
+    bl_label = "Texture Cache"
+    bl_options = {'DEFAULT_CLOSED'}
+
+    def draw_header(self, context):
+        cscene = context.scene.cycles
+
+        self.layout.prop(cscene, "use_texture_cache", text="")
+
+    def draw(self, context):
+        layout = self.layout
+
+        scene = context.scene
+        cscene = scene.cycles
+        rd = scene.render
+        layout.active = cscene.use_texture_cache
+
+        split = layout.split()
+        col = split.column()
+        col.prop(cscene, "texture_auto_convert")
+        col.prop(cscene, "texture_accept_unmipped")
+        col.prop(cscene, "texture_accept_untiled")
+        col.prop(cscene, "texture_auto_mip")
+        col.prop(cscene, "texture_auto_tile")
+        col = split.column()
+        col.prop(cscene, "texture_cache_size")
+        col.prop(cscene, "texture_tile_size")
+        col.prop(cscene, "texture_blur_diffuse")
+        col.prop(cscene, "texture_blur_glossy")
+        row = layout.row()
+        row.prop(cscene, "use_custom_cache_path")
+        row = layout.row()
+        row.active = cscene.use_custom_cache_path
+        row.prop(cscene, "custom_cache_path")
 
 class CYCLES_RENDER_PT_performance_viewport(CyclesButtonsPanel, Panel):
     bl_label = "Viewport"
@@ -2111,6 +2145,7 @@ classes = (
     CYCLES_RENDER_PT_performance_acceleration_structure,
     CYCLES_RENDER_PT_performance_final_render,
     CYCLES_RENDER_PT_performance_viewport,
+    CYCLES_RENDER_PT_texture_cache,
     CYCLES_RENDER_PT_passes,
     CYCLES_RENDER_PT_passes_data,
     CYCLES_RENDER_PT_passes_light,

@@ -216,6 +216,14 @@ class MultiDevice : public Device {
     return devices.front().device->get_cpu_osl_memory();
   }
 
+  virtual void *get_cpu_oiio_memory() override
+  {
+    if (devices.size() > 1) {
+      return NULL;
+    }
+    return devices.front().device->get_cpu_oiio_memory();
+  }
+  
   bool is_resident(device_ptr key, Device *sub_device) override
   {
     foreach (SubDevice &sub, devices) {

@@ -341,6 +341,11 @@ void *Device::get_cpu_osl_memory()
   return nullptr;
 }
 
+void *Device::get_cpu_oiio_memory()
+{
+  return nullptr;
+}
+
 /* DeviceInfo */
 
 CCL_NAMESPACE_END

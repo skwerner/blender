@@ -35,6 +35,7 @@ class CPUKernelThreadGlobals : public KernelGlobals {
    * without OSL support. Will avoid need to those unnamed pointers and casts. */
   CPUKernelThreadGlobals(const KernelGlobals &kernel_globals,
                          void *osl_globals_memory,
+                         void *oiio_globals_memory,
                          Profiler &cpu_profiler);
 
   ~CPUKernelThreadGlobals();

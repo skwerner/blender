@@ -39,6 +39,17 @@ class OIIOImageLoader : public ImageLoader {
 
   bool equals(const ImageLoader &other) const override;
 
+  bool get_tx(const ustring &colorspace,
+              const ExtensionType &extension,
+              Progress *progress,
+              bool auto_convert,
+              const char *cache_path);
+
+  static bool make_tx(const string &filename,
+                      const string &outputfilename,
+                      const ustring &colorspace,
+                      ExtensionType extension);
+
  protected:
   ustring filepath;
 };

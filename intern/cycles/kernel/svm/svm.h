@@ -55,6 +55,7 @@ ccl_device_inline float3 stack_load_float3(float *stack, uint a)
 ccl_device_inline void stack_store_float3(float *stack, uint a, float3 f)
 {
   kernel_assert(a + 2 < SVM_STACK_SIZE);
+  kernel_assert(isfinite3_safe(f));
 
   float *stack_a = stack + a;
   stack_a[0] = f.x;
@@ -328,10 +329,10 @@ ccl_device void svm_eval_nodes(INTEGRATOR_STATE_CONST_ARGS,
         }
         break;
       case NODE_TEX_IMAGE:
-        offset = svm_node_tex_image(kg, sd, stack, node, offset);
+        offset = svm_node_tex_image(kg, sd, path_flag, stack, node, offset);
         break;
       case NODE_TEX_IMAGE_BOX:
-        svm_node_tex_image_box(kg, sd, stack, node);
+        svm_node_tex_image_box(kg, sd, path_flag, stack, node);
         break;
       case NODE_TEX_NOISE:
         offset = svm_node_tex_noise(kg, sd, stack, node.y, node.z, node.w, offset);
@@ -454,7 +455,7 @@ ccl_device void svm_eval_nodes(INTEGRATOR_STATE_CONST_ARGS,
         svm_node_camera(kg, sd, stack, node.y, node.z, node.w);
         break;
       case NODE_TEX_ENVIRONMENT:
-        svm_node_tex_environment(kg, sd, stack, node);
+        svm_node_tex_environment(kg, sd, path_flag, stack, node);
         break;
       case NODE_TEX_SKY:
         offset = svm_node_tex_sky(kg, sd, stack, node, offset);

@@ -126,6 +126,9 @@ ccl_device_noinline int svm_node_tex_coord_bump_dx(
     }
     case NODE_TEXCO_NORMAL: {
       data = sd->N;
+#  ifdef __DNDU__
+      data = sd->N + sd->dNdx;
+#  endif
       object_inverse_normal_transform(kg, sd, &data);
       break;
     }
@@ -207,6 +210,9 @@ ccl_device_noinline int svm_node_tex_coord_bump_dy(
     }
     case NODE_TEXCO_NORMAL: {
       data = sd->N;
+#  ifdef __DNDU__
+      data = sd->N + sd->dNdy;
+#  endif
       object_inverse_normal_transform(kg, sd, &data);
       break;
     }

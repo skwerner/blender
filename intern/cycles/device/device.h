@@ -184,6 +184,7 @@ class Device {
       vector<CPUKernelThreadGlobals> & /*kernel_thread_globals*/);
   /* Get OpenShadingLanguage memory buffer. */
   virtual void *get_cpu_osl_memory();
+  virtual void *get_cpu_oiio_memory();
 
   /* acceleration structure building */
   virtual void build_bvh(BVH *bvh, Progress &progress, bool refit);

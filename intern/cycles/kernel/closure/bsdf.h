@@ -213,7 +213,8 @@ ccl_device_inline int bsdf_sample(const KernelGlobals *kg,
                                      omega_in,
                                      &domega_in->dx,
                                      &domega_in->dy,
-                                     pdf);
+                                     pdf,
+                                     sd);
       break;
     case CLOSURE_BSDF_REFRACTION_ID:
       label = bsdf_refraction_sample(sc,
@@ -227,7 +228,8 @@ ccl_device_inline int bsdf_sample(const KernelGlobals *kg,
                                      omega_in,
                                      &domega_in->dx,
                                      &domega_in->dy,
-                                     pdf);
+                                     pdf,
+                                     sd);
       break;
     case CLOSURE_BSDF_TRANSPARENT_ID:
       label = bsdf_transparent_sample(sc,
@@ -259,7 +261,8 @@ ccl_device_inline int bsdf_sample(const KernelGlobals *kg,
                                          omega_in,
                                          &domega_in->dx,
                                          &domega_in->dy,
-                                         pdf);
+                                         pdf,
+                                         sd);
       break;
     case CLOSURE_BSDF_MICROFACET_MULTI_GGX_ID:
     case CLOSURE_BSDF_MICROFACET_MULTI_GGX_FRESNEL_ID:
@@ -293,7 +296,8 @@ ccl_device_inline int bsdf_sample(const KernelGlobals *kg,
                                                      &domega_in->dx,
                                                      &domega_in->dy,
                                                      pdf,
-                                                     &sd->lcg_state);
+                                                     &sd->lcg_state,
+                                                     sd);
       break;
     case CLOSURE_BSDF_MICROFACET_BECKMANN_ID:
     case CLOSURE_BSDF_MICROFACET_BECKMANN_REFRACTION_ID:
@@ -309,7 +313,8 @@ ccl_device_inline int bsdf_sample(const KernelGlobals *kg,
                                               omega_in,
                                               &domega_in->dx,
                                               &domega_in->dy,
-                                              pdf);
+                                              pdf,
+                                              sd);
       break;
     case CLOSURE_BSDF_ASHIKHMIN_SHIRLEY_ID:
       label = bsdf_ashikhmin_shirley_sample(sc,

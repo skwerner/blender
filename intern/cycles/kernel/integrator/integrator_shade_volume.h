@@ -501,6 +501,256 @@ ccl_device_forceinline void volume_integrate_step_scattering(
   }
 }
 
+#if 0
+/* The particle tracing algorithm from section 4.1 in
+ "Unbiased Light Transport Estimators for Inhomogeneous Participating Media"
+ Szirmay-Kalos et al, 2017 */
+ccl_device VolumeIntegrateResult
+kernel_volume_integrate_heterogeneous_tracking(KernelGlobals *kg,
+                                               ccl_addr_space PathState *state,
+                                               Ray *ray,
+                                               ShaderData *sd,
+                                               PathRadiance *L,
+                                               ccl_addr_space float3 *throughput)
+{
+  uint lcg_state = lcg_state_init_addrspace(state, 0x0f0f0f0f);
+  float3 tp = *throughput;
+  float t = 0.0f;
+  float sigma_samp = kernel_data.integrator.volume_max_density;
+  float rphase = path_state_rng_1D(kg, state, PRNG_PHASE_CHANNEL);
+  do {
+    float s = lcg_step_float_addrspace(&lcg_state);
+    float dt = -(logf(1.f - s) / sigma_samp);
+    t = t + dt;
+    if (t > ray->t) {
+      break;
+    }
+    float3 new_P = ray->P + ray->D * t;
+    VolumeShaderCoefficients coeff;
+    if (!volume_shader_sample(kg, sd, state, new_P, &coeff)) {
+      continue;
+    }
+    int closure_flag = sd->flag;
+    float3 albedo = safe_divide_color(coeff.sigma_s, coeff.sigma_t);
+    int channel = (int)(rphase * 3.0f); /* TODO: better choice of channel */
+    float a = kernel_volume_channel_get(albedo, channel);
+    float r = kernel_volume_channel_get(coeff.sigma_t, channel) / sigma_samp;
+    float qscat = a * r;
+    float qtran = fabsf(1.0f - r);
+    float qsum = qscat + qtran;
+    if (r < 1.0f || qsum > 1.0f) {
+      qscat = qscat / qsum;
+      qtran = qtran / qsum;
+    }
+    float xi = lcg_step_float_addrspace(&lcg_state);
+    if (xi < qscat) {
+      tp = tp * r * a / qscat;
+
+      if (L && (closure_flag & SD_EMISSION)) {
+        float3 emission = coeff.emission * dt;
+        path_radiance_accum_emission(kg, L, state, tp, emission);
+      }
+
+      /* adjust throughput and move to new location */
+      sd->P = ray->P + t * ray->D;
+      throughput->x = saturate(tp.x);
+      throughput->y = saturate(tp.y);
+      throughput->z = saturate(tp.z);
+      return VOLUME_PATH_SCATTERED;
+    }
+    else if (xi < qscat + qtran) {
+      /* transmission */
+      tp = (1.0f - r) * tp / qtran;
+
+      if (L && (closure_flag & SD_EMISSION)) {
+        float3 emission = coeff.emission * dt;
+        path_radiance_accum_emission(kg, L, state, tp, emission);
+      }
+    }
+    else {
+      /* absorption */
+      tp = make_float3(0.0f, 0.0f, 0.0f);
+    }
+  } while (fabsf(min3(tp)) > 0.0f && t < ray->t);
+
+  throughput->x = saturate(tp.x);
+  throughput->y = saturate(tp.y);
+  throughput->z = saturate(tp.z);
+  return VOLUME_PATH_ATTENUATED;
+}
+
+/* Woodcock tracking with spectral MIS. Unbiased and noisy.
+ * Emission is handled via "Line Integration for Rendering Heterogeneous Emissive Volumes",
+ * Simon et al, EGSR 2017. */
+
+ccl_device VolumeIntegrateResult
+kernel_volume_integrate_heterogeneous_woodcock_mis_tracking(KernelGlobals *kg,
+                                                            ccl_addr_space PathState *state,
+                                                            Ray *ray,
+                                                            ShaderData *sd,
+                                                            PathRadiance *L,
+                                                            ccl_addr_space float3 *throughput)
+{
+  uint lcg_state = lcg_state_init_addrspace(state, 0x12345678);
+  float t = 0.0f;
+  float sigma_m = kernel_data.integrator.volume_max_density;
+  VolumeShaderCoefficients coeff;
+  float3 channel_pdf;
+  float rphase = path_state_rng_1D(kg, state, PRNG_PHASE_CHANNEL);
+  int channel = kernel_volume_sample_channel(
+      make_float3(1.0f, 1.0f, 1.0f), make_float3(1.0f, 1.0f, 1.0f), rphase, &channel_pdf);
+  float3 tp = *throughput;
+  float3 pdf = make_float3(1.0f, 1.0f, 1.0f);
+
+  for (int i = 0; i < kernel_data.integrator.volume_max_steps; ++i) {
+    float s = lcg_step_float_addrspace(&lcg_state);
+    float dt = -(logf(1.f - s) / sigma_m);
+    t = t + dt;
+    if (t >= ray->t) {
+      break;
+    }
+    float s2 = lcg_step_float_addrspace(&lcg_state);
+    float3 new_P = ray->P + ray->D * t;
+    const float Tc = expf(-t * sigma_m);
+    coeff.sigma_t = make_float3(1.0f, 1.0f, 1.0f);
+    if (volume_shader_sample(kg, sd, state, new_P, &coeff)) {
+      int closure_flag = sd->flag;
+      if (L && (closure_flag & SD_EMISSION)) {
+        path_radiance_accum_emission(kg, L, state, *throughput * dt, coeff.emission);
+      }
+      if (s2 < kernel_volume_channel_get(coeff.sigma_s, channel) / sigma_m) {
+        sd->P = new_P;
+        tp *= Tc * coeff.sigma_s;
+        pdf *= Tc * coeff.sigma_s;
+        *throughput = tp / average(pdf);
+        return VOLUME_PATH_SCATTERED;
+      }
+      else if (s2 < (kernel_volume_channel_get(coeff.sigma_t, channel) / sigma_m)) {
+        float3 sigma_a = coeff.sigma_t - coeff.sigma_s;
+        tp *= Tc * sigma_a;
+        pdf *= Tc * sigma_a;
+        *throughput = tp / average(pdf);
+        return VOLUME_PATH_ATTENUATED;
+      }
+    }
+
+    tp *= Tc * (make_float3(sigma_m, sigma_m, sigma_m) - coeff.sigma_t);
+    pdf *= Tc * (make_float3(sigma_m, sigma_m, sigma_m) - coeff.sigma_t);
+  }
+  *throughput = tp / average(pdf);
+  return VOLUME_PATH_MISSED;
+}
+
+
+/* Monochromatic Woodcock tracking. Unbiased and noisy.
+ * Emission is handled via "Line Integration for Rendering Heterogeneous Emissive Volumes",
+ * Simon et al, EGSR 2017. */
+
+ccl_device VolumeIntegrateResult
+kernel_volume_integrate_heterogeneous_woodcock_tracking(KernelGlobals *kg,
+                                                        ccl_addr_space PathState *state,
+                                                        Ray *ray,
+                                                        ShaderData *sd,
+                                                        PathRadiance *L,
+                                                        ccl_addr_space float3 *throughput,
+                                                        float sigma_m)
+{
+  uint lcg_state = lcg_state_init_addrspace(state, 0x12345678);
+  float t = 0.0f;
+  VolumeShaderCoefficients coeff;
+
+  for (int i = 0; i < kernel_data.integrator.volume_max_steps; ++i) {
+    float s = lcg_step_float_addrspace(&lcg_state);
+    float dt = -(logf(1.f - s) / sigma_m);
+    t = t + dt;
+    if (t >= ray->t) {
+      break;
+    }
+    float s2 = lcg_step_float_addrspace(&lcg_state);
+    float3 new_P = ray->P + ray->D * t;
+    if (volume_shader_sample(kg, sd, state, new_P, &coeff)) {
+      int closure_flag = sd->flag;
+      if (L && (closure_flag & SD_EMISSION)) {
+        path_radiance_accum_emission(kg, L, state, *throughput * dt, coeff.emission);
+      }
+      if (s2 < max3(coeff.sigma_s) / sigma_m) {
+        sd->P = new_P;
+        return VOLUME_PATH_SCATTERED;
+      }
+      else if (s2 < (max3(coeff.sigma_t) / sigma_m)) {
+        *throughput = make_float3(0.0f, 0.0f, 0.0f);
+        return VOLUME_PATH_ATTENUATED;
+      }
+    }
+  }
+  return VOLUME_PATH_ATTENUATED;
+}
+
+ccl_device VolumeIntegrateResult
+kernel_volume_integrate_heterogeneous_spectral_tracking(KernelGlobals *kg,
+                                                        ccl_addr_space PathState *state,
+                                                        Ray *ray,
+                                                        ShaderData *sd,
+                                                        PathRadiance *L,
+                                                        ccl_addr_space float3 *throughput)
+{
+  uint lcg_state = lcg_state_init_addrspace(state, 0x0f0f0f0f);
+  float3 tp = *throughput;
+  float t = 0.0f;
+  float sigma_samp = kernel_data.integrator.volume_max_density;
+  do {
+    float s = lcg_step_float_addrspace(&lcg_state);
+    float dt = -(logf(1.f - s) / sigma_samp);
+    t = t + dt;
+    if (t > ray->t) {
+      break;
+    }
+    float3 new_P = ray->P + ray->D * t;
+    VolumeShaderCoefficients coeff;
+    if (!volume_shader_sample(kg, sd, state, new_P, &coeff)) {
+      continue;
+    }
+    float3 sigma_a = coeff.sigma_t - coeff.sigma_s;
+    float3 sigma_n = make_float3(sigma_samp, sigma_samp, sigma_samp) - coeff.sigma_t;
+
+    /* Spectral tracking, Kutz et al 2017 */
+    float pa = max3(sigma_a * tp);
+    float ps = max3(coeff.sigma_s * tp);
+    float pn = max3(sigma_n * tp);
+    const float ic = 1.0f / (pa + ps + pn);
+    pa *= ic;
+    ps *= ic;
+    pn *= ic;
+
+    float xi = lcg_step_float_addrspace(&lcg_state);
+    if (xi < 1.0f - pn) {
+      sd->P = ray->P + t * ray->D;
+      tp *= coeff.sigma_s / (sigma_samp * ps);
+      throughput->x = saturate(tp.x);
+      throughput->y = saturate(tp.y);
+      throughput->z = saturate(tp.z);
+      return VOLUME_PATH_SCATTERED;
+    }
+    else if (xi < pa) {
+      /* Absorption. */
+      tp *= sigma_a / (sigma_samp * pa);
+      break;
+    }
+    else {
+      /* continue */
+      tp *= sigma_n / (sigma_samp * pn);
+    }
+  } while (fabsf(max3(tp)) > 0.0f && t < ray->t);
+
+  throughput->x = saturate(tp.x);
+  throughput->y = saturate(tp.y);
+  throughput->z = saturate(tp.z);
+  return VOLUME_PATH_ATTENUATED;
+}
+
+
+#endif
+
 /* heterogeneous volume distance sampling: integrate stepping through the
  * volume until we reach the end, get absorbed entirely, or run out of
  * iterations. this does probabilistically scatter or get transmitted through

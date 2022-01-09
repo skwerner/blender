@@ -1745,7 +1745,7 @@ void GeometryManager::device_update_displacement_images(Device *device,
 
           ImageSlotTextureNode *image_node = static_cast<ImageSlotTextureNode *>(node);
           for (int i = 0; i < image_node->handle.num_tiles(); i++) {
-            const int slot = image_node->handle.svm_slot(i);
+            const int slot = image_node->handle.svm_slot(scene->shader_manager->use_osl(), i);
             if (slot != -1) {
               bump_images.insert(slot);
             }
@@ -1754,10 +1754,12 @@ void GeometryManager::device_update_displacement_images(Device *device,
       }
     }
   }
+  /*
   foreach (int slot, bump_images) {
     pool.push(function_bind(
         &ImageManager::device_update_slot, image_manager, device, scene, slot, &progress));
-  }
+  }*/
+  image_manager->device_update(device, scene, progress);
   pool.wait_work();
 }
 

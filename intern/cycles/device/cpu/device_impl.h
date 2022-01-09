@@ -35,6 +35,7 @@
 #include "kernel/device/cpu/compat.h"
 #include "kernel/device/cpu/kernel.h"
 #include "kernel/device/cpu/globals.h"
+#include "kernel/kernel_oiio_globals.h"
 
 #include "kernel/osl/osl_shader.h"
 #include "kernel/osl/osl_globals.h"
@@ -49,6 +50,7 @@ class CPUDevice : public Device {
   device_vector<TextureInfo> texture_info;
   bool need_texture_info;
 
+  OIIOGlobals oiio_globals;
 #ifdef WITH_OSL
   OSLGlobals osl_globals;
 #endif
@@ -91,6 +93,7 @@ class CPUDevice : public Device {
   virtual void get_cpu_kernel_thread_globals(
       vector<CPUKernelThreadGlobals> &kernel_thread_globals) override;
   virtual void *get_cpu_osl_memory() override;
+  virtual void *get_cpu_oiio_memory() override;
 
  protected:
   virtual bool load_kernels(uint /*kernel_features*/) override;

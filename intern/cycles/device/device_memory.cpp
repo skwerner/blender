@@ -236,6 +236,12 @@ device_texture::device_texture(Device *device,
       data_type = TYPE_UINT16;
       data_elements = 1;
       break;
+    case IMAGE_DATA_TYPE_OIIO:
+      /* Assumes 64 bit pointers to be stored as uint. */
+      static_assert(sizeof(void*) == sizeof(uint64_t));
+      data_type = TYPE_UINT64;
+      data_elements = 1;
+      break;
     case IMAGE_DATA_NUM_TYPES:
       assert(0);
       return;

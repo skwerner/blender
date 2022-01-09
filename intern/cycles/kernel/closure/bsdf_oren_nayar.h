@@ -107,6 +107,8 @@ ccl_device int bsdf_oren_nayar_sample(const ShaderClosure *sc,
     // TODO: find a better approximation for the bounce
     *domega_in_dx = (2.0f * dot(bsdf->N, dIdx)) * bsdf->N - dIdx;
     *domega_in_dy = (2.0f * dot(bsdf->N, dIdy)) * bsdf->N - dIdy;
+    *domega_in_dx *= 125.0f;
+    *domega_in_dy *= 125.0f;
 #endif
   }
   else {

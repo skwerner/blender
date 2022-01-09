@@ -24,6 +24,7 @@
 #include "blender/blender_util.h"
 
 #include "render/denoising.h"
+#include "render/image_oiio.h"
 #include "render/merge.h"
 
 #include "util/util_debug.h"
@@ -700,6 +701,22 @@ static PyObject *osl_compile_func(PyObject * /*self*/, PyObject *args)
 }
 #endif
 
+static PyObject *oiio_make_tx(PyObject * /*self*/, PyObject *args)
+{
+  const char *inputfile = NULL, *outputfile = NULL, *colorspace = NULL;
+  int extension = EXTENSION_CLIP;
+
+  if (!PyArg_ParseTuple(args, "sssi", &inputfile, &outputfile, &colorspace, &extension))
+    return NULL;
+
+  /* return */
+  if (!OIIOImageLoader::make_tx(
+          inputfile, outputfile, ustring(colorspace), (ExtensionType)extension))
+    Py_RETURN_FALSE;
+
+  Py_RETURN_TRUE;
+}
+
 static PyObject *system_info_func(PyObject * /*self*/, PyObject * /*value*/)
 {
   string system_info = Device::device_capabilities();
@@ -973,6 +990,7 @@ static PyMethodDef methods[] = {
     {"osl_update_node", osl_update_node_func, METH_VARARGS, ""},
     {"osl_compile", osl_compile_func, METH_VARARGS, ""},
 #endif
+    {"oiio_make_tx", oiio_make_tx, METH_VARARGS, ""},
     {"available_devices", available_devices_func, METH_VARARGS, ""},
     {"system_info", system_info_func, METH_NOARGS, ""},
 

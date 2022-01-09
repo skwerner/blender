@@ -93,6 +93,7 @@ ccl_device_noinline void motion_triangle_shader_setup(const KernelGlobals *kg,
   sd->dPdu = (verts[0] - verts[2]);
   sd->dPdv = (verts[1] - verts[2]);
 #endif
+
   /* Compute smooth normal. */
   if (sd->shader & SHADER_SMOOTH_NORMAL) {
     /* Find attribute. */

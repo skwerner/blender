@@ -774,6 +774,27 @@ SceneParams BlenderSync::get_scene_params(BL::Scene &b_scene, bool background)
 
   params.bvh_layout = DebugFlags().cpu.bvh_layout;
 
+  params.texture.use_cache = RNA_boolean_get(&cscene, "use_texture_cache");
+  params.texture.cache_size = RNA_int_get(&cscene, "texture_cache_size");
+  params.texture.auto_convert = RNA_boolean_get(&cscene, "texture_auto_convert");
+  params.texture.accept_unmipped = RNA_boolean_get(&cscene, "texture_accept_unmipped");
+  params.texture.accept_untiled = RNA_boolean_get(&cscene, "texture_accept_untiled");
+  params.texture.tile_size = RNA_int_get(&cscene, "texture_tile_size");
+  params.texture.auto_mip = RNA_boolean_get(&cscene, "texture_auto_mip");
+  params.texture.auto_tile = RNA_boolean_get(&cscene, "texture_auto_tile");
+  params.texture.diffuse_blur = RNA_float_get(&cscene, "texture_blur_diffuse");
+  params.texture.glossy_blur = RNA_float_get(&cscene, "texture_blur_glossy");
+  params.texture.use_custom_cache_path = RNA_boolean_get(&cscene, "use_custom_cache_path");
+  if (params.texture.use_custom_cache_path) {
+    char *path = RNA_string_get_alloc(&cscene, "custom_cache_path", NULL, 0, NULL);
+    if (path) {
+      params.texture.custom_cache_path = path;
+      MEM_freeN(path);
+    }
+  }
+  else {
+    params.texture.custom_cache_path.clear();
+  }
   params.background = background;
 
   return params;

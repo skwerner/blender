@@ -19,6 +19,9 @@
 #include "util/util_image.h"
 #include "util/util_logging.h"
 #include "util/util_path.h"
+#include "util/util_progress.h"
+
+#include <OpenImageIO/imagebufalgo.h>
 
 CCL_NAMESPACE_BEGIN
 
@@ -62,7 +65,8 @@ bool OIIOImageLoader::load_metadata(const ImageDeviceFeatures &features, ImageMe
   size_t channel_size = spec.format.basesize();
 
   bool is_float = false;
-  bool is_half = false;
+  bool is_half = spec.format == TypeDesc::HALF && features.has_half_float;
+  bool is_tiled = spec.tile_pixels() != 0;
 
   if (spec.format.is_floating_point()) {
     is_float = true;
@@ -75,15 +79,13 @@ bool OIIOImageLoader::load_metadata(const ImageDeviceFeatures &features, ImageMe
     }
   }
 
-  /* check if it's half float */
-  if (spec.format == TypeDesc::HALF && features.has_half_float) {
-    is_half = true;
-  }
-
   /* set type and channels */
   metadata.channels = spec.nchannels;
 
-  if (is_half) {
+  if (is_tiled && features.has_texture_cache) {
+    metadata.type = IMAGE_DATA_TYPE_OIIO;
+  }
+  else if (is_half) {
     metadata.type = (metadata.channels > 1) ? IMAGE_DATA_TYPE_HALF4 : IMAGE_DATA_TYPE_HALF;
   }
   else if (is_float) {
@@ -211,6 +213,7 @@ bool OIIOImageLoader::load_pixels(const ImageMetaData &metadata,
       break;
     case IMAGE_DATA_TYPE_NANOVDB_FLOAT:
     case IMAGE_DATA_TYPE_NANOVDB_FLOAT3:
+    case IMAGE_DATA_TYPE_OIIO:
     case IMAGE_DATA_NUM_TYPES:
       break;
   }
@@ -233,6 +236,87 @@ bool OIIOImageLoader::equals(const ImageLoader &other) const
 {
   const OIIOImageLoader &other_loader = (const OIIOImageLoader &)other;
   return filepath == other_loader.filepath;
+}
+
+bool OIIOImageLoader::make_tx(const string &filename,
+                              const string &outputfilename,
+                              const ustring &colorspace,
+                              ExtensionType extension)
+{
+  ImageSpec config;
+  config.attribute("maketx:filtername", "lanczos3");
+  config.attribute("maketx:opaque_detect", 1);
+  config.attribute("maketx:highlightcomp", 1);
+  config.attribute("maketx:oiio_options", 1);
+  config.attribute("maketx:updatemode", 1);
+
+  switch (extension) {
+    case EXTENSION_CLIP:
+      config.attribute("maketx:wrap", "black");
+      break;
+    case EXTENSION_REPEAT:
+      config.attribute("maketx:wrap", "periodic");
+      break;
+    case EXTENSION_EXTEND:
+      config.attribute("maketx:wrap", "clamp");
+      break;
+    default:
+      assert(0);
+      break;
+  }
+
+  /* Convert textures to linear color space before mip mapping. */
+  if (colorspace != u_colorspace_raw) {
+    if (colorspace == u_colorspace_srgb || colorspace.empty()) {
+      config.attribute("maketx:incolorspace", "sRGB");
+    }
+    else {
+      config.attribute("maketx:incolorspace", colorspace.c_str());
+    }
+    config.attribute("maketx:outcolorspace", "linear");
+  }
+
+  return ImageBufAlgo::make_texture(ImageBufAlgo::MakeTxTexture, filename, outputfilename, config);
+}
+
+bool OIIOImageLoader::get_tx(const ustring &colorspace,
+                             const ExtensionType &extension,
+                             Progress *progress,
+                             bool auto_convert,
+                             const char *cache_path)
+{
+  if (!path_exists(osl_filepath().c_str())) {
+    return false;
+  }
+
+  string::size_type idx = osl_filepath().rfind('.');
+  if (idx != string::npos) {
+    string extension = osl_filepath().substr(idx + 1).c_str();
+    if (extension == "tx") {
+      return true;
+    }
+  }
+
+  string tx_name = string(osl_filepath().substr(0, idx).c_str()) + ".tx";
+  if (cache_path) {
+    string filename = path_filename(tx_name);
+    tx_name = path_join(string(cache_path), filename);
+  }
+  if (path_exists(tx_name)) {
+    filepath = tx_name;
+    return true;
+  }
+
+  if (auto_convert && progress) {
+    progress->set_status("Updating Images", string("Converting ") + osl_filepath().c_str());
+
+    bool ok = make_tx(osl_filepath().c_str(), tx_name, colorspace, extension);
+    if (ok) {
+      filepath = tx_name;
+      return true;
+    }
+  }
+  return false;
 }
 
 CCL_NAMESPACE_END

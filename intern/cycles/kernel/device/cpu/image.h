@@ -22,6 +22,14 @@
 #  include <nanovdb/util/SampleFromVoxels.h>
 #endif
 
+#ifdef __OIIO__
+#  include "kernel/kernel_oiio_globals.h"
+#  define NEAREST_LOOKUP_PATHS \
+    (PATH_RAY_DIFFUSE | PATH_RAY_SHADOW | PATH_RAY_DIFFUSE_ANCESTOR | PATH_RAY_VOLUME_SCATTER | \
+     PATH_RAY_GLOSSY | PATH_RAY_EMISSION)
+#  define DIFFUSE_BLUR_PATHS (PATH_RAY_DIFFUSE | PATH_RAY_DIFFUSE_ANCESTOR)
+#endif
+
 CCL_NAMESPACE_BEGIN
 
 /* Make template functions private so symbols don't conflict between kernels with different
@@ -583,32 +591,126 @@ template<typename T> struct NanoVDBInterpolator {
 
 #undef SET_CUBIC_SPLINE_WEIGHTS
 
-ccl_device float4 kernel_tex_image_interp(const KernelGlobals *kg, int id, float x, float y)
+ccl_device float4 kernel_tex_image_interp(const KernelGlobals *kg, int id, float x, float y, differential ds, differential dt, uint path_flag)
 {
   const TextureInfo &info = kernel_tex_fetch(__texture_info, id);
+  float4 r = make_float4(TEX_IMAGE_MISSING_R, TEX_IMAGE_MISSING_G, TEX_IMAGE_MISSING_B, TEX_IMAGE_MISSING_A);
 
   switch (info.data_type) {
     case IMAGE_DATA_TYPE_HALF:
-      return TextureInterpolator<half>::interp(info, x, y);
+      r = TextureInterpolator<half>::interp(info, x, y);
+      break;
     case IMAGE_DATA_TYPE_BYTE:
-      return TextureInterpolator<uchar>::interp(info, x, y);
+      r = TextureInterpolator<uchar>::interp(info, x, y);
+      break;
     case IMAGE_DATA_TYPE_USHORT:
-      return TextureInterpolator<uint16_t>::interp(info, x, y);
+      r = TextureInterpolator<uint16_t>::interp(info, x, y);
+      break;
     case IMAGE_DATA_TYPE_FLOAT:
-      return TextureInterpolator<float>::interp(info, x, y);
+      r = TextureInterpolator<float>::interp(info, x, y);
+      break;
     case IMAGE_DATA_TYPE_HALF4:
-      return TextureInterpolator<half4>::interp(info, x, y);
+      r = TextureInterpolator<half4>::interp(info, x, y);
+      break;
     case IMAGE_DATA_TYPE_BYTE4:
-      return TextureInterpolator<uchar4>::interp(info, x, y);
+      r = TextureInterpolator<uchar4>::interp(info, x, y);
+      break;
     case IMAGE_DATA_TYPE_USHORT4:
-      return TextureInterpolator<ushort4>::interp(info, x, y);
+      r = TextureInterpolator<ushort4>::interp(info, x, y);
+      break;
     case IMAGE_DATA_TYPE_FLOAT4:
-      return TextureInterpolator<float4>::interp(info, x, y);
+      r = TextureInterpolator<float4>::interp(info, x, y);
+      break;
+    case IMAGE_DATA_TYPE_OIIO:
+    {
+#ifdef __OIIO__
+      /* Make sure we have all necessary data in place, if not, bail. */
+      kernel_assert(kg->oiio);
+      kernel_assert(kg->oiio->tex_sys);
+      kernel_assert(info.data);
+      if (!kg->oiio || !kg->oiio->tex_sys || !info.data) {
+        return r;
+      }
+      /* Options: Anisotropic is a quality/speed tradeoff.
+       * Interpolation and extensions are supported in OIIO under different constants.
+       * */
+      OIIO::TextureOpt options;
+      options.anisotropic = 8;
+      float missingcolor[4] = {
+          TEX_IMAGE_MISSING_R, TEX_IMAGE_MISSING_G, TEX_IMAGE_MISSING_B, TEX_IMAGE_MISSING_A};
+      options.missingcolor = missingcolor;
+      options.mipmode = OIIO::TextureOpt::MipModeAniso;
+      options.sblur = options.tblur = 0.0f;
+      switch (info.interpolation) {
+        case INTERPOLATION_SMART:
+          options.interpmode = OIIO::TextureOpt::InterpSmartBicubic;
+          break;
+        case INTERPOLATION_CUBIC:
+          options.interpmode = OIIO::TextureOpt::InterpBicubic;
+          break;
+        case INTERPOLATION_LINEAR:
+          options.interpmode = OIIO::TextureOpt::InterpBilinear;
+          break;
+        //case INTERPOLATION_NONE:
+        case INTERPOLATION_CLOSEST:
+        default:
+          options.interpmode = OIIO::TextureOpt::InterpClosest;
+          break;
+      }
+      switch (info.extension) {
+        case EXTENSION_CLIP:
+          options.swrap = options.twrap = OIIO::TextureOpt::WrapBlack;
+          break;
+        case EXTENSION_EXTEND:
+          options.swrap = options.twrap = OIIO::TextureOpt::WrapClamp;
+          break;
+        case EXTENSION_REPEAT:
+        default:
+          options.swrap = options.twrap = OIIO::TextureOpt::WrapPeriodic;
+          break;
+      }
+
+      /* Texture lookup simplifications on less important paths. */
+      if (path_flag & NEAREST_LOOKUP_PATHS && !(path_flag & PATH_RAY_SINGULAR)) {
+        options.interpmode = OIIO::TextureOpt::InterpClosest;
+        options.mipmode = OIIO::TextureOpt::MipModeOneLevel;
+      }
+      else {
+        options.mipmode = OIIO::TextureOpt::MipModeAniso;
+      }
+      if (path_flag & DIFFUSE_BLUR_PATHS) {
+        options.sblur = options.tblur = kg->oiio->diffuse_blur;
+      }
+      else if (path_flag & PATH_RAY_GLOSSY) {
+        options.sblur = options.tblur = kg->oiio->glossy_blur;
+      }
+      else {
+        options.sblur = options.tblur = 0.0f;
+      }
+  
+      OIIO::TextureSystem::TextureHandle *handle = *((OIIO::TextureSystem::TextureHandle**)info.data);
+      kernel_assert(handle && kg->oiio->tex_sys->good(handle));
+      if(handle && !kg->oiio->tex_sys->good(handle)) {
+        return r;
+      }
+      kg->oiio->tex_sys->texture(handle,
+                                 (OIIO::TextureSystem::Perthread *)kg->oiio_tdata,
+                                 options,
+                                 x,
+                                 y,
+                                 ds.dx,
+                                 ds.dy,
+                                 dt.dx,
+                                 dt.dy,
+                                 4,
+                                 (float *)&r);
+#endif
+      break;
+    }
     default:
       assert(0);
-      return make_float4(
-          TEX_IMAGE_MISSING_R, TEX_IMAGE_MISSING_G, TEX_IMAGE_MISSING_B, TEX_IMAGE_MISSING_A);
   }
+  return info.compress_as_srgb ? color_srgb_to_linear_v4(r) : r;
 }
 
 ccl_device float4 kernel_tex_image_interp_3d(const KernelGlobals *kg,
@@ -645,6 +747,8 @@ ccl_device float4 kernel_tex_image_interp_3d(const KernelGlobals *kg,
     case IMAGE_DATA_TYPE_NANOVDB_FLOAT3:
       return NanoVDBInterpolator<nanovdb::Vec3f>::interp_3d(info, P.x, P.y, P.z, interp);
 #endif
+    case IMAGE_DATA_TYPE_OIIO:
+      return make_float4(TEX_IMAGE_MISSING_R, TEX_IMAGE_MISSING_G, TEX_IMAGE_MISSING_B, TEX_IMAGE_MISSING_A);
     default:
       assert(0);
       return make_float4(

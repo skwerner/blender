@@ -128,6 +128,8 @@ class ImageTextureNode : public ImageSlotTextureNode {
   NODE_SOCKET_API(float, projection_blend)
   NODE_SOCKET_API(bool, animated)
   NODE_SOCKET_API(float3, vector)
+  NODE_SOCKET_API(float3, vector_dx)
+  NODE_SOCKET_API(float3, vector_dy)
   NODE_SOCKET_API_ARRAY(array<int>, tiles)
 
  protected:
@@ -160,6 +162,8 @@ class EnvironmentTextureNode : public ImageSlotTextureNode {
   NODE_SOCKET_API(InterpolationType, interpolation)
   NODE_SOCKET_API(bool, animated)
   NODE_SOCKET_API(float3, vector)
+  NODE_SOCKET_API(float3, vector_dx)
+  NODE_SOCKET_API(float3, vector_dy)
 };
 
 class SkyTextureNode : public TextureNode {

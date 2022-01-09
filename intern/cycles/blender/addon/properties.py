@@ -718,6 +718,82 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         items=enum_texture_limit
     )
 
+    use_texture_cache: BoolProperty(
+        name="Use Texture Cache",
+        default=False,
+        description="Enables out-of-core texturing to conserve RAM"
+    )
+
+    texture_cache_size: IntProperty(
+        name="Texture Cache Size (MB)",
+        default=1024,
+        description="The size of the OpenImageIO texture cache in MB",
+        min=0
+    )
+
+    texture_auto_convert: BoolProperty(
+        name="Auto Convert Textures",
+        default=True,
+        description="Automatically convert textures to .tx files for optimal texture cache performance"
+    )
+
+    texture_accept_unmipped: BoolProperty(
+        name="Accept Unmipped",
+        default=True,
+        description="Texture cached rendering without mip mapping is very expensive. Uncheck to prevent Cycles from using textures that are not mip mapped"
+    )
+
+    texture_accept_untiled: BoolProperty(
+        name="Accept Untiled",
+        default=True,
+        description="Texture cached rendering without tiled textures is very expensive. Uncheck to prevent Cycles from using textures that are not tiled"
+    )
+
+    texture_auto_tile: BoolProperty(
+        name="Auto Tile",
+        default=True,
+        description="On the fly creation of tiled versions of textures that are not tiled. This can increase render time but helps reduce memory usage"
+    )
+
+    texture_auto_mip: BoolProperty(
+        name="Auto Mip",
+        default=True,
+        description="On the fly creation of mip maps of textures that are not mip mapped. This can increase render time but helps reduce memory usage"
+    )
+
+    texture_tile_size: IntProperty(
+        name="Tile Size",
+        default=64,
+        description="The size of tiles that Cycles uses for auto tiling"
+    )
+
+    texture_blur_diffuse: FloatProperty(
+        name="Diffuse Blur",
+        default=0.0156,
+        description="The amount of texture blur applied to diffuse bounces",
+        min = 0.0, max = 1.0
+    )
+
+    texture_blur_glossy: FloatProperty(
+        name="Glossy Blur",
+        default=0.0,
+        description="The amount of texture blur applied to glossy bounces",
+        min = 0.0, max = 1.0
+    )
+
+    use_custom_cache_path: BoolProperty(
+        name="Use Custom Cache Path",
+        default=False,
+        description="Use a custom path for the texture cache, as oppoosed to placing cache files next to the original file"
+    )
+
+    custom_cache_path: StringProperty(
+        name="Custom Cache Path",
+        default="",
+        subtype="DIR_PATH",
+        description="Custom path for the texture cache"
+    )
+
     use_fast_gi: BoolProperty(
         name="Fast GI Approximation",
         description="Approximate diffuse indirect light with background tinted ambient occlusion. This provides fast alternative to full global illumination, for interactive viewport rendering or final renders with reduced quality",

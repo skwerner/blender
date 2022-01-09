@@ -383,6 +383,10 @@ void ShaderGraph::finalize(Scene *scene, bool do_bump, bool do_simplify, bool bu
     if (do_bump)
       bump_from_displacement(bump_in_object_space);
 
+    /* This must be after all bump nodes are created,
+     * so that bump map lookups can be mip mapped too. */
+    add_differentials();
+
     ShaderInput *surface_in = output()->input("Surface");
     ShaderInput *volume_in = output()->input("Volume");
 
@@ -950,6 +954,91 @@ void ShaderGraph::refine_bump_nodes()
        * we re-connected this input to sample-center, so lets disconnect it
        * from bump input. */
       disconnect(bump_input);
+    }
+  }
+}
+
+void ShaderGraph::add_differentials()
+{
+  /* we transverse the node graph looking for texture nodes, when we find them,
+   * we copy the sub-graph defined from "Vector"
+   * input to the inputs "Vector_dx" and "Vector_dy" */
+
+  foreach (ShaderNode *node, nodes) {
+    if (node->special_type == SHADER_SPECIAL_TYPE_IMAGE_SLOT && node->input("Vector")->link &&
+        node->input("Vector_dx") && node->input("Vector_dy")) {
+      ShaderInput *vector_input = node->input("Vector");
+      ShaderNodeSet nodes_vector;
+
+      /* make 2 extra copies of the subgraph defined in Vector input */
+      ShaderNodeMap nodes_dx;
+      ShaderNodeMap nodes_dy;
+
+      /* find dependencies for the given input */
+      find_dependencies(nodes_vector, vector_input);
+
+      copy_nodes(nodes_vector, nodes_dx);
+      copy_nodes(nodes_vector, nodes_dy);
+
+      /* First: Nodes that have no bump are set to center, others are left untouched. */
+      foreach (ShaderNode *node, nodes_vector)
+        node->bump = node->bump == SHADER_BUMP_NONE ? SHADER_BUMP_CENTER : node->bump;
+
+      /* Second: Nodes that have no bump are set DX, others are shifted by one. */
+      foreach (NodePair &pair, nodes_dx) {
+        switch (pair.second->bump) {
+          case SHADER_BUMP_DX:
+            pair.second->bump = SHADER_BUMP_DY;
+            break;
+          case SHADER_BUMP_DY:
+            pair.second->bump = SHADER_BUMP_CENTER;
+            break;
+          default:
+            pair.second->bump = SHADER_BUMP_DX;
+        }
+      }
+
+      /* Second: Nodes that have no bump are set DY, others are shifted by two. */
+      foreach (NodePair &pair, nodes_dy) {
+        switch (pair.second->bump) {
+          case SHADER_BUMP_DX:
+            pair.second->bump = SHADER_BUMP_CENTER;
+            break;
+          case SHADER_BUMP_DY:
+            pair.second->bump = SHADER_BUMP_DX;
+            break;
+          default:
+            pair.second->bump = SHADER_BUMP_DY;
+        }
+      }
+
+      ShaderOutput *out = vector_input->link;
+      ShaderOutput *out_dx = nodes_dx[out->parent]->output(out->name());
+      ShaderOutput *out_dy = nodes_dy[out->parent]->output(out->name());
+
+      /* Insert mapping nodes that are duplicates of what's inside the image node.
+       * This is somewhat wasteful, it would be better to have a MappingNode
+       * that does three transforms at a time. */
+      MappingNode *mapping1 = create_node<MappingNode>();
+      MappingNode *mapping2 = create_node<MappingNode>();
+      mapping1->set_location(((ImageTextureNode *)node)->tex_mapping.translation);
+      mapping1->set_rotation(((ImageTextureNode *)node)->tex_mapping.rotation);
+      mapping1->set_scale(((ImageTextureNode *)node)->tex_mapping.scale);
+      mapping2->set_location(((ImageTextureNode *)node)->tex_mapping.translation);
+      mapping2->set_rotation(((ImageTextureNode *)node)->tex_mapping.rotation);
+      mapping2->set_scale(((ImageTextureNode *)node)->tex_mapping.scale);
+      add(mapping1);
+      add(mapping2);
+      connect(out_dx, mapping1->input("Vector"));
+      connect(out_dy, mapping2->input("Vector"));
+      connect(mapping1->output("Vector"), node->input("Vector_dx"));
+      connect(mapping2->output("Vector"), node->input("Vector_dy"));
+
+      /* add generated nodes */
+      foreach (NodePair &pair, nodes_dx)
+        add(pair.second);
+      foreach (NodePair &pair, nodes_dy)
+        add(pair.second);
     }
   }
 }

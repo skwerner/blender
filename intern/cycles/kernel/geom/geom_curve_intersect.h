@@ -777,6 +777,10 @@ ccl_device_inline void curve_shader_setup(const KernelGlobals *kg,
   sd->dPdu = dPdu;
   sd->dPdv = cross(dPdu, sd->Ng);
 #  endif
+#  ifdef __DNDU__
+  sd->dNdx = make_float3(0.0f, 0.0f, 0.0f);
+  sd->dNdy = make_float3(0.0f, 0.0f, 0.0f);
+#  endif
 
   if (isect_object != OBJECT_NONE) {
     const Transform tfm = object_get_transform(kg, sd);

@@ -50,6 +50,7 @@ typedef enum ImageDataType {
   IMAGE_DATA_TYPE_USHORT = 7,
   IMAGE_DATA_TYPE_NANOVDB_FLOAT = 8,
   IMAGE_DATA_TYPE_NANOVDB_FLOAT3 = 9,
+  IMAGE_DATA_TYPE_OIIO = 10,
 
   IMAGE_DATA_NUM_TYPES
 } ImageDataType;
@@ -92,6 +93,7 @@ typedef struct TextureInfo {
   /* Transform for 3D textures. */
   uint use_transform_3d;
   Transform transform_3d;
+  uint compress_as_srgb;
 } TextureInfo;
 
 CCL_NAMESPACE_END

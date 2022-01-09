@@ -154,6 +154,22 @@ ccl_device_inline void triangle_dPdudv(const KernelGlobals *kg,
   *dPdv = (p1 - p2);
 }
 
+ccl_device_inline void triangle_dNdudv(const KernelGlobals *kg,
+                                       int prim,
+                                       ccl_addr_space float3 *dNdu,
+                                       ccl_addr_space float3 *dNdv)
+{
+  /* load triangle vertices */
+  const uint4 tri_vindex = kernel_tex_fetch(__tri_vindex, prim);
+  float3 n0 = float4_to_float3(kernel_tex_fetch(__tri_vnormal, tri_vindex.x));
+  float3 n1 = float4_to_float3(kernel_tex_fetch(__tri_vnormal, tri_vindex.y));
+  float3 n2 = float4_to_float3(kernel_tex_fetch(__tri_vnormal, tri_vindex.z));
+
+  /* compute derivatives of N w.r.t. uv */
+  *dNdu = (n0 - n2);
+  *dNdv = (n1 - n2);
+}
+
 /* Reading attributes on various triangle elements */
 
 ccl_device float triangle_attribute_float(const KernelGlobals *kg,

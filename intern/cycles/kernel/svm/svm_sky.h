@@ -141,6 +141,8 @@ ccl_device float3 sky_radiance_nishita(const KernelGlobals *kg,
   float3 xyz;
   /* convert dir to spherical coordinates */
   float2 direction = direction_to_spherical(dir);
+  differential ds, dt;
+  ds.dx = ds.dy = dt.dx = dt.dy = 0.0f;
 
   /* render above the horizon */
   if (dir.z >= 0.0f) {
@@ -184,7 +186,7 @@ ccl_device float3 sky_radiance_nishita(const KernelGlobals *kg,
       if (x > 1.0f) {
         x -= 1.0f;
       }
-      xyz = float4_to_float3(kernel_tex_image_interp(kg, texture_id, x, y));
+      xyz = float4_to_float3(kernel_tex_image_interp(kg, texture_id, x, y, ds, dt, 0));
     }
   }
   /* ground */
@@ -201,7 +203,7 @@ ccl_device float3 sky_radiance_nishita(const KernelGlobals *kg,
       if (x > 1.0f) {
         x -= 1.0f;
       }
-      xyz = float4_to_float3(kernel_tex_image_interp(kg, texture_id, x, -0.5)) * fade;
+      xyz = float4_to_float3(kernel_tex_image_interp(kg, texture_id, x, -0.5f, ds, dt, 0)) * fade;
     }
   }
 

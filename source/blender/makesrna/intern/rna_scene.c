@@ -86,8 +86,7 @@ const EnumPropertyItem rna_enum_exr_codec_items[] = {
     {R_IMF_EXR_CODEC_B44, "B44", 0, "B44 (lossy)", ""},
     {R_IMF_EXR_CODEC_B44A, "B44A", 0, "B44A (lossy)", ""},
     {R_IMF_EXR_CODEC_DWAA, "DWAA", 0, "DWAA (lossy)", ""},
-    /* NOTE: Commented out for until new OpenEXR is released, see T50673. */
-    /* {R_IMF_EXR_CODEC_DWAB, "DWAB", 0, "DWAB (lossy)", ""}, */
+    {R_IMF_EXR_CODEC_DWAB, "DWAB", 0, "DWAB (lossy)", ""},
     {0, NULL, 0, NULL, NULL},
 };
 #endif
@@ -676,7 +675,9 @@ static void rna_ToolSettings_snap_mode_set(struct PointerRNA *ptr, int value)
 /* Grease Pencil update cache */
 static void rna_GPencil_update(Main *UNUSED(bmain), Scene *scene, PointerRNA *UNUSED(ptr))
 {
-  ED_gpencil_tag_scene_gpencil(scene);
+  if (scene != NULL) {
+    ED_gpencil_tag_scene_gpencil(scene);
+  }
 }
 
 static void rna_Gpencil_extend_selection(bContext *C, PointerRNA *UNUSED(ptr))
@@ -848,8 +849,9 @@ static void rna_Scene_camera_update(Main *bmain, Scene *UNUSED(scene_unused), Po
   DEG_relations_tag_update(bmain);
 }
 
-static void rna_Scene_fps_update(Main *bmain, Scene *scene, PointerRNA *UNUSED(ptr))
+static void rna_Scene_fps_update(Main *bmain, Scene *UNUSED(active_scene), PointerRNA *ptr)
 {
+  Scene *scene = (Scene *)ptr->owner_id;
   DEG_id_tag_update(&scene->id, ID_RECALC_AUDIO_FPS | ID_RECALC_SEQUENCER_STRIPS);
   /* NOTE: Tag via dependency graph will take care of all the updates ion the evaluated domain,
    * however, changes in FPS actually modifies an original skip length,
@@ -857,9 +859,9 @@ static void rna_Scene_fps_update(Main *bmain, Scene *scene, PointerRNA *UNUSED(p
   SEQ_sound_update_length(bmain, scene);
 }
 
-static void rna_Scene_listener_update(Main *UNUSED(bmain), Scene *scene, PointerRNA *UNUSED(ptr))
+static void rna_Scene_listener_update(Main *UNUSED(bmain), Scene *UNUSED(scene), PointerRNA *ptr)
 {
-  DEG_id_tag_update(&scene->id, ID_RECALC_AUDIO_LISTENER);
+  DEG_id_tag_update(ptr->owner_id, ID_RECALC_AUDIO_LISTENER);
 }
 
 static void rna_Scene_volume_update(Main *UNUSED(bmain), Scene *UNUSED(scene), PointerRNA *ptr)
@@ -885,8 +887,11 @@ static const char *rna_Scene_statistics_string_get(Scene *scene,
   return ED_info_statistics_string(bmain, scene, view_layer);
 }
 
-static void rna_Scene_framelen_update(Main *UNUSED(bmain), Scene *scene, PointerRNA *UNUSED(ptr))
+static void rna_Scene_framelen_update(Main *UNUSED(bmain),
+                                      Scene *UNUSED(active_scene),
+                                      PointerRNA *ptr)
 {
+  Scene *scene = (Scene *)ptr->owner_id;
   scene->r.framelen = (float)scene->r.framapto / (float)scene->r.images;
 }
 
@@ -1940,9 +1945,9 @@ static void rna_Scene_use_audio_set(PointerRNA *ptr, bool value)
   }
 }
 
-static void rna_Scene_use_audio_update(Main *UNUSED(bmain), Scene *scene, PointerRNA *UNUSED(ptr))
+static void rna_Scene_use_audio_update(Main *UNUSED(bmain), Scene *UNUSED(scene), PointerRNA *ptr)
 {
-  DEG_id_tag_update(&scene->id, ID_RECALC_AUDIO_MUTE);
+  DEG_id_tag_update(ptr->owner_id, ID_RECALC_AUDIO_MUTE);
 }
 
 static int rna_Scene_sync_mode_get(PointerRNA *ptr)
@@ -2199,9 +2204,9 @@ static void rna_SceneCamera_update(Main *UNUSED(bmain), Scene *UNUSED(scene), Po
   }
 }
 
-static void rna_SceneSequencer_update(Main *UNUSED(bmain), Scene *scene, PointerRNA *UNUSED(ptr))
+static void rna_SceneSequencer_update(Main *UNUSED(bmain), Scene *UNUSED(scene), PointerRNA *ptr)
 {
-  SEQ_cache_cleanup(scene);
+  SEQ_cache_cleanup((Scene *)ptr->owner_id);
 }
 
 static char *rna_ToolSettings_path(PointerRNA *UNUSED(ptr))
@@ -3156,6 +3161,14 @@ static void rna_def_tool_settings(BlenderRNA *brna)
   RNA_def_property_ui_text(prop, "Snap UV Element", "Type of element to snap to");
   RNA_def_property_update(prop, NC_SCENE | ND_TOOLSETTINGS, NULL); /* header redraw */
 
+  prop = RNA_def_property(srna, "use_snap_uv_grid_absolute", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "snap_uv_flag", SCE_SNAP_ABS_GRID);
+  RNA_def_property_ui_text(
+      prop,
+      "Absolute Grid Snap",
+      "Absolute grid alignment while translating (based on the pivot center)");
+  RNA_def_property_update(prop, NC_SCENE | ND_TOOLSETTINGS, NULL); /* header redraw */
+
   prop = RNA_def_property(srna, "snap_target", PROP_ENUM, PROP_NONE);
   RNA_def_property_enum_sdna(prop, NULL, "snap_target");
   RNA_def_property_enum_items(prop, rna_enum_snap_target_items);
@@ -3248,6 +3261,7 @@ static void rna_def_tool_settings(BlenderRNA *brna)
       "Automerge",
       "Join by distance last drawn stroke with previous strokes in the active layer");
   RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+  RNA_def_property_update(prop, NC_SCENE | ND_TOOLSETTINGS, NULL);
 
   prop = RNA_def_property(srna, "gpencil_sculpt", PROP_POINTER, PROP_NONE);
   RNA_def_property_pointer_sdna(prop, NULL, "gp_sculpt");
@@ -3411,7 +3425,8 @@ static void rna_def_tool_settings(BlenderRNA *brna)
       prop,
       "Cycle-Aware Keying",
       "For channels with cyclic extrapolation, keyframe insertion is automatically "
-      "remapped inside the cycle time range, and keeps ends in sync");
+      "remapped inside the cycle time range, and keeps ends in sync. Curves newly added to "
+      "actions with a Manual Frame Range and Cyclic Animation are automatically made cyclic");
 
   /* Keyframing */
   prop = RNA_def_property(srna, "keyframe_type", PROP_ENUM, PROP_NONE);
@@ -3524,8 +3539,10 @@ static void rna_def_sequencer_tool_settings(BlenderRNA *brna)
       {0, NULL, 0, NULL, NULL},
   };
 
-    static const EnumPropertyItem pivot_points[] = {
+  static const EnumPropertyItem pivot_points[] = {
+      {V3D_AROUND_CENTER_BOUNDS, "CENTER", ICON_PIVOT_BOUNDBOX, "Bounding Box Center", ""},
       {V3D_AROUND_CENTER_MEDIAN, "MEDIAN", ICON_PIVOT_MEDIAN, "Median Point", ""},
+      {V3D_AROUND_CURSOR, "CURSOR", ICON_PIVOT_CURSOR, "2D Cursor", "Pivot around the 2D cursor"},
       {V3D_AROUND_LOCAL_ORIGINS,
        "INDIVIDUAL_ORIGINS",
        ICON_PIVOT_INDIVIDUAL,
@@ -4149,6 +4166,13 @@ void rna_def_view_layer_common(BlenderRNA *brna, StructRNA *srna, const bool sce
     RNA_def_property_ui_text(
         prop, "Cryptomatte Levels", "Sets how many unique objects can be distinguished per pixel");
     RNA_def_property_ui_range(prop, 2.0, 16.0, 2.0, 0.0);
+    RNA_def_property_update(prop, NC_SCENE | ND_RENDER_OPTIONS, "rna_ViewLayer_pass_update");
+
+    prop = RNA_def_property(srna, "use_pass_cryptomatte_accurate", PROP_BOOLEAN, PROP_NONE);
+    RNA_def_property_boolean_sdna(prop, NULL, "cryptomatte_flag", VIEW_LAYER_CRYPTOMATTE_ACCURATE);
+    RNA_def_property_boolean_default(prop, true);
+    RNA_def_property_ui_text(
+        prop, "Cryptomatte Accurate", "Generate a more accurate cryptomatte pass");
     RNA_def_property_update(prop, NC_SCENE | ND_RENDER_OPTIONS, "rna_ViewLayer_pass_update");
   }
 
@@ -5559,7 +5583,7 @@ static void rna_def_scene_ffmpeg_settings(BlenderRNA *brna)
       {FFMPEG_MPEG2, "MPEG2", 0, "MPEG-2", ""},
       {FFMPEG_MPEG4, "MPEG4", 0, "MPEG-4", ""},
       {FFMPEG_AVI, "AVI", 0, "AVI", ""},
-      {FFMPEG_MOV, "QUICKTIME", 0, "Quicktime", ""},
+      {FFMPEG_MOV, "QUICKTIME", 0, "QuickTime", ""},
       {FFMPEG_DV, "DV", 0, "DV", ""},
       {FFMPEG_OGG, "OGG", 0, "Ogg", ""},
       {FFMPEG_MKV, "MKV", 0, "Matroska", ""},
@@ -7049,7 +7073,7 @@ static void rna_def_scene_eevee(BlenderRNA *brna)
   RNA_def_property_update(prop, NC_SCENE | ND_RENDER_OPTIONS, NULL);
 
   prop = RNA_def_property(srna, "ssr_quality", PROP_FLOAT, PROP_FACTOR);
-  RNA_def_property_ui_text(prop, "Trace Precision", "Precision of the screen space raytracing");
+  RNA_def_property_ui_text(prop, "Trace Precision", "Precision of the screen space ray-tracing");
   RNA_def_property_range(prop, 0.0f, 1.0f);
   RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
   RNA_def_property_update(prop, NC_SCENE | ND_RENDER_OPTIONS, NULL);

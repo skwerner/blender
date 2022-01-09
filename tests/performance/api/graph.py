@@ -21,8 +21,8 @@ class TestGraph:
             queue = TestQueue(json_filepath)
 
             for entry in queue.entries:
-                if entry.status in ('done', 'outdated'):
-                    device_name = entry.device_name
+                if entry.status in {'done', 'outdated'}:
+                    device_name = entry.device_name + " (" + entry.device_type + ")"
                     if device_name in devices.keys():
                         devices[device_name].append(entry)
                     else:
@@ -75,7 +75,7 @@ class TestGraph:
                 revision_dates[revision] = int(entry.date)
 
         # Google Charts JSON data layout is like a spreadsheat table, with
-        # colums, rows and cells. We create one column for revision labels,
+        # columns, rows, and cells. We create one column for revision labels,
         # and one column for each test.
         cols = []
         if chart_type == 'line':

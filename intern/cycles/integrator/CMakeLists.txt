@@ -27,6 +27,8 @@ set(SRC
   pass_accessor.cpp
   pass_accessor_cpu.cpp
   pass_accessor_gpu.cpp
+  path_trace_display.cpp
+  path_trace_tile.cpp
   path_trace_work.cpp
   path_trace_work_cpu.cpp
   path_trace_work_gpu.cpp
@@ -47,6 +49,8 @@ set(SRC_HEADERS
   pass_accessor.h
   pass_accessor_cpu.h
   pass_accessor_gpu.h
+  path_trace_display.h
+  path_trace_tile.h
   path_trace_work.h
   path_trace_work_cpu.h
   path_trace_work_gpu.h
@@ -57,9 +61,11 @@ set(SRC_HEADERS
 )
 
 set(LIB
+  cycles_device
+
   # NOTE: Is required for RenderBuffers access. Might consider moving files around a bit to
   # avoid such cyclic dependency.
-  cycles_render
+  cycles_session
 
   cycles_util
 )

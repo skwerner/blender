@@ -22,7 +22,7 @@
 /* So ImathMath is included before our kernel_cpu_compat. */
 #ifdef WITH_OSL
 /* So no context pollution happens from indirectly included windows.h */
-#  include "util/util_windows.h"
+#  include "util/windows.h"
 #  include <OSL/oslexec.h>
 #endif
 
@@ -39,28 +39,27 @@
 #include "kernel/device/cpu/compat.h"
 #include "kernel/device/cpu/globals.h"
 #include "kernel/device/cpu/kernel.h"
-#include "kernel/kernel_types.h"
+#include "kernel/types.h"
 
-#include "kernel/osl/osl_shader.h"
-#include "kernel/osl/osl_globals.h"
+#include "kernel/osl/shader.h"
+#include "kernel/osl/globals.h"
 // clang-format on
 
-#include "bvh/bvh_embree.h"
+#include "bvh/embree.h"
 
-#include "render/buffers.h"
+#include "session/buffers.h"
 
-#include "util/util_debug.h"
-#include "util/util_foreach.h"
-#include "util/util_function.h"
-#include "util/util_logging.h"
-#include "util/util_map.h"
-#include "util/util_opengl.h"
-#include "util/util_openimagedenoise.h"
-#include "util/util_optimization.h"
-#include "util/util_progress.h"
-#include "util/util_system.h"
-#include "util/util_task.h"
-#include "util/util_thread.h"
+#include "util/debug.h"
+#include "util/foreach.h"
+#include "util/function.h"
+#include "util/log.h"
+#include "util/map.h"
+#include "util/openimagedenoise.h"
+#include "util/optimization.h"
+#include "util/progress.h"
+#include "util/system.h"
+#include "util/task.h"
+#include "util/thread.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -69,8 +68,8 @@ CPUDevice::CPUDevice(const DeviceInfo &info_, Stats &stats_, Profiler &profiler_
 {
   /* Pick any kernel, all of them are supposed to have same level of microarchitecture
    * optimization. */
-  VLOG(1) << "Will be using " << kernels.integrator_init_from_camera.get_uarch_name()
-          << " kernels.";
+  VLOG(1) << "Using " << get_cpu_kernels().integrator_init_from_camera.get_uarch_name()
+          << " CPU kernels.";
 
   if (info.cpu_threads == 0) {
     info.cpu_threads = TaskScheduler::num_threads();
@@ -92,11 +91,6 @@ CPUDevice::~CPUDevice()
 #endif
 
   texture_info.free();
-}
-
-bool CPUDevice::show_samples() const
-{
-  return (info.cpu_threads == 1);
 }
 
 BVHLayoutMask CPUDevice::get_bvh_layout_mask() const
@@ -135,8 +129,7 @@ void CPUDevice::mem_alloc(device_memory &mem)
               << string_human_readable_size(mem.memory_size()) << ")";
     }
 
-    if (mem.type == MEM_DEVICE_ONLY) {
-      assert(!mem.host_pointer);
+    if (mem.type == MEM_DEVICE_ONLY || !mem.host_pointer) {
       size_t alignment = MIN_ALIGNMENT_CPU_DATA_TYPES;
       void *data = util_aligned_malloc(mem.memory_size(), alignment);
       mem.device_pointer = (device_ptr)data;
@@ -170,7 +163,7 @@ void CPUDevice::mem_copy_to(device_memory &mem)
 }
 
 void CPUDevice::mem_copy_from(
-    device_memory & /*mem*/, int /*y*/, int /*w*/, int /*h*/, int /*elem*/)
+    device_memory & /*mem*/, size_t /*y*/, size_t /*w*/, size_t /*h*/, size_t /*elem*/)
 {
   /* no-op */
 }
@@ -195,7 +188,7 @@ void CPUDevice::mem_free(device_memory &mem)
     tex_free((device_texture &)mem);
   }
   else if (mem.device_pointer) {
-    if (mem.type == MEM_DEVICE_ONLY) {
+    if (mem.type == MEM_DEVICE_ONLY || !mem.host_pointer) {
       util_aligned_free((void *)mem.device_pointer);
     }
     mem.device_pointer = 0;
@@ -204,7 +197,7 @@ void CPUDevice::mem_free(device_memory &mem)
   }
 }
 
-device_ptr CPUDevice::mem_alloc_sub_ptr(device_memory &mem, int offset, int /*size*/)
+device_ptr CPUDevice::mem_alloc_sub_ptr(device_memory &mem, size_t offset, size_t /*size*/)
 {
   return (device_ptr)(((char *)mem.device_pointer) + mem.memory_elements_size(offset));
 }
@@ -280,7 +273,8 @@ void CPUDevice::build_bvh(BVH *bvh, Progress &progress, bool refit)
 {
 #ifdef WITH_EMBREE
   if (bvh->params.bvh_layout == BVH_LAYOUT_EMBREE ||
-      bvh->params.bvh_layout == BVH_LAYOUT_MULTI_OPTIX_EMBREE) {
+      bvh->params.bvh_layout == BVH_LAYOUT_MULTI_OPTIX_EMBREE ||
+      bvh->params.bvh_layout == BVH_LAYOUT_MULTI_METAL_EMBREE) {
     BVHEmbree *const bvh_embree = static_cast<BVHEmbree *>(bvh);
     if (refit) {
       bvh_embree->refit(progress);
@@ -296,159 +290,6 @@ void CPUDevice::build_bvh(BVH *bvh, Progress &progress, bool refit)
   else
 #endif
     Device::build_bvh(bvh, progress, refit);
-}
-
-#if 0
-void CPUDevice::render(DeviceTask &task, RenderTile &tile, KernelGlobals *kg)
-{
-  const bool use_coverage = kernel_data.film.cryptomatte_passes & CRYPT_ACCURATE;
-
-  scoped_timer timer(&tile.buffers->render_time);
-
-  Coverage coverage(kg, tile);
-  if (use_coverage) {
-    coverage.init_path_trace();
-  }
-
-  float *render_buffer = (float *)tile.buffer;
-  int start_sample = tile.start_sample;
-  int end_sample = tile.start_sample + tile.num_samples;
-
-  /* Needed for Embree. */
-  SIMD_SET_FLUSH_TO_ZERO;
-
-  for (int sample = start_sample; sample < end_sample; sample++) {
-    if (task.get_cancel() || TaskPool::canceled()) {
-      if (task.need_finish_queue == false)
-        break;
-    }
-
-    if (tile.stealing_state == RenderTile::CAN_BE_STOLEN && task.get_tile_stolen()) {
-      tile.stealing_state = RenderTile::WAS_STOLEN;
-      break;
-    }
-
-    if (tile.task == RenderTile::PATH_TRACE) {
-      for (int y = tile.y; y < tile.y + tile.h; y++) {
-        for (int x = tile.x; x < tile.x + tile.w; x++) {
-          if (use_coverage) {
-            coverage.init_pixel(x, y);
-          }
-          kernels.path_trace(kg, render_buffer, sample, x, y, tile.offset, tile.stride);
-        }
-      }
-    }
-    else {
-      for (int y = tile.y; y < tile.y + tile.h; y++) {
-        for (int x = tile.x; x < tile.x + tile.w; x++) {
-          kernels.bake(kg, render_buffer, sample, x, y, tile.offset, tile.stride);
-        }
-      }
-    }
-    tile.sample = sample + 1;
-
-    if (task.adaptive_sampling.use && task.adaptive_sampling.need_filter(sample)) {
-      const bool stop = adaptive_sampling_filter(kg, tile, sample);
-      if (stop) {
-        const int num_progress_samples = end_sample - sample;
-        tile.sample = end_sample;
-        task.update_progress(&tile, tile.w * tile.h * num_progress_samples);
-        break;
-      }
-    }
-
-    task.update_progress(&tile, tile.w * tile.h);
-  }
-  if (use_coverage) {
-    coverage.finalize();
-  }
-
-  if (task.adaptive_sampling.use && (tile.stealing_state != RenderTile::WAS_STOLEN)) {
-    adaptive_sampling_post(tile, kg);
-  }
-}
-
-void CPUDevice::thread_render(DeviceTask &task)
-{
-  if (TaskPool::canceled()) {
-    if (task.need_finish_queue == false)
-      return;
-  }
-
-  /* allocate buffer for kernel globals */
-  CPUKernelThreadGlobals kg(kernel_globals, get_cpu_osl_memory(), get_cpu_oiio_memory());
-
-  profiler.add_state(&kg.profiler);
-
-  /* NLM denoiser. */
-  DenoisingTask *denoising = NULL;
-
-  /* OpenImageDenoise: we can only denoise with one thread at a time, so to
-   * avoid waiting with mutex locks in the denoiser, we let only a single
-   * thread acquire denoising tiles. */
-  uint tile_types = task.tile_types;
-  bool hold_denoise_lock = false;
-  if ((tile_types & RenderTile::DENOISE) && task.denoising.type == DENOISER_OPENIMAGEDENOISE) {
-    if (!oidn_task_lock.try_lock()) {
-      tile_types &= ~RenderTile::DENOISE;
-      hold_denoise_lock = true;
-    }
-  }
-
-  RenderTile tile;
-  while (task.acquire_tile(this, tile, tile_types)) {
-    if (tile.task == RenderTile::PATH_TRACE) {
-      render(task, tile, &kg);
-    }
-    else if (tile.task == RenderTile::BAKE) {
-      render(task, tile, &kg);
-    }
-    else if (tile.task == RenderTile::DENOISE) {
-      denoise_openimagedenoise(task, tile);
-      task.update_progress(&tile, tile.w * tile.h);
-    }
-
-    task.release_tile(tile);
-
-    if (TaskPool::canceled()) {
-      if (task.need_finish_queue == false)
-        break;
-    }
-  }
-
-  if (hold_denoise_lock) {
-    oidn_task_lock.unlock();
-  }
-
-  profiler.remove_state(&kg.profiler);
-
-  delete denoising;
-}
-
-void CPUDevice::thread_denoise(DeviceTask &task)
-{
-  RenderTile tile;
-  tile.x = task.x;
-  tile.y = task.y;
-  tile.w = task.w;
-  tile.h = task.h;
-  tile.buffer = task.buffer;
-  tile.sample = task.sample + task.num_samples;
-  tile.num_samples = task.num_samples;
-  tile.start_sample = task.sample;
-  tile.offset = task.offset;
-  tile.stride = task.stride;
-  tile.buffers = task.buffers;
-
-  denoise_openimagedenoise(task, tile);
-
-  task.update_progress(&tile, tile.w * tile.h);
-}
-#endif
-
-const CPUKernels *CPUDevice::get_cpu_kernels() const
-{
-  return &kernels;
 }
 
 void CPUDevice::get_cpu_kernel_thread_globals(

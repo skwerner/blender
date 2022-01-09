@@ -33,7 +33,6 @@
 
 namespace blender::ed::outliner {
 
-/* Convenience/readability. */
 template<typename T> using List = ListBaseWrapper<T>;
 
 TreeDisplayLibraries::TreeDisplayLibraries(SpaceOutliner &space_outliner)
@@ -186,7 +185,7 @@ short TreeDisplayLibraries::id_filter_get() const
   return 0;
 }
 
-bool TreeDisplayLibraries::library_id_filter_poll(Library *lib, ID *id) const
+bool TreeDisplayLibraries::library_id_filter_poll(const Library *lib, ID *id) const
 {
   if (id->lib != lib) {
     return false;

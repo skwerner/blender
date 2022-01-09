@@ -26,10 +26,8 @@ using blender::float3;
 using blender::IndexRange;
 using blender::MutableSpan;
 using blender::Span;
+using blender::VArray;
 using blender::fn::GVArray;
-using blender::fn::GVArray_For_ArrayContainer;
-using blender::fn::GVArray_Typed;
-using blender::fn::GVArrayPtr;
 
 void NURBSpline::copy_settings(Spline &dst) const
 {
@@ -80,22 +78,6 @@ void NURBSpline::set_order(const uint8_t value)
 {
   BLI_assert(value >= 2 && value <= 6);
   order_ = value;
-  this->mark_cache_invalid();
-}
-
-/**
- * \warning Call #reallocate on the spline's attributes after adding all points.
- */
-void NURBSpline::add_point(const float3 position,
-                           const float radius,
-                           const float tilt,
-                           const float weight)
-{
-  positions_.append(position);
-  radii_.append(radius);
-  tilts_.append(tilt);
-  weights_.append(weight);
-  knots_dirty_ = true;
   this->mark_cache_invalid();
 }
 
@@ -262,13 +244,13 @@ void NURBSpline::calculate_knots() const
 Span<float> NURBSpline::knots() const
 {
   if (!knots_dirty_) {
-    BLI_assert(knots_.size() == this->size() + order_);
+    BLI_assert(knots_.size() == this->knots_size());
     return knots_;
   }
 
   std::lock_guard lock{knots_mutex_};
   if (!knots_dirty_) {
-    BLI_assert(knots_.size() == this->size() + order_);
+    BLI_assert(knots_.size() == this->knots_size());
     return knots_;
   }
 
@@ -410,23 +392,23 @@ void interpolate_to_evaluated_impl(Span<NURBSpline::BasisCache> weights,
   mixer.finalize();
 }
 
-GVArrayPtr NURBSpline::interpolate_to_evaluated(const GVArray &src) const
+GVArray NURBSpline::interpolate_to_evaluated(const GVArray &src) const
 {
   BLI_assert(src.size() == this->size());
 
   if (src.is_single()) {
-    return src.shallow_copy();
+    return src;
   }
 
   Span<BasisCache> basis_cache = this->calculate_basis_cache();
 
-  GVArrayPtr new_varray;
+  GVArray new_varray;
   blender::attribute_math::convert_to_static_type(src.type(), [&](auto dummy) {
     using T = decltype(dummy);
     if constexpr (!std::is_void_v<blender::attribute_math::DefaultMixer<T>>) {
       Array<T> values(this->evaluated_points_size());
       interpolate_to_evaluated_impl<T>(basis_cache, src.typed<T>(), values);
-      new_varray = std::make_unique<GVArray_For_ArrayContainer<Array<T>>>(std::move(values));
+      new_varray = VArray<T>::ForContainer(std::move(values));
     }
   });
 
@@ -448,8 +430,8 @@ Span<float3> NURBSpline::evaluated_positions() const
   evaluated_position_cache_.resize(eval_size);
 
   /* TODO: Avoid copying the evaluated data from the temporary array. */
-  GVArray_Typed<float3> evaluated = Spline::interpolate_to_evaluated(positions_.as_span());
-  evaluated->materialize(evaluated_position_cache_);
+  VArray<float3> evaluated = Spline::interpolate_to_evaluated(positions_.as_span());
+  evaluated.materialize(evaluated_position_cache_);
 
   position_cache_dirty_ = false;
   return evaluated_position_cache_;

@@ -39,6 +39,11 @@ void BKE_mesh_foreach_mapped_vert(struct Mesh *mesh,
                                                const short no_s[3]),
                                   void *userData,
                                   MeshForeachFlag flag);
+/**
+ * Copied from #cdDM_foreachMappedEdge.
+ * \param tot_edges: Number of original edges. Used to avoid calling the callback with invalid
+ * edge indices.
+ */
 void BKE_mesh_foreach_mapped_edge(
     struct Mesh *mesh,
     int tot_edges,
@@ -63,9 +68,7 @@ void BKE_mesh_foreach_mapped_subdiv_face_center(
     void *userData,
     MeshForeachFlag flag);
 
-void BKE_mesh_foreach_mapped_vert_coords_get(struct Mesh *me_eval,
-                                             float (*r_cos)[3],
-                                             const int totcos);
+void BKE_mesh_foreach_mapped_vert_coords_get(struct Mesh *me_eval, float (*r_cos)[3], int totcos);
 
 #ifdef __cplusplus
 }

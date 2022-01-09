@@ -38,12 +38,6 @@
 /** \name Snapping in Anim Editors
  * \{ */
 
-/**
- * This function returns the snapping 'mode' for Animation Editors only.
- * We cannot use the standard snapping due to NLA-strip scaling complexities.
- *
- * TODO: these modifier checks should be accessible from the key-map.
- */
 short getAnimEdit_SnapMode(TransInfo *t)
 {
   short autosnap = SACTSNAP_OFF;
@@ -56,8 +50,10 @@ short getAnimEdit_SnapMode(TransInfo *t)
     }
   }
   else if (t->spacetype == SPACE_GRAPH) {
+    if ((t->mode == TFM_TRANSLATION) && activeSnap(t)) {
+      return autosnap;
+    }
     SpaceGraph *sipo = (SpaceGraph *)t->area->spacedata.first;
-
     if (sipo) {
       autosnap = sipo->autosnap;
     }
@@ -126,9 +122,6 @@ void snapFrameTransform(TransInfo *t,
   }
 }
 
-/* This function is used by Animation Editor specific transform functions to do
- * the Snap Keyframe to Nearest Frame/Marker
- */
 void transform_snap_anim_flush_data(TransInfo *t,
                                     TransData *td,
                                     const eAnimEdit_AutoSnap autosnap,

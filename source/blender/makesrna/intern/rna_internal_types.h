@@ -44,11 +44,20 @@ typedef struct IDProperty IDProperty;
 
 /* Function Callbacks */
 
-typedef void (*UpdateFunc)(struct Main *main, struct Scene *scene, struct PointerRNA *ptr);
+/** Update callback for an RNA property.
+ *
+ *  \note This is NOT called automatically when writing into the property, it needs to be called
+ * manually (through #RNA_property_update or #RNA_property_update_main) when needed.
+ *
+ *  \param bmain: the Main data-base to which `ptr` data belongs.
+ *  \param active_scene: The current active scene (may be NULL in some cases).
+ *  \param ptr: The RNA pointer data to update. */
+typedef void (*UpdateFunc)(struct Main *bmain, struct Scene *active_scene, struct PointerRNA *ptr);
 typedef void (*ContextPropUpdateFunc)(struct bContext *C,
                                       struct PointerRNA *ptr,
                                       struct PropertyRNA *prop);
 typedef void (*ContextUpdateFunc)(struct bContext *C, struct PointerRNA *ptr);
+
 typedef int (*EditableFunc)(struct PointerRNA *ptr, const char **r_info);
 typedef int (*ItemEditableFunc)(struct PointerRNA *ptr, int index);
 typedef struct IDProperty **(*IDPropertiesFunc)(struct PointerRNA *ptr);
@@ -202,11 +211,11 @@ typedef struct PropertyRNAOrID {
 typedef int (*RNAPropOverrideDiff)(struct Main *bmain,
                                    struct PropertyRNAOrID *prop_a,
                                    struct PropertyRNAOrID *prop_b,
-                                   const int mode,
+                                   int mode,
                                    struct IDOverrideLibrary *override,
                                    const char *rna_path,
                                    const size_t rna_path_len,
-                                   const int flags,
+                                   int flags,
                                    bool *r_override_changed);
 
 /**
@@ -226,9 +235,9 @@ typedef bool (*RNAPropOverrideStore)(struct Main *bmain,
                                      struct PropertyRNA *prop_local,
                                      struct PropertyRNA *prop_reference,
                                      struct PropertyRNA *prop_storage,
-                                     const int len_local,
-                                     const int len_reference,
-                                     const int len_storage,
+                                     int len_local,
+                                     int len_reference,
+                                     int len_storage,
                                      struct IDOverrideLibraryPropertyOperation *opop);
 
 /**
@@ -245,9 +254,9 @@ typedef bool (*RNAPropOverrideApply)(struct Main *bmain,
                                      struct PropertyRNA *prop_dst,
                                      struct PropertyRNA *prop_src,
                                      struct PropertyRNA *prop_storage,
-                                     const int len_dst,
-                                     const int len_src,
-                                     const int len_storage,
+                                     int len_dst,
+                                     int len_src,
+                                     int len_storage,
                                      struct PointerRNA *ptr_item_dst,
                                      struct PointerRNA *ptr_item_src,
                                      struct PointerRNA *ptr_item_storage,

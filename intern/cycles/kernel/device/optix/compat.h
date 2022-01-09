@@ -21,6 +21,7 @@
 #include <optix.h>
 
 #define __KERNEL_GPU__
+#define __KERNEL_GPU_RAYTRACING__
 #define __KERNEL_CUDA__ /* OptiX kernels are implicitly CUDA kernels too */
 #define __KERNEL_OPTIX__
 #define CCL_NAMESPACE_BEGIN
@@ -49,16 +50,16 @@ typedef unsigned long long uint64_t;
   __device__ __forceinline__  // Function calls are bad for OptiX performance, so inline everything
 #define ccl_device_inline ccl_device
 #define ccl_device_forceinline ccl_device
+#define ccl_device_inline_method ccl_device
 #define ccl_device_noinline __device__ __noinline__
 #define ccl_device_noinline_cpu ccl_device
 #define ccl_global
-#define ccl_static_constant __constant__
+#define ccl_inline_constant __constant__
 #define ccl_device_constant __constant__ __device__
 #define ccl_constant const
 #define ccl_gpu_shared __shared__
 #define ccl_private
 #define ccl_may_alias
-#define ccl_addr_space
 #define ccl_restrict __restrict__
 #define ccl_loop_no_unroll
 #define ccl_align(n) __align__(n)
@@ -77,16 +78,16 @@ typedef unsigned long long uint64_t;
 #define ccl_gpu_block_idx_x (blockIdx.x)
 #define ccl_gpu_grid_dim_x (gridDim.x)
 #define ccl_gpu_warp_size (warpSize)
+#define ccl_gpu_thread_mask(thread_warp) uint(0xFFFFFFFF >> (ccl_gpu_warp_size - thread_warp))
 
 #define ccl_gpu_global_id_x() (ccl_gpu_block_idx_x * ccl_gpu_block_dim_x + ccl_gpu_thread_idx_x)
 #define ccl_gpu_global_size_x() (ccl_gpu_grid_dim_x * ccl_gpu_block_dim_x)
 
-/* GPU warp synchronizaton */
+/* GPU warp synchronization. */
 
 #define ccl_gpu_syncthreads() __syncthreads()
 #define ccl_gpu_ballot(predicate) __ballot_sync(0xFFFFFFFF, predicate)
 #define ccl_gpu_shfl_down_sync(mask, var, detla) __shfl_down_sync(mask, var, detla)
-#define ccl_gpu_popc(x) __popc(x)
 
 /* GPU texture objects */
 
@@ -121,7 +122,14 @@ __device__ half __float2half(const float f)
   return val;
 }
 
+__device__ float __half2float(const half h)
+{
+  float val;
+  asm("{  cvt.f32.f16 %0, %1;}\n" : "=f"(val) : "h"(h));
+  return val;
+}
+
 /* Types */
 
-#include "util/util_half.h"
-#include "util/util_types.h"
+#include "util/half.h"
+#include "util/types.h"

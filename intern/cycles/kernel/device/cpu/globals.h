@@ -18,8 +18,9 @@
 
 #pragma once
 
-#include "kernel/kernel_profiling.h"
-#include "kernel/kernel_types.h"
+#include "kernel/tables.h"
+#include "kernel/types.h"
+#include "kernel/util/profiling.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -38,9 +39,9 @@ struct OSLShadingSystem;
 struct OIIOGlobals;
 #endif
 
-typedef struct KernelGlobals {
+typedef struct KernelGlobalsCPU {
 #define KERNEL_TEX(type, name) texture<type> name;
-#include "kernel/kernel_textures.h"
+#include "kernel/textures.h"
 
   KernelData __data;
 
@@ -59,7 +60,9 @@ typedef struct KernelGlobals {
   /* **** Run-time data ****  */
 
   ProfilingState profiler;
-} KernelGlobals;
+} KernelGlobalsCPU;
+
+typedef const KernelGlobalsCPU *ccl_restrict KernelGlobals;
 
 /* Abstraction macros */
 #define kernel_tex_fetch(tex, index) (kg->tex.fetch(index))

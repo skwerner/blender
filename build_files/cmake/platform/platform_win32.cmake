@@ -27,7 +27,7 @@ if(NOT MSVC)
 endif()
 
 if(CMAKE_C_COMPILER_ID MATCHES "Clang")
-  set(MSVC_CLANG On)
+  set(MSVC_CLANG ON)
   set(VC_TOOLS_DIR $ENV{VCToolsRedistDir} CACHE STRING "Location of the msvc redistributables")
   set(MSVC_REDIST_DIR ${VC_TOOLS_DIR})
   if(DEFINED MSVC_REDIST_DIR)
@@ -53,7 +53,7 @@ if(CMAKE_C_COMPILER_ID MATCHES "Clang")
   endif()
   if(WITH_WINDOWS_STRIPPED_PDB)
     message(WARNING "stripped pdb not supported with clang, disabling..")
-    set(WITH_WINDOWS_STRIPPED_PDB Off)
+    set(WITH_WINDOWS_STRIPPED_PDB OFF)
   endif()
 endif()
 
@@ -159,7 +159,7 @@ endif()
 if(WITH_COMPILER_ASAN AND MSVC AND NOT MSVC_CLANG)
   if(CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 19.28.29828)
     #set a flag so we don't have to do this comparison all the time
-    SET(MSVC_ASAN On)
+    SET(MSVC_ASAN ON)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /fsanitize=address")
     set(CMAKE_C_FLAGS     "${CMAKE_C_FLAGS} /fsanitize=address")
     string(APPEND CMAKE_EXE_LINKER_FLAGS_DEBUG " /INCREMENTAL:NO")
@@ -179,22 +179,22 @@ endif()
 
 if(WITH_WINDOWS_SCCACHE AND CMAKE_VS_MSBUILD_COMMAND)
     message(WARNING "Disabling sccache, sccache is not supported with msbuild")
-    set(WITH_WINDOWS_SCCACHE Off)
+    set(WITH_WINDOWS_SCCACHE OFF)
 endif()
 
 # Debug Symbol format
 # sccache # MSVC_ASAN # format # why
-# On      # On        # Z7     # sccache will only play nice with Z7
-# On      # Off       # Z7     # sccache will only play nice with Z7
-# Off     # On        # Zi     # Asan will not play nice with Edit and Continue
-# Off     # Off       # ZI     # Neither asan nor sscache is enabled Edit and Continue is available
+# ON      # ON        # Z7     # sccache will only play nice with Z7
+# ON      # OFF       # Z7     # sccache will only play nice with Z7
+# OFF     # ON        # Zi     # Asan will not play nice with Edit and Continue
+# OFF     # OFF       # ZI     # Neither asan nor sscache is enabled Edit and Continue is available
 
 # Release Symbol format
 # sccache # MSVC_ASAN # format # why
-# On      # On        # Z7     # sccache will only play nice with Z7
-# On      # Off       # Z7     # sccache will only play nice with Z7
-# Off     # On        # Zi     # Asan will not play nice with Edit and Continue
-# Off     # Off       # Zi     # Edit and Continue disables some optimizations
+# ON      # ON        # Z7     # sccache will only play nice with Z7
+# ON      # OFF       # Z7     # sccache will only play nice with Z7
+# OFF     # ON        # Zi     # Asan will not play nice with Edit and Continue
+# OFF     # OFF       # Zi     # Edit and Continue disables some optimizations
 
 
 if(WITH_WINDOWS_SCCACHE)
@@ -288,7 +288,7 @@ if(CMAKE_GENERATOR MATCHES "^Visual Studio.+" AND # Only supported in the VS IDE
     "EnableMicrosoftCodeAnalysis=false"
     "EnableClangTidyCodeAnalysis=true"
   )
-  set(VS_CLANG_TIDY On)
+  set(VS_CLANG_TIDY ON)
 endif()
 
 # Mark libdir as system headers with a lower warn level, to resolve some warnings
@@ -469,7 +469,7 @@ if(WITH_PYTHON)
 
   set(PYTHON_INCLUDE_DIR ${LIBDIR}/python/${_PYTHON_VERSION_NO_DOTS}/include)
   set(PYTHON_NUMPY_INCLUDE_DIRS ${LIBDIR}/python/${_PYTHON_VERSION_NO_DOTS}/lib/site-packages/numpy/core/include)
-  set(NUMPY_FOUND On)
+  set(NUMPY_FOUND ON)
   unset(_PYTHON_VERSION_NO_DOTS)
   # uncached vars
   set(PYTHON_INCLUDE_DIRS "${PYTHON_INCLUDE_DIR}")
@@ -477,7 +477,7 @@ if(WITH_PYTHON)
 endif()
 
 if(WITH_BOOST)
-  if(WITH_CYCLES_OSL)
+  if(WITH_CYCLES AND WITH_CYCLES_OSL)
     set(boost_extra_libs wave)
   endif()
   if(WITH_INTERNATIONAL)
@@ -520,7 +520,7 @@ if(WITH_BOOST)
       debug ${BOOST_LIBPATH}/libboost_thread-${BOOST_DEBUG_POSTFIX}
       debug ${BOOST_LIBPATH}/libboost_chrono-${BOOST_DEBUG_POSTFIX}
     )
-    if(WITH_CYCLES_OSL)
+    if(WITH_CYCLES AND WITH_CYCLES_OSL)
       set(BOOST_LIBRARIES ${BOOST_LIBRARIES}
         optimized ${BOOST_LIBPATH}/libboost_wave-${BOOST_POSTFIX}
         debug ${BOOST_LIBPATH}/libboost_wave-${BOOST_DEBUG_POSTFIX})
@@ -708,7 +708,7 @@ if(WITH_CODEC_SNDFILE)
   set(LIBSNDFILE_LIBRARIES ${LIBSNDFILE_LIBPATH}/libsndfile-1.lib)
 endif()
 
-if(WITH_CYCLES_OSL)
+if(WITH_CYCLES AND WITH_CYCLES_OSL)
   set(CYCLES_OSL ${LIBDIR}/osl CACHE PATH "Path to OpenShadingLanguage installation")
   set(OSL_SHADER_DIR ${CYCLES_OSL}/shaders)
   # Shaders have moved around a bit between OSL versions, check multiple locations
@@ -741,7 +741,7 @@ if(WITH_CYCLES_OSL)
   endif()
 endif()
 
-if(WITH_CYCLES_EMBREE)
+if(WITH_CYCLES AND WITH_CYCLES_EMBREE)
   windows_find_package(Embree)
   if(NOT EMBREE_FOUND)
     set(EMBREE_INCLUDE_DIRS ${LIBDIR}/embree/include)
@@ -853,18 +853,18 @@ if(WITH_GMP)
   set(GMP_INCLUDE_DIRS ${LIBDIR}/gmp/include)
   set(GMP_LIBRARIES ${LIBDIR}/gmp/lib/libgmp-10.lib optimized ${LIBDIR}/gmp/lib/libgmpxx.lib debug ${LIBDIR}/gmp/lib/libgmpxx_d.lib)
   set(GMP_ROOT_DIR ${LIBDIR}/gmp)
-  set(GMP_FOUND On)
+  set(GMP_FOUND ON)
 endif()
 
 if(WITH_POTRACE)
   set(POTRACE_INCLUDE_DIRS ${LIBDIR}/potrace/include)
   set(POTRACE_LIBRARIES ${LIBDIR}/potrace/lib/potrace.lib)
-  set(POTRACE_FOUND On)
+  set(POTRACE_FOUND ON)
 endif()
 
 if(WITH_HARU)
   if(EXISTS ${LIBDIR}/haru)
-    set(HARU_FOUND On)
+    set(HARU_FOUND ON)
     set(HARU_ROOT_DIR ${LIBDIR}/haru)
     set(HARU_INCLUDE_DIRS ${HARU_ROOT_DIR}/include)
     set(HARU_LIBRARIES ${HARU_ROOT_DIR}/lib/libhpdfs.lib)

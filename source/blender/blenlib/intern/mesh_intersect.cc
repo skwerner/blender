@@ -53,7 +53,7 @@
 #  include "BLI_mesh_intersect.hh"
 
 #  ifdef WITH_TBB
-#    include "tbb/parallel_sort.h"
+#    include <tbb/parallel_sort.h>
 #  endif
 
 // #  define PERFDEBUG
@@ -61,11 +61,11 @@
 namespace blender::meshintersect {
 
 #  ifdef PERFDEBUG
-static void perfdata_init(void);
+static void perfdata_init();
 static void incperfcount(int countnum);
 static void bumpperfcount(int countnum, int amt);
 static void doperfmax(int maxnum, int val);
-static void dump_perfdata(void);
+static void dump_perfdata();
 #  endif
 
 /** For debugging, can disable threading in intersect code with this static constant. */
@@ -150,7 +150,6 @@ Plane::Plane(const double3 &norm, const double d) : norm(norm), d(d)
   norm_exact = mpq3(0, 0, 0); /* Marks as "exact not yet populated". */
 }
 
-/** This is wrong for degenerate planes, but we don't expect to call it on those. */
 bool Plane::exact_populated() const
 {
   return norm_exact[0] != 0 || norm_exact[1] != 0 || norm_exact[2] != 0;
@@ -803,11 +802,6 @@ std::ostream &operator<<(std::ostream &os, const IMesh &mesh)
   return os;
 }
 
-/**
- * Assume bounding boxes have been expanded by a sufficient epsilon on all sides
- * so that the comparisons against the bb bounds are sufficient to guarantee that
- * if an overlap or even touching could happen, this will return true.
- */
 bool bbs_might_intersect(const BoundingBox &bb_a, const BoundingBox &bb_b)
 {
   return isect_aabb_aabb_v3(bb_a.min, bb_a.max, bb_b.min, bb_b.max);
@@ -1162,7 +1156,7 @@ static int filter_plane_side(const double3 &p,
 }
 
 /*
- * interesect_tri_tri and helper functions.
+ * #intersect_tri_tri and helper functions.
  * This code uses the algorithm of Guigue and Devillers, as described
  * in "Faster Triangle-Triangle Intersection Tests".
  * Adapted from code by Eric Haines:
@@ -2225,8 +2219,7 @@ static bool face_is_degenerate(const Face *f)
   return false;
 }
 
-/** Fast check for degenerate tris. Only tests for when verts are identical,
- * not cases where there are zero-length edges. */
+/** Fast check for degenerate tris. It is OK if it returns true for nearly degenerate triangles. */
 static bool any_degenerate_tris_fast(const Array<Face *> triangulation)
 {
   for (const Face *f : triangulation) {
@@ -2234,6 +2227,23 @@ static bool any_degenerate_tris_fast(const Array<Face *> triangulation)
     const Vert *v1 = (*f)[1];
     const Vert *v2 = (*f)[2];
     if (v0 == v1 || v0 == v2 || v1 == v2) {
+      return true;
+    }
+    double3 da = v2->co - v0->co;
+    double3 db = v2->co - v1->co;
+    double da_length_squared = da.length_squared();
+    double db_length_squared = db.length_squared();
+    if (da_length_squared == 0.0 || db_length_squared == 0.0) {
+      return true;
+    }
+    /* |da x db| = |da| |db| sin t, where t is angle between them.
+     * The triangle is almost degenerate if sin t is almost 0.
+     * sin^2 t = |da x db|^2 / (|da|^2 |db|^2)
+     */
+    double3 dab = double3::cross_high_precision(da, db);
+    double dab_length_squared = dab.length_squared();
+    double sin_squared_t = dab_length_squared / (da_length_squared * db_length_squared);
+    if (sin_squared_t < 1e-8) {
       return true;
     }
   }
@@ -2260,12 +2270,6 @@ static Array<Face *> triangulate_poly(Face *f, IMeshArena *arena)
   return ans;
 }
 
-/**
- * Return an #IMesh that is a triangulation of a mesh with general
- * polygonal faces, #IMesh.
- * Added diagonals will be distinguishable by having edge original
- * indices of #NO_INDEX.
- */
 IMesh triangulate_polymesh(IMesh &imesh, IMeshArena *arena)
 {
   Vector<Face *> face_tris;
@@ -2552,79 +2556,6 @@ static void calc_overlap_itts(Map<std::pair<int, int>, ITT_value> &itt_map,
 }
 
 /**
- * Data needed for parallelization of calc_subdivided_non_cluster_tris.
- */
-struct OverlapTriRange {
-  int tri_index;
-  int overlap_start;
-  int len;
-};
-struct SubdivideTrisData {
-  Array<IMesh> &r_tri_subdivided;
-  const IMesh &tm;
-  const Map<std::pair<int, int>, ITT_value> &itt_map;
-  Span<BVHTreeOverlap> overlap;
-  IMeshArena *arena;
-
-  /* This vector gives, for each triangle in tm that has an intersection
-   * we want to calculate: what the index of that triangle in tm is,
-   * where it starts in the ov structure as indexA, and how many
-   * overlap pairs have that same indexA (they will be continuous). */
-  Vector<OverlapTriRange> overlap_tri_range;
-
-  SubdivideTrisData(Array<IMesh> &r_tri_subdivided,
-                    const IMesh &tm,
-                    const Map<std::pair<int, int>, ITT_value> &itt_map,
-                    Span<BVHTreeOverlap> overlap,
-                    IMeshArena *arena)
-      : r_tri_subdivided(r_tri_subdivided),
-        tm(tm),
-        itt_map(itt_map),
-        overlap(overlap),
-        arena(arena)
-  {
-  }
-};
-
-static void calc_subdivided_tri_range_func(void *__restrict userdata,
-                                           const int iter,
-                                           const TaskParallelTLS *__restrict UNUSED(tls))
-{
-  constexpr int dbg_level = 0;
-  SubdivideTrisData *data = static_cast<SubdivideTrisData *>(userdata);
-  OverlapTriRange &otr = data->overlap_tri_range[iter];
-  int t = otr.tri_index;
-  if (dbg_level > 0) {
-    std::cout << "calc_subdivided_tri_range_func\nt=" << t << " start=" << otr.overlap_start
-              << " len=" << otr.len << "\n";
-  }
-  constexpr int inline_capacity = 100;
-  Vector<ITT_value, inline_capacity> itts(otr.len);
-  for (int j = otr.overlap_start; j < otr.overlap_start + otr.len; ++j) {
-    int t_other = data->overlap[j].indexB;
-    std::pair<int, int> key = canon_int_pair(t, t_other);
-    ITT_value itt;
-    if (data->itt_map.contains(key)) {
-      itt = data->itt_map.lookup(key);
-    }
-    if (itt.kind != INONE) {
-      itts.append(itt);
-    }
-    if (dbg_level > 0) {
-      std::cout << "  tri t" << t_other << "; result = " << itt << "\n";
-    }
-  }
-  if (itts.size() > 0) {
-    CDT_data cd_data = prepare_cdt_input(data->tm, t, itts);
-    do_cdt(cd_data);
-    data->r_tri_subdivided[t] = extract_subdivided_tri(cd_data, data->tm, t, data->arena);
-    if (dbg_level > 0) {
-      std::cout << "subdivide output\n" << data->r_tri_subdivided[t];
-    }
-  }
-}
-
-/**
  * For each triangle in tm, fill in the corresponding slot in
  * r_tri_subdivided with the result of intersecting it with
  * all the other triangles in the mesh, if it intersects any others.
@@ -2642,10 +2573,14 @@ static void calc_subdivided_non_cluster_tris(Array<IMesh> &r_tri_subdivided,
     std::cout << "\nCALC_SUBDIVIDED_TRIS\n\n";
   }
   Span<BVHTreeOverlap> overlap = ov.overlap();
-  SubdivideTrisData data(r_tri_subdivided, tm, itt_map, overlap, arena);
+  struct OverlapTriRange {
+    int tri_index;
+    int overlap_start;
+    int len;
+  };
+  Vector<OverlapTriRange> overlap_tri_range;
   int overlap_tot = overlap.size();
-  data.overlap_tri_range = Vector<OverlapTriRange>();
-  data.overlap_tri_range.reserve(overlap_tot);
+  overlap_tri_range.reserve(overlap_tot);
   int overlap_index = 0;
   while (overlap_index < overlap_tot) {
     int t = overlap[overlap_index].indexA;
@@ -2660,7 +2595,7 @@ static void calc_subdivided_non_cluster_tris(Array<IMesh> &r_tri_subdivided,
       int len = i - overlap_index + 1;
       if (!(len == 1 && overlap[overlap_index].indexB == t)) {
         OverlapTriRange range = {t, overlap_index, len};
-        data.overlap_tri_range.append(range);
+        overlap_tri_range.append(range);
 #  ifdef PERFDEBUG
         bumpperfcount(0, len); /* Non-cluster overlaps. */
 #  endif
@@ -2668,13 +2603,50 @@ static void calc_subdivided_non_cluster_tris(Array<IMesh> &r_tri_subdivided,
     }
     overlap_index = i + 1;
   }
-  int overlap_tri_range_tot = data.overlap_tri_range.size();
-  TaskParallelSettings settings;
-  BLI_parallel_range_settings_defaults(&settings);
-  settings.min_iter_per_thread = 50;
-  settings.use_threading = intersect_use_threading;
-  BLI_task_parallel_range(
-      0, overlap_tri_range_tot, &data, calc_subdivided_tri_range_func, &settings);
+  int overlap_tri_range_tot = overlap_tri_range.size();
+  Array<CDT_data> cd_data(overlap_tri_range_tot);
+  int grain_size = 64;
+  threading::parallel_for(overlap_tri_range.index_range(), grain_size, [&](IndexRange range) {
+    for (int otr_index : range) {
+      OverlapTriRange &otr = overlap_tri_range[otr_index];
+      int t = otr.tri_index;
+      if (dbg_level > 0) {
+        std::cout << "handling overlap range\nt=" << t << " start=" << otr.overlap_start
+                  << " len=" << otr.len << "\n";
+      }
+      constexpr int inline_capacity = 100;
+      Vector<ITT_value, inline_capacity> itts(otr.len);
+      for (int j = otr.overlap_start; j < otr.overlap_start + otr.len; ++j) {
+        int t_other = overlap[j].indexB;
+        std::pair<int, int> key = canon_int_pair(t, t_other);
+        ITT_value itt;
+        if (itt_map.contains(key)) {
+          itt = itt_map.lookup(key);
+        }
+        if (itt.kind != INONE) {
+          itts.append(itt);
+        }
+        if (dbg_level > 0) {
+          std::cout << "  tri t" << t_other << "; result = " << itt << "\n";
+        }
+      }
+      if (itts.size() > 0) {
+        cd_data[otr_index] = prepare_cdt_input(tm, t, itts);
+        do_cdt(cd_data[otr_index]);
+      }
+    }
+  });
+  /* Extract the new faces serially, so that Boolean is repeatable regardless of parallelism. */
+  for (int otr_index : overlap_tri_range.index_range()) {
+    CDT_data &cdd = cd_data[otr_index];
+    if (cdd.vert.size() > 0) {
+      int t = overlap_tri_range[otr_index].tri_index;
+      r_tri_subdivided[t] = extract_subdivided_tri(cdd, tm, t, arena);
+      if (dbg_level > 1) {
+        std::cout << "subdivide output for tri " << t << " = " << r_tri_subdivided[t];
+      }
+    }
+  }
   /* Now have to put in the triangles that are the same as the input ones, and not in clusters.
    */
   threading::parallel_for(tm.face_index_range(), 2048, [&](IndexRange range) {
@@ -2978,7 +2950,6 @@ static IMesh remove_degenerate_tris(const IMesh &tm_in)
   return ans;
 }
 
-/* This is the main routine for calculating the self_intersection of a triangle mesh. */
 IMesh trimesh_self_intersect(const IMesh &tm_in, IMeshArena *arena)
 {
   return trimesh_nary_intersect(
@@ -3153,9 +3124,6 @@ static std::ostream &operator<<(std::ostream &os, const ITT_value &itt)
   return os;
 }
 
-/**
- * Writing the obj_mesh has the side effect of populating verts.
- */
 void write_obj_mesh(IMesh &m, const std::string &objname)
 {
   /* Would like to use #BKE_tempdir_base() here, but that brings in dependence on kernel library.
@@ -3211,7 +3179,7 @@ struct PerfCounts {
 
 static PerfCounts *perfdata = nullptr;
 
-static void perfdata_init(void)
+static void perfdata_init()
 {
   perfdata = new PerfCounts;
 
@@ -3263,7 +3231,7 @@ static void doperfmax(int maxnum, int val)
   perfdata->max[maxnum] = max_ii(perfdata->max[maxnum], val);
 }
 
-static void dump_perfdata(void)
+static void dump_perfdata()
 {
   std::cout << "\nPERFDATA\n";
   for (int i : perfdata->count.index_range()) {

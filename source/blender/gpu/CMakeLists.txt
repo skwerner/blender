@@ -37,6 +37,7 @@ set(INC
   ../imbuf
   ../makesdna
   ../makesrna
+  ../windowmanager
 
   ../editors/include
 
@@ -225,6 +226,7 @@ data_to_c_simple(shaders/gpu_shader_image_frag.glsl SRC)
 data_to_c_simple(shaders/gpu_shader_image_desaturate_frag.glsl SRC)
 data_to_c_simple(shaders/gpu_shader_image_overlays_merge_frag.glsl SRC)
 data_to_c_simple(shaders/gpu_shader_image_overlays_stereo_merge_frag.glsl SRC)
+data_to_c_simple(shaders/gpu_shader_image_modulate_alpha_frag.glsl SRC)
 data_to_c_simple(shaders/gpu_shader_image_shuffle_color_frag.glsl SRC)
 data_to_c_simple(shaders/gpu_shader_image_color_frag.glsl SRC)
 data_to_c_simple(shaders/gpu_shader_image_varying_color_frag.glsl SRC)
@@ -268,8 +270,8 @@ data_to_c_simple(shaders/gpu_shader_2D_edituvs_stretch_vert.glsl SRC)
 
 data_to_c_simple(shaders/gpu_shader_text_vert.glsl SRC)
 data_to_c_simple(shaders/gpu_shader_text_frag.glsl SRC)
-data_to_c_simple(shaders/gpu_shader_keyframe_diamond_vert.glsl SRC)
-data_to_c_simple(shaders/gpu_shader_keyframe_diamond_frag.glsl SRC)
+data_to_c_simple(shaders/gpu_shader_keyframe_shape_vert.glsl SRC)
+data_to_c_simple(shaders/gpu_shader_keyframe_shape_frag.glsl SRC)
 
 data_to_c_simple(shaders/gpu_shader_codegen_lib.glsl SRC)
 
@@ -296,6 +298,7 @@ data_to_c_simple(shaders/material/gpu_shader_material_diffuse.glsl SRC)
 data_to_c_simple(shaders/material/gpu_shader_material_displacement.glsl SRC)
 data_to_c_simple(shaders/material/gpu_shader_material_eevee_specular.glsl SRC)
 data_to_c_simple(shaders/material/gpu_shader_material_emission.glsl SRC)
+data_to_c_simple(shaders/material/gpu_shader_material_float_curve.glsl SRC)
 data_to_c_simple(shaders/material/gpu_shader_material_fractal_noise.glsl SRC)
 data_to_c_simple(shaders/material/gpu_shader_material_fresnel.glsl SRC)
 data_to_c_simple(shaders/material/gpu_shader_material_gamma.glsl SRC)
@@ -404,7 +407,7 @@ if(WITH_GTESTS)
       tests/gpu_testing.hh
     )
     set(TEST_INC
-      "../../../intern/ghost/"
+      ../../../intern/ghost
     )
     set(TEST_LIB
 

@@ -30,7 +30,9 @@
 extern "C" {
 #endif
 
-/* pd->forcefield:  Effector Fields types */
+struct BodySpring;
+
+/** #PartDeflect.forcefield: Effector Fields types. */
 typedef enum ePFieldType {
   /** (this is used for general effector weight). */
   PFIELD_NULL = 0,

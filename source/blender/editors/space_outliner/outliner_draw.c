@@ -1841,16 +1841,20 @@ static bool outliner_draw_overrides_buts(uiBlock *block,
       if (tip == NULL) {
         tip = TIP_("Some sub-items require attention");
       }
-      uiBut *bt = uiDefIconBlockBut(block,
-                                    NULL,
-                                    NULL,
-                                    1,
-                                    ICON_ERROR,
-                                    (int)(region->v2d.cur.xmax - OL_TOG_USER_BUTS_STATUS),
-                                    te->ys,
-                                    UI_UNIT_X,
-                                    UI_UNIT_Y,
-                                    tip);
+      uiBut *bt = uiDefIconBut(block,
+                               UI_BTYPE_BUT,
+                               1,
+                               ICON_ERROR,
+                               (int)(region->v2d.cur.xmax - OL_TOG_USER_BUTS_STATUS),
+                               te->ys,
+                               UI_UNIT_X,
+                               UI_UNIT_Y,
+                               NULL,
+                               0.0,
+                               0.0,
+                               0.0,
+                               0.0,
+                               tip);
       UI_but_flag_enable(bt, but_flag);
     }
     any_item_has_warnings = any_item_has_warnings || item_has_warnings || any_child_has_warnings;
@@ -2358,8 +2362,14 @@ TreeElementIcon tree_element_get_icon(TreeStoreElem *tselem, TreeElement *te)
             case eGpencilModifierType_Texture:
               data.icon = ICON_TEXTURE;
               break;
-            case eGpencilModifierType_Weight:
+            case eGpencilModifierType_WeightProximity:
               data.icon = ICON_MOD_VERTEX_WEIGHT;
+              break;
+            case eGpencilModifierType_WeightAngle:
+              data.icon = ICON_MOD_VERTEX_WEIGHT;
+              break;
+            case eGpencilModifierType_Shrinkwrap:
+              data.icon = ICON_MOD_SHRINKWRAP;
               break;
 
               /* Default */
@@ -2926,12 +2936,6 @@ static void outliner_draw_iconrow_doit(uiBlock *block,
   (*offsx) += UI_UNIT_X;
 }
 
-/**
- * Return the index to use based on the TreeElement ID and object type
- *
- * We use a continuum of indices until we get to the object data-blocks
- * and we then make room for the object types.
- */
 int tree_element_id_type_to_index(TreeElement *te)
 {
   TreeStoreElem *tselem = TREESTORE(te);

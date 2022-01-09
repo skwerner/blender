@@ -245,10 +245,10 @@ elseif(WITH_GHOST_X11 OR WITH_GHOST_WAYLAND)
     if(WITH_X11_XF86VMODE)
       add_definitions(-DWITH_X11_XF86VMODE)
       list(APPEND INC_SYS
-        ${X11_xf86vmode_INCLUDE_PATH}
+        ${X11_Xxf86vmode_INCLUDE_PATH}
       )
       list(APPEND LIB
-        ${X11_Xf86vmode_LIB}
+        ${X11_Xxf86vmode_LIB}
       )
     endif()
 
@@ -473,6 +473,7 @@ if(WITH_XR_OPENXR)
     intern/GHOST_Xr.cpp
     intern/GHOST_XrAction.cpp
     intern/GHOST_XrContext.cpp
+    intern/GHOST_XrControllerModel.cpp
     intern/GHOST_XrEvent.cpp
     intern/GHOST_XrGraphicsBinding.cpp
     intern/GHOST_XrSession.cpp
@@ -482,13 +483,22 @@ if(WITH_XR_OPENXR)
     intern/GHOST_IXrGraphicsBinding.h
     intern/GHOST_XrAction.h
     intern/GHOST_XrContext.h
+    intern/GHOST_XrControllerModel.h
     intern/GHOST_XrException.h
     intern/GHOST_XrSession.h
     intern/GHOST_XrSwapchain.h
     intern/GHOST_Xr_intern.h
     intern/GHOST_Xr_openxr_includes.h
+
+    # Header only library.
+    ../../extern/tinygltf/tiny_gltf.h
+  )
+  list(APPEND INC
+    ../../extern/json/include
+    ../../extern/tinygltf
   )
   list(APPEND INC_SYS
+    ${EIGEN3_INCLUDE_DIRS}
     ${XR_OPENXR_SDK_INCLUDE_DIR}
   )
   list(APPEND LIB

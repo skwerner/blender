@@ -65,7 +65,7 @@ typedef struct GlyphCacheBLF {
   struct GlyphCacheBLF *prev;
 
   /* font size. */
-  unsigned int size;
+  float size;
 
   /* and dpi. */
   unsigned int dpi;
@@ -86,13 +86,6 @@ typedef struct GlyphCacheBLF {
   int bitmap_len_landed;
   int bitmap_len_alloc;
 
-  /* and the bigger glyph in the font. */
-  int glyph_width_max;
-  int glyph_height_max;
-
-  /* ascender and descender value. */
-  float ascender;
-  float descender;
 } GlyphCacheBLF;
 
 typedef struct GlyphBLF {
@@ -152,7 +145,7 @@ typedef struct FontBufInfoBLF {
   struct ColorManagedDisplay *display;
 
   /* and the color, the alphas is get from the glyph!
-   * color is srgb space */
+   * color is sRGB space */
   float col_init[4];
   /* cached conversion from 'col_init' */
   unsigned char col_char[4];
@@ -212,7 +205,10 @@ typedef struct FontBLF {
   unsigned int dpi;
 
   /* font size. */
-  unsigned int size;
+  float size;
+
+  /* Column width when printing monospaced. */
+  int fixed_width;
 
   /* max texture size. */
   int tex_size_max;

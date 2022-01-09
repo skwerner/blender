@@ -223,7 +223,7 @@ static void draw_main_line(const rctf *main_line_rect,
 
 static void draw_backdrop(const int fontid,
                           const rctf *main_line_rect,
-                          const float color_bg[4],
+                          const uint8_t color_bg[4],
                           const short region_y_size,
                           const float base_tick_height)
 {
@@ -241,7 +241,7 @@ static void draw_backdrop(const int fontid,
       .ymin = pad[1],
       .ymax = region_y_size - pad[1],
   };
-  UI_draw_roundbox_aa(&backdrop_rect, true, 4.0f, color_bg);
+  UI_draw_roundbox_3ub_alpha(&backdrop_rect, true, 4.0f, color_bg, color_bg[3]);
 }
 
 /**
@@ -260,19 +260,19 @@ static void slider_draw(const struct bContext *UNUSED(C), ARegion *region, void 
   uint8_t color_line[4];
   uint8_t color_handle[4];
   uint8_t color_overshoot[4];
-  float color_bg[4];
+  uint8_t color_bg[4];
 
   /* Get theme colors. */
-  UI_GetThemeColor4ubv(TH_TEXT, color_text);
-  UI_GetThemeColor4ubv(TH_TEXT, color_line);
-  UI_GetThemeColor4ubv(TH_TEXT, color_overshoot);
-  UI_GetThemeColor4ubv(TH_ACTIVE, color_handle);
-  UI_GetThemeColor3fv(TH_BACK, color_bg);
+  UI_GetThemeColor4ubv(TH_HEADER_TEXT_HI, color_handle);
+  UI_GetThemeColor4ubv(TH_HEADER_TEXT, color_text);
+  UI_GetThemeColor4ubv(TH_HEADER_TEXT, color_line);
+  UI_GetThemeColor4ubv(TH_HEADER_TEXT, color_overshoot);
+  UI_GetThemeColor4ubv(TH_HEADER, color_bg);
 
-  color_bg[3] = 0.5f;
-  color_overshoot[0] = color_overshoot[0] * 0.7;
-  color_overshoot[1] = color_overshoot[1] * 0.7;
-  color_overshoot[2] = color_overshoot[2] * 0.7;
+  color_overshoot[0] = color_overshoot[0] * 0.8;
+  color_overshoot[1] = color_overshoot[1] * 0.8;
+  color_overshoot[2] = color_overshoot[2] * 0.8;
+  color_bg[3] = 160;
 
   /* Get the default font. */
   const uiStyle *style = UI_style_get();
@@ -356,12 +356,11 @@ static void slider_draw(const struct bContext *UNUSED(C), ARegion *region, void 
 
 static void slider_update_factor(tSlider *slider, const wmEvent *event)
 {
-  const float factor_delta = (event->x - slider->last_cursor[0]) / SLIDE_PIXEL_DISTANCE;
+  const float factor_delta = (event->xy[0] - slider->last_cursor[0]) / SLIDE_PIXEL_DISTANCE;
   /* Reduced factor delta in precision mode (shift held). */
   slider->raw_factor += slider->precision ? (factor_delta / 8) : factor_delta;
   slider->factor = slider->raw_factor;
-  slider->last_cursor[0] = event->x;
-  slider->last_cursor[1] = event->y;
+  copy_v2fl_v2i(slider->last_cursor, event->xy);
 
   if (!slider->overshoot) {
     slider->factor = clamp_f(slider->factor, 0, 1);
@@ -398,18 +397,11 @@ tSlider *ED_slider_create(struct bContext *C)
   return slider;
 }
 
-/**
- * For modal operations so the percentage doesn't pop on the first mouse movement.
- */
 void ED_slider_init(struct tSlider *slider, const wmEvent *event)
 {
-  slider->last_cursor[0] = event->x;
-  slider->last_cursor[1] = event->y;
+  copy_v2fl_v2i(slider->last_cursor, event->xy);
 }
 
-/**
- * Calculate slider factor based on mouse position.
- */
 bool ED_slider_modal(tSlider *slider, const wmEvent *event)
 {
   bool event_handled = true;
@@ -443,9 +435,6 @@ bool ED_slider_modal(tSlider *slider, const wmEvent *event)
   return event_handled;
 }
 
-/**
- * Return string based on the current state of the slider.
- */
 void ED_slider_status_string_get(const struct tSlider *slider,
                                  char *status_string,
                                  const size_t size_of_status_string)
@@ -525,16 +514,13 @@ void ED_slider_allow_overshoot_set(struct tSlider *slider, const bool value)
 
 /** \} */
 
-/**
- * Callback that draws a line between the mouse and a position given as the initial argument.
- */
 void ED_region_draw_mouse_line_cb(const bContext *C, ARegion *region, void *arg_info)
 {
   wmWindow *win = CTX_wm_window(C);
   const float *mval_src = (float *)arg_info;
   const float mval_dst[2] = {
-      win->eventstate->x - region->winrct.xmin,
-      win->eventstate->y - region->winrct.ymin,
+      win->eventstate->xy[0] - region->winrct.xmin,
+      win->eventstate->xy[1] - region->winrct.ymin,
   };
 
   const uint shdr_pos = GPU_vertformat_attr_add(
@@ -778,9 +764,6 @@ static float metadata_box_height_get(ImBuf *ibuf, int fontid, const bool is_top)
   return 0;
 }
 
-/**
- * \note Keep in sync with #BKE_image_stamp_buf.
- */
 void ED_region_image_metadata_draw(
     int x, int y, ImBuf *ibuf, const rctf *frame, float zoomx, float zoomy)
 {

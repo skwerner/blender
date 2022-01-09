@@ -129,8 +129,6 @@ static void drw_stats_timer_start_ex(const char *name, const bool is_query)
   }
 }
 
-/* Use this to group the queries. It does NOT keep track
- * of the time, it only sum what the queries inside it. */
 void DRW_stats_group_start(const char *name)
 {
   drw_stats_timer_start_ex(name, false);
@@ -147,7 +145,6 @@ void DRW_stats_group_end(void)
   }
 }
 
-/* NOTE: Only call this when no sub timer will be called. */
 void DRW_stats_query_start(const char *name)
 {
   GPU_debug_group_begin(name);
@@ -257,10 +254,8 @@ void DRW_stats_draw(const rcti *rect)
 
   /* Engines rows */
   char time_to_txt[16];
-  LISTBASE_FOREACH (LinkData *, link, &DST.enabled_engines) {
+  DRW_ENABLED_ENGINE_ITER (DST.view_data_active, engine, data) {
     u = 0;
-    DrawEngineType *engine = link->data;
-    ViewportEngineData *data = drw_viewport_engine_data_ensure(engine);
 
     draw_stat_5row(rect, u++, v, engine->idname, sizeof(engine->idname));
 
@@ -297,7 +292,7 @@ void DRW_stats_draw(const rcti *rect)
   v += 2;
 
   u = 0;
-  double *cache_time = GPU_viewport_cache_time_get(DST.viewport);
+  double *cache_time = DRW_view_data_cache_time_get(DST.view_data_active);
   sprintf(col_label, "Cache Time");
   draw_stat_5row(rect, u++, v, col_label, sizeof(col_label));
   sprintf(time_to_txt, "%.2fms", *cache_time);

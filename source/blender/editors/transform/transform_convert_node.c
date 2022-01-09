@@ -31,6 +31,7 @@
 
 #include "BKE_context.h"
 #include "BKE_node.h"
+#include "BKE_node_tree_update.h"
 #include "BKE_report.h"
 
 #include "ED_node.h"
@@ -173,9 +174,11 @@ void flushTransNodes(TransInfo *t)
     }
     else {
       /* Edge panning functions expect window coordinates, mval is relative to region */
-      const float x = t->region->winrct.xmin + t->mval[0];
-      const float y = t->region->winrct.ymin + t->mval[1];
-      UI_view2d_edge_pan_apply(t->context, customdata, x, y);
+      const int xy[2] = {
+          t->region->winrct.xmin + t->mval[0],
+          t->region->winrct.ymin + t->mval[1],
+      };
+      UI_view2d_edge_pan_apply(t->context, customdata, xy);
     }
   }
 
@@ -244,7 +247,7 @@ void special_aftertrans_update__node(bContext *C, TransInfo *t)
           nodeRemoveNode(bmain, ntree, node, true);
         }
       }
-      ntreeUpdateTree(bmain, ntree);
+      ED_node_tree_propagate_change(C, bmain, ntree);
     }
   }
 

@@ -62,7 +62,7 @@
  * then the function has to specify whether the referenced array is expected to be initialized or
  * not.
  *
- * Since the arrays are only referenced, it is generally unsafe to store an Span. When you
+ * Since the arrays are only referenced, it is generally unsafe to store a Span. When you
  * store one, you should know who owns the memory.
  *
  * Instances of Span and MutableSpan are small and should be passed by value.
@@ -478,8 +478,8 @@ template<typename T> class MutableSpan {
   using size_type = int64_t;
 
  protected:
-  T *data_;
-  int64_t size_;
+  T *data_ = nullptr;
+  int64_t size_ = 0;
 
  public:
   constexpr MutableSpan() = default;
@@ -597,6 +597,11 @@ template<typename T> class MutableSpan {
     BLI_assert(size >= 0);
     const int64_t new_size = std::max<int64_t>(0, std::min(size, size_ - start));
     return MutableSpan(data_ + start, new_size);
+  }
+
+  constexpr MutableSpan slice(IndexRange range) const
+  {
+    return this->slice(range.start(), range.size());
   }
 
   /**
@@ -728,30 +733,5 @@ template<typename T> class MutableSpan {
     return MutableSpan<NewT>((NewT *)data_, new_size);
   }
 };
-
-/**
- * Utilities to check that arrays have the same size in debug builds.
- */
-template<typename T1, typename T2> constexpr void assert_same_size(const T1 &v1, const T2 &v2)
-{
-  UNUSED_VARS_NDEBUG(v1, v2);
-#ifdef DEBUG
-  int64_t size = v1.size();
-  BLI_assert(size == v1.size());
-  BLI_assert(size == v2.size());
-#endif
-}
-
-template<typename T1, typename T2, typename T3>
-constexpr void assert_same_size(const T1 &v1, const T2 &v2, const T3 &v3)
-{
-  UNUSED_VARS_NDEBUG(v1, v2, v3);
-#ifdef DEBUG
-  int64_t size = v1.size();
-  BLI_assert(size == v1.size());
-  BLI_assert(size == v2.size());
-  BLI_assert(size == v3.size());
-#endif
-}
 
 } /* namespace blender */

@@ -412,14 +412,23 @@ static void detect_workarounds()
   if (GLContext::debug_layer_support == false) {
     GLContext::debug_layer_workaround = true;
   }
+
+  /* Broken glGenerateMipmap on macOS 10.15.7 security update. */
+  if (GPU_type_matches(GPU_DEVICE_INTEL, GPU_OS_MAC, GPU_DRIVER_ANY) &&
+      strstr(renderer, "HD Graphics 4000")) {
+    GLContext::generate_mipmap_workaround = true;
+  }
 }  // namespace blender::gpu
 
 /** Internal capabilities. */
+
 GLint GLContext::max_cubemap_size = 0;
 GLint GLContext::max_texture_3d_size = 0;
 GLint GLContext::max_ubo_binds = 0;
 GLint GLContext::max_ubo_size = 0;
+
 /** Extensions. */
+
 bool GLContext::base_instance_support = false;
 bool GLContext::clear_texture_support = false;
 bool GLContext::copy_image_support = false;
@@ -433,9 +442,12 @@ bool GLContext::texture_cube_map_array_support = false;
 bool GLContext::texture_filter_anisotropic_support = false;
 bool GLContext::texture_gather_support = false;
 bool GLContext::vertex_attrib_binding_support = false;
+
 /** Workarounds. */
+
 bool GLContext::debug_layer_workaround = false;
 bool GLContext::unused_fb_slot_workaround = false;
+bool GLContext::generate_mipmap_workaround = false;
 float GLContext::derivative_signs[2] = {1.0f, 1.0f};
 
 void GLBackend::capabilities_init()

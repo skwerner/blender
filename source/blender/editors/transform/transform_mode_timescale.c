@@ -87,7 +87,7 @@ static void applyTimeScaleValue(TransInfo *t, float value)
       }
 
       /* now, calculate the new value */
-      *(td->val) = ((td->ival - startx) * fac) + startx;
+      td->loc[0] = ((td->iloc[0] - startx) * fac) + startx;
     }
   }
 }
@@ -151,4 +151,5 @@ void initTimeScale(TransInfo *t)
   t->num.unit_sys = t->scene->unit.system;
   t->num.unit_type[0] = B_UNIT_NONE;
 }
+
 /** \} */

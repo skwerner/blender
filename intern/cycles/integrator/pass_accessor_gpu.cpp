@@ -16,9 +16,9 @@
 
 #include "integrator/pass_accessor_gpu.h"
 
-#include "device/device_queue.h"
-#include "render/buffers.h"
-#include "util/util_logging.h"
+#include "device/queue.h"
+#include "session/buffers.h"
+#include "util/log.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -43,38 +43,41 @@ void PassAccessorGPU::run_film_convert_kernels(DeviceKernel kernel,
   KernelFilmConvert kfilm_convert;
   init_kernel_film_convert(&kfilm_convert, buffer_params, destination);
 
-  const int work_size = buffer_params.width * buffer_params.height;
+  const int work_size = buffer_params.window_width * buffer_params.window_height;
 
   const int destination_stride = destination.stride != 0 ? destination.stride :
-                                                           buffer_params.width;
+                                                           buffer_params.window_width;
+
+  const int offset = buffer_params.window_x * buffer_params.pass_stride +
+                     buffer_params.window_y * buffer_params.stride * buffer_params.pass_stride;
 
   if (destination.d_pixels) {
     DCHECK_EQ(destination.stride, 0) << "Custom stride for float destination is not implemented.";
 
-    void *args[] = {const_cast<KernelFilmConvert *>(&kfilm_convert),
-                    const_cast<device_ptr *>(&destination.d_pixels),
-                    const_cast<device_ptr *>(&render_buffers->buffer.device_pointer),
-                    const_cast<int *>(&work_size),
-                    const_cast<int *>(&buffer_params.width),
-                    const_cast<int *>(&buffer_params.offset),
-                    const_cast<int *>(&buffer_params.stride),
-                    const_cast<int *>(&destination.offset),
-                    const_cast<int *>(&destination_stride)};
+    DeviceKernelArguments args(&kfilm_convert,
+                               &destination.d_pixels,
+                               &render_buffers->buffer.device_pointer,
+                               &work_size,
+                               &buffer_params.window_width,
+                               &offset,
+                               &buffer_params.stride,
+                               &destination.offset,
+                               &destination_stride);
 
     queue_->enqueue(kernel, work_size, args);
   }
   if (destination.d_pixels_half_rgba) {
     const DeviceKernel kernel_half_float = static_cast<DeviceKernel>(kernel + 1);
 
-    void *args[] = {const_cast<KernelFilmConvert *>(&kfilm_convert),
-                    const_cast<device_ptr *>(&destination.d_pixels_half_rgba),
-                    const_cast<device_ptr *>(&render_buffers->buffer.device_pointer),
-                    const_cast<int *>(&work_size),
-                    const_cast<int *>(&buffer_params.width),
-                    const_cast<int *>(&buffer_params.offset),
-                    const_cast<int *>(&buffer_params.stride),
-                    const_cast<int *>(&destination.offset),
-                    const_cast<int *>(&destination_stride)};
+    DeviceKernelArguments args(&kfilm_convert,
+                               &destination.d_pixels_half_rgba,
+                               &render_buffers->buffer.device_pointer,
+                               &work_size,
+                               &buffer_params.window_width,
+                               &offset,
+                               &buffer_params.stride,
+                               &destination.offset,
+                               &destination_stride);
 
     queue_->enqueue(kernel_half_float, work_size, args);
   }

@@ -1000,7 +1000,7 @@ static void PE_update_mirror_cache(Object *ob, ParticleSystem *psys)
 
   tree = BLI_kdtree_3d_new(totpart);
 
-  /* insert particles into kd tree */
+  /* Insert particles into KD-tree. */
   LOOP_PARTICLES
   {
     key = pa->hair;
@@ -1419,7 +1419,6 @@ static void pe_iterate_lengths(Scene *scene, PTCacheEdit *edit)
   BLI_task_parallel_range(0, edit->totpoint, &iter_data, iterate_lengths_iter, &settings);
 }
 
-/* set current distances to be kept between neighboring keys */
 void recalc_lengths(PTCacheEdit *edit)
 {
   POINT_P;
@@ -1437,7 +1436,6 @@ void recalc_lengths(PTCacheEdit *edit)
   }
 }
 
-/* calculate a tree for finding nearest emitter's vertice */
 void recalc_emitter_field(Depsgraph *UNUSED(depsgraph), Object *UNUSED(ob), ParticleSystem *psys)
 {
   PTCacheEdit *edit = psys->edit;
@@ -3903,8 +3901,8 @@ static void brush_puff(PEData *data, int point_index, float mouse_distance)
       copy_v3_v3(co, key->co);
       mul_m4_v3(mat, co);
 
-      /* use 'kco' as the object space version of worldspace 'co',
-       * ob->imat is set before calling */
+      /* Use `kco` as the object space version of world-space `co`,
+       * `ob->imat` is set before calling. */
       mul_v3_m4v3(kco, data->ob->imat, co);
 
       point_index = BLI_kdtree_3d_find_nearest(edit->emitter_field, kco, NULL);
@@ -3993,15 +3991,15 @@ static void brush_puff(PEData *data, int point_index, float mouse_distance)
             copy_v3_v3(oco, key->co);
             mul_m4_v3(mat, oco);
 
-            /* use 'kco' as the object space version of worldspace 'co',
-             * ob->imat is set before calling */
+            /* Use `kco` as the object space version of world-space `co`,
+             * `ob->imat` is set before calling. */
             mul_v3_m4v3(kco, data->ob->imat, oco);
 
             point_index = BLI_kdtree_3d_find_nearest(edit->emitter_field, kco, NULL);
             if (point_index != -1) {
               copy_v3_v3(onor, &edit->emitter_cosnos[point_index * 6 + 3]);
-              mul_mat3_m4_v3(data->ob->obmat, onor); /* normal into worldspace */
-              mul_mat3_m4_v3(imat, onor);            /* worldspace into particle space */
+              mul_mat3_m4_v3(data->ob->obmat, onor); /* Normal into world-space. */
+              mul_mat3_m4_v3(imat, onor);            /* World-space into particle-space. */
               normalize_v3(onor);
             }
             else {
@@ -5261,7 +5259,6 @@ void PARTICLE_OT_shape_cut(wmOperatorType *ot)
 /** \name Particle Edit Toggle Operator
  * \{ */
 
-/* initialize needed data for bake edit */
 void PE_create_particle_edit(
     Depsgraph *depsgraph, Scene *scene, Object *ob, PointCache *cache, ParticleSystem *psys)
 {

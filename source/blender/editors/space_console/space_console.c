@@ -149,7 +149,7 @@ static void console_cursor(wmWindow *win, ScrArea *UNUSED(area), ARegion *region
 {
   int wmcursor = WM_CURSOR_TEXT_EDIT;
   const wmEvent *event = win->eventstate;
-  if (UI_view2d_mouse_in_scrollers(region, &region->v2d, event->x, event->y)) {
+  if (UI_view2d_mouse_in_scrollers(region, &region->v2d, event->xy)) {
     wmcursor = WM_CURSOR_DEFAULT;
   }
 
@@ -293,7 +293,6 @@ static void console_main_region_listener(const wmRegionListenerParams *params)
   }
 }
 
-/* only called once, from space/spacetypes.c */
 void ED_spacetype_console(void)
 {
   SpaceType *st = MEM_callocN(sizeof(SpaceType), "spacetype console");

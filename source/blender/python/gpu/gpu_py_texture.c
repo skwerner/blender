@@ -527,6 +527,7 @@ PyTypeObject BPyGPUTexture_Type = {
 /* -------------------------------------------------------------------- */
 /** \name GPU Texture module
  * \{ */
+
 PyDoc_STRVAR(pygpu_texture_from_image_doc,
              ".. function:: from_image(image)\n"
              "\n"
@@ -536,7 +537,7 @@ PyDoc_STRVAR(pygpu_texture_from_image_doc,
              "premultiplied or straight alpha matching the image alpha mode.\n"
              "\n"
              "   :arg image: The Image datablock.\n"
-             "   :type image: `bpy.types.Image`\n"
+             "   :type image: :class:`bpy.types.Image`\n"
              "   :return: The GPUTexture used by the image.\n"
              "   :rtype: :class:`gpu.types.GPUTexture`\n");
 static PyObject *pygpu_texture_from_image(PyObject *UNUSED(self), PyObject *arg)

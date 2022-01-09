@@ -88,7 +88,7 @@ endmacro()
 
 function(cycles_link_directories)
   if(APPLE)
-    # APPLE plaform uses full paths for linking libraries, and avoids link_directories.
+    # APPLE platform uses full paths for linking libraries, and avoids link_directories.
     return()
   endif()
 
@@ -156,16 +156,16 @@ macro(cycles_target_link_libraries target)
     ${PLATFORM_LINKLIBS}
   )
 
-  if(WITH_CUDA_DYNLOAD)
-    target_link_libraries(${target} extern_cuew)
-  else()
-    target_link_libraries(${target} ${CUDA_CUDA_LIBRARY})
+  if(WITH_CYCLES_DEVICE_CUDA OR WITH_CYCLES_DEVICE_OPTIX)
+    if(WITH_CUDA_DYNLOAD)
+      target_link_libraries(${target} extern_cuew)
+    else()
+      target_link_libraries(${target} ${CUDA_CUDA_LIBRARY})
+    endif()
   endif()
 
-  if(CYCLES_STANDALONE_REPOSITORY)
-    target_link_libraries(${target} extern_numaapi)
-  else()
-    target_link_libraries(${target} bf_intern_numaapi)
+  if(WITH_CYCLES_DEVICE_HIP AND WITH_HIP_DYNLOAD)
+    target_link_libraries(${target} extern_hipew)
   endif()
 
   if(UNIX AND NOT APPLE)

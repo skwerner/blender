@@ -18,8 +18,8 @@
 
 #include "integrator/adaptive_sampling.h"
 #include "integrator/denoiser.h" /* For DenoiseParams. */
-#include "render/buffers.h"
-#include "util/util_string.h"
+#include "session/buffers.h"
+#include "util/string.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -31,7 +31,7 @@ class RenderWork {
   int resolution_divider = 1;
 
   /* Initialize render buffers.
-   * Includes steps like zero-ing the buffer on the device, and optional reading of pixels from the
+   * Includes steps like zeroing the buffer on the device, and optional reading of pixels from the
    * baking target. */
   bool init_render_buffers = false;
 
@@ -39,6 +39,7 @@ class RenderWork {
   struct {
     int start_sample = 0;
     int num_samples = 0;
+    int sample_offset = 0;
   } path_trace;
 
   struct {
@@ -83,7 +84,7 @@ class RenderWork {
   } display;
 
   /* Re-balance multi-device scheduling after rendering this work.
-   * Note that the scheduler does not know anything abouce devices, so if there is only a single
+   * Note that the scheduler does not know anything about devices, so if there is only a single
    * device used, then it is up for the PathTracer to ignore the balancing. */
   bool rebalance = false;
 
@@ -125,6 +126,9 @@ class RenderScheduler {
   void set_num_samples(int num_samples);
   int get_num_samples() const;
 
+  void set_sample_offset(int sample_offset);
+  int get_sample_offset() const;
+
   /* Time limit for the path tracing tasks, in minutes.
    * Zero disables the limit. */
   void set_time_limit(double time_limit);
@@ -150,7 +154,7 @@ class RenderScheduler {
 
   /* Reset scheduler, indicating that rendering will happen from scratch.
    * Resets current rendered state, as well as scheduling information. */
-  void reset(const BufferParams &buffer_params, int num_samples);
+  void reset(const BufferParams &buffer_params, int num_samples, int sample_offset);
 
   /* Reset scheduler upon switching to a next tile.
    * Will keep the same number of samples and full-frame render parameters, but will reset progress
@@ -203,7 +207,7 @@ class RenderScheduler {
    * extra work needs to be scheduled to denoise and write final result. */
   bool done() const;
 
-  /* Update scheduling state for a newely scheduled work.
+  /* Update scheduling state for a newly scheduled work.
    * Takes care of things like checking whether work was ever denoised, tile was written and states
    * like that. */
   void update_state_for_render_work(const RenderWork &render_work);
@@ -235,7 +239,7 @@ class RenderScheduler {
   double guess_display_update_interval_in_seconds_for_num_samples_no_limit(
       int num_rendered_samples) const;
 
-  /* Calculate number of samples which can be rendered within current desred update interval which
+  /* Calculate number of samples which can be rendered within current desired update interval which
    * is calculated by `guess_update_interval_in_seconds()`. */
   int calculate_num_samples_per_update() const;
 
@@ -250,11 +254,11 @@ class RenderScheduler {
   /* Whether adaptive sampling convergence check and filter is to happen. */
   bool work_need_adaptive_filter() const;
 
-  /* Calculate thretshold for adaptive sampling. */
+  /* Calculate threshold for adaptive sampling. */
   float work_adaptive_threshold() const;
 
   /* Check whether current work needs denoising.
-   * Denoising is not needed if the denoiser is not configured, or when denosiing is happening too
+   * Denoising is not needed if the denoiser is not configured, or when denoising is happening too
    * often.
    *
    * The delayed will be true when the denoiser is configured for use, but it was delayed for a
@@ -344,7 +348,7 @@ class RenderScheduler {
     /* Number of rendered samples on top of the start sample. */
     int num_rendered_samples = 0;
 
-    /* Point in time the latest GPUDisplay work has been scheduled. */
+    /* Point in time the latest PathTraceDisplay work has been scheduled. */
     double last_display_update_time = 0.0;
     /* Value of -1 means display was never updated. */
     int last_display_update_sample = -1;
@@ -418,6 +422,8 @@ class RenderScheduler {
    * [start_sample_, start_sample_ + num_samples_ - 1] range, inclusively. */
   int start_sample_ = 0;
   int num_samples_ = 0;
+
+  int sample_offset_ = 0;
 
   /* Limit in seconds for how long path tracing is allowed to happen.
    * Zero means no limit is applied. */

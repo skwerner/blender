@@ -17,7 +17,7 @@
 #pragma once
 
 #include "integrator/tile.h"
-#include "util/util_types.h"
+#include "util/types.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -31,6 +31,9 @@ class WorkTileScheduler {
  public:
   WorkTileScheduler();
 
+  /* To indicate if there is accelerated RT support. */
+  void set_accelerated_rt(bool state);
+
   /* MAximum path states which are allowed to be used by a single scheduled work tile.
    *
    * Affects the scheduled work size: the work size will be as big as possible, but will not exceed
@@ -38,7 +41,11 @@ class WorkTileScheduler {
   void set_max_num_path_states(int max_num_path_states);
 
   /* Scheduling will happen for pixels within a big tile denotes by its parameters. */
-  void reset(const BufferParams &buffer_params, int sample_start, int samples_num);
+  void reset(const BufferParams &buffer_params,
+             int sample_start,
+             int samples_num,
+             int sample_offset,
+             float scrambling_distance);
 
   /* Get work for a device.
    * Returns true if there is still work to be done and initialize the work tile to all
@@ -50,6 +57,9 @@ class WorkTileScheduler {
 
  protected:
   void reset_scheduler_state();
+
+  /* Used to indicate if there is accelerated ray tracing. */
+  bool accelerated_rt_ = false;
 
   /* Maximum allowed path states to be used.
    *
@@ -64,15 +74,19 @@ class WorkTileScheduler {
   /* dimensions of the currently rendering image in pixels. */
   int2 image_size_px_ = make_int2(0, 0);
 
-  /* Offset and stride of the buffer within which scheduing is happenning.
+  /* Offset and stride of the buffer within which scheduling is happening.
    * Will be passed over to the KernelWorkTile. */
   int offset_, stride_;
+
+  /* Scrambling Distance requires adapted tile size */
+  float scrambling_distance_;
 
   /* Start sample of index and number of samples which are to be rendered.
    * The scheduler will cover samples range of [start, start + num] over the entire image
    * (splitting into a smaller work tiles). */
   int sample_start_ = 0;
   int samples_num_ = 0;
+  int sample_offset_ = 0;
 
   /* Tile size which be scheduled for rendering. */
   TileSize tile_size_;
@@ -87,7 +101,7 @@ class WorkTileScheduler {
    * in the `get_work()`? */
   int total_tiles_num_ = 0;
 
-  /* In the case when the number of sam[les in the `tile_size_` is lower than samples_num_ denotes
+  /* In the case when the number of samples in the `tile_size_` is lower than samples_num_ denotes
    * how many tiles are to be "stacked" to cover the entire requested range of samples. */
   int num_tiles_per_sample_range_ = 0;
 

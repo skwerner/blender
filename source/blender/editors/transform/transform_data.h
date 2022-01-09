@@ -27,8 +27,8 @@ struct Object;
 struct bConstraint;
 
 #define TRANSDATABASIC \
-  /** Extra data (mirrored element pointer, in editmode mesh to BMVert) \
-   * (editbone for roll fixing) (...). */ \
+  /** Extra data (mirrored element pointer, in edit-mode mesh to #BMVert) \
+   * (edit-bone for roll fixing) (...). */ \
   void *extra; \
   /** Location of the data to transform. */ \
   float *loc; \
@@ -85,6 +85,8 @@ typedef struct TransDataExtension {
   float isize[3];
   /** Object matrix. */
   float obmat[4][4];
+  /** Use for #V3D_ORIENT_GIMBAL orientation. */
+  float axismtx_gimbal[3][3];
   /** Use instead of #TransData.smtx,
    * It is the same but without the #Bone.bone_mat, see #TD_PBONE_LOCAL_MTX_C. */
   float l_smtx[3][3];

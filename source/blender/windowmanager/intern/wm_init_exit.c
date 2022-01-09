@@ -56,7 +56,6 @@
 #include "BKE_blendfile.h"
 #include "BKE_callbacks.h"
 #include "BKE_context.h"
-#include "BKE_font.h"
 #include "BKE_global.h"
 #include "BKE_icons.h"
 #include "BKE_image.h"
@@ -69,6 +68,7 @@
 #include "BKE_scene.h"
 #include "BKE_screen.h"
 #include "BKE_sound.h"
+#include "BKE_vfont.h"
 
 #include "BKE_addon.h"
 #include "BKE_appdir.h"
@@ -119,6 +119,7 @@
 #include "ED_space_api.h"
 #include "ED_undo.h"
 #include "ED_util.h"
+#include "ED_view3d.h"
 
 #include "BLF_api.h"
 #include "BLT_lang.h"
@@ -222,10 +223,6 @@ static void sound_jack_sync_callback(Main *bmain, int mode, double time)
   }
 }
 
-/**
- * Initialize Blender and load the startup file & preferences
- * (only called once).
- */
 void WM_init(bContext *C, int argc, const char **argv)
 {
 
@@ -317,9 +314,9 @@ void WM_init(bContext *C, int argc, const char **argv)
                       NULL,
                       &params_file_read_post);
 
-  /* NOTE: leave `G_MAIN->name` set to an empty string since this
+  /* NOTE: leave `G_MAIN->filepath` set to an empty string since this
    * matches behavior after loading a new file. */
-  BLI_assert(G_MAIN->name[0] == '\0');
+  BLI_assert(G_MAIN->filepath[0] == '\0');
 
   /* Call again to set from preferences. */
   BLT_lang_set(NULL);
@@ -372,13 +369,6 @@ void WM_init(bContext *C, int argc, const char **argv)
   wm_history_file_read();
 
   BLI_strncpy(G.lib, BKE_main_blendfile_path_from_global(), sizeof(G.lib));
-
-#ifdef WITH_COMPOSITOR
-  if (1) {
-    extern void *COM_linker_hack;
-    COM_linker_hack = COM_execute;
-  }
-#endif
 
   wm_homefile_read_post(C, params_file_read_post);
 }
@@ -438,10 +428,6 @@ static int wm_exit_handler(bContext *C, const wmEvent *event, void *userdata)
   return WM_UI_HANDLER_BREAK;
 }
 
-/**
- * Cause a delayed #WM_exit()
- * call to avoid leaking memory when trying to exit from within operators.
- */
 void wm_exit_schedule_delayed(const bContext *C)
 {
   /* What we do here is a little bit hacky, but quite simple and doesn't require bigger
@@ -455,9 +441,6 @@ void wm_exit_schedule_delayed(const bContext *C)
   WM_event_add_mousemove(win); /* ensure handler actually gets called */
 }
 
-/**
- * \note doesn't run exit() call #WM_exit() for that.
- */
 void WM_exit_ex(bContext *C, const bool do_python)
 {
   wmWindowManager *wm = C ? CTX_wm_manager(C) : NULL;
@@ -553,6 +536,7 @@ void WM_exit_ex(bContext *C, const bool do_python)
   RE_engines_exit();
 
   ED_preview_free_dbase(); /* frees a Main dbase, before BKE_blender_free! */
+  ED_preview_restart_queue_free();
   ED_assetlist_storage_exit();
 
   if (wm) {
@@ -578,6 +562,13 @@ void WM_exit_ex(bContext *C, const bool do_python)
 
   BKE_blender_free(); /* blender.c, does entire library and spacetypes */
                       //  BKE_material_copybuf_free();
+
+  /* Free the GPU subdivision data after the database to ensure that subdivision structs used by
+   * the modifiers were garbage collected. */
+  if (opengl_is_init) {
+    DRW_subdiv_free();
+  }
+
   ANIM_fcurves_copybuf_free();
   ANIM_drivers_copybuf_free();
   ANIM_driver_vars_copybuf_free();
@@ -661,11 +652,6 @@ void WM_exit_ex(bContext *C, const bool do_python)
   BKE_tempdir_session_purge();
 }
 
-/**
- * \brief Main exit function to close Blender ordinarily.
- * \note Use #wm_exit_schedule_delayed() to close Blender from an operator.
- * Might leak memory otherwise.
- */
 void WM_exit(bContext *C)
 {
   WM_exit_ex(C, true);
@@ -683,10 +669,6 @@ void WM_exit(bContext *C)
   exit(G.is_break == true);
 }
 
-/**
- * Needed for cases when operators are re-registered
- * (when operator type pointers are stored).
- */
 void WM_script_tag_reload(void)
 {
   UI_interface_tag_script_reload();

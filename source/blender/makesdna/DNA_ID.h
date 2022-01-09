@@ -211,11 +211,15 @@ typedef struct IDOverrideLibraryPropertyOperation {
   char _pad0[2];
 
   /* Sub-item references, if needed (for arrays or collections only).
-   * We need both reference and local values to allow e.g. insertion into collections
+   * We need both reference and local values to allow e.g. insertion into RNA collections
    * (constraints, modifiers...).
-   * In collection case, if names are defined, they are used in priority.
-   * Names are pointers (instead of char[64]) to save some space, NULL when unset.
-   * Indices are -1 when unset. */
+   * In RNA collection case, if names are defined, they are used in priority.
+   * Names are pointers (instead of char[64]) to save some space, NULL or empty string when unset.
+   * Indices are -1 when unset.
+   *
+   * NOTE: For insertion operations in RNA collections, reference may not actually exist in the
+   * linked reference data. It is used to identify the anchor of the insertion operation (i.e. the
+   * item after or before which the new local item should be inserted), in the local override. */
   char *subitem_reference_name;
   char *subitem_local_name;
   int subitem_reference_index;
@@ -311,7 +315,21 @@ typedef struct IDOverrideLibrary {
   struct ID *storage;
 
   IDOverrideLibraryRuntime *runtime;
+
+  void *_pad_0;
+
+  unsigned int flag;
+  char _pad_1[4];
 } IDOverrideLibrary;
+
+/* IDOverrideLibrary->flag */
+enum {
+  /**
+   * The override data-block should not be considered as part of an override hierarchy (generally
+   * because it was created as an single override, outside of any hierarchy consideration).
+   */
+  IDOVERRIDE_LIBRARY_FLAG_NO_HIERARCHY = 1 << 0,
+};
 
 /* watch it: Sequence has identical beginning. */
 /**
@@ -392,7 +410,14 @@ typedef struct ID {
    *   that references this ID (the bones of an armature or the modifiers of an object for e.g.).
    */
   void *py_instance;
-  void *_pad1;
+
+  /**
+   * Weak reference to an ID in a given library file, used to allow re-using already appended data
+   * in some cases, instead of appending it again.
+   *
+   * May be NULL.
+   */
+  struct LibraryWeakReference *library_weak_reference;
 } ID;
 
 /**
@@ -420,17 +445,46 @@ typedef struct Library {
 
   struct PackedFile *packedfile;
 
+  ushort tag;
+  char _pad_0[6];
+
   /* Temp data needed by read/write code, and liboverride recursive resync. */
   int temp_index;
   /** See BLENDER_FILE_VERSION, BLENDER_FILE_SUBVERSION, needed for do_versions. */
   short versionfile, subversionfile;
 } Library;
 
+/* Library.tag */
+enum eLibrary_Tag {
+  /* Automatic recursive resync was needed when linking/loading data from that library. */
+  LIBRARY_TAG_RESYNC_REQUIRED = 1 << 0,
+};
+
+/**
+ * A weak library/ID reference for local data that has been appended, to allow re-using that local
+ * data instead of creating a new copy of it in future appends.
+ *
+ * NOTE: This is by design a week reference, in other words code should be totally fine and perform
+ * a regular append if it cannot find a valid matching local ID.
+ *
+ * NOTE: There should always be only one single ID in current Main matching a given linked
+ * reference.
+ */
+typedef struct LibraryWeakReference {
+  /**  Expected to match a `Library.filepath`. */
+  char library_filepath[1024];
+
+  /** MAX_ID_NAME. May be different from the current local ID name. */
+  char library_id_name[66];
+
+  char _pad[2];
+} LibraryWeakReference;
+
 /* for PreviewImage->flag */
 enum ePreviewImage_Flag {
   PRV_CHANGED = (1 << 0),
   PRV_USER_EDITED = (1 << 1), /* if user-edited, do not auto-update this anymore! */
-  PRV_UNFINISHED = (1 << 2),  /* The preview is not done rendering yet. */
+  PRV_RENDERING = (1 << 2),   /* Rendering was invoked. Cleared on file read. */
 };
 
 /* for PreviewImage->tag */
@@ -770,6 +824,9 @@ typedef enum IDRecalcFlag {
    * local one.
    */
   ID_RECALC_TAG_FOR_UNDO = (1 << 24),
+
+  /* The node tree has changed in a way that affects its output nodes. */
+  ID_RECALC_NTREE_OUTPUT = (1 << 25),
 
   /***************************************************************************
    * Pseudonyms, to have more semantic meaning in the actual code without

@@ -18,9 +18,9 @@
 
 #ifdef WITH_CUDA
 
-#  include "device/device_kernel.h"
-#  include "device/device_memory.h"
-#  include "device/device_queue.h"
+#  include "device/kernel.h"
+#  include "device/memory.h"
+#  include "device/queue.h"
 
 #  include "device/cuda/util.h"
 
@@ -42,7 +42,9 @@ class CUDADeviceQueue : public DeviceQueue {
 
   virtual bool kernel_available(DeviceKernel kernel) const override;
 
-  virtual bool enqueue(DeviceKernel kernel, const int work_size, void *args[]) override;
+  virtual bool enqueue(DeviceKernel kernel,
+                       const int work_size,
+                       DeviceKernelArguments const &args) override;
 
   virtual bool synchronize() override;
 
@@ -60,6 +62,8 @@ class CUDADeviceQueue : public DeviceQueue {
  protected:
   CUDADevice *cuda_device_;
   CUstream cuda_stream_;
+
+  void assert_success(CUresult result, const char *operation);
 };
 
 CCL_NAMESPACE_END

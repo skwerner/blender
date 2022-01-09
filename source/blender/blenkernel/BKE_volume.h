@@ -18,7 +18,7 @@
 
 /** \file
  * \ingroup bke
- * \brief Volume datablock.
+ * \brief Volume data-block.
  */
 #ifdef __cplusplus
 extern "C" {
@@ -37,7 +37,7 @@ struct VolumeGridVector;
 
 void BKE_volumes_init(void);
 
-/* Datablock Management */
+/* Data-block Management */
 
 void BKE_volume_init_grids(struct Volume *volume);
 void *BKE_volume_add(struct Main *bmain, const char *name);
@@ -88,6 +88,7 @@ const char *BKE_volume_grids_frame_filepath(const struct Volume *volume);
 const VolumeGrid *BKE_volume_grid_get_for_read(const struct Volume *volume, int grid_index);
 VolumeGrid *BKE_volume_grid_get_for_write(struct Volume *volume, int grid_index);
 const VolumeGrid *BKE_volume_grid_active_get_for_read(const struct Volume *volume);
+/* Tries to find a grid with the given name. Make sure that the volume has been loaded. */
 const VolumeGrid *BKE_volume_grid_find_for_read(const struct Volume *volume, const char *name);
 
 /* Grid
@@ -115,20 +116,24 @@ void BKE_volume_grid_unload(const struct Volume *volume, const struct VolumeGrid
 bool BKE_volume_grid_is_loaded(const struct VolumeGrid *grid);
 
 /* Metadata */
+
 const char *BKE_volume_grid_name(const struct VolumeGrid *grid);
 VolumeGridType BKE_volume_grid_type(const struct VolumeGrid *grid);
 int BKE_volume_grid_channels(const struct VolumeGrid *grid);
+/**
+ * Transformation from index space to object space.
+ */
 void BKE_volume_grid_transform_matrix(const struct VolumeGrid *grid, float mat[4][4]);
 
 /* Volume Editing
  *
- * These are intended for modifiers to use on evaluated datablocks.
+ * These are intended for modifiers to use on evaluated data-blocks.
  *
- * new_for_eval creates a volume datablock with no grids or file path, but
+ * new_for_eval creates a volume data-block with no grids or file path, but
  * preserves other settings such as viewport display options.
  *
- * copy_for_eval creates a volume datablock preserving everything except the
- * file path. Grids are shared with the source datablock, not copied. */
+ * copy_for_eval creates a volume data-block preserving everything except the
+ * file path. Grids are shared with the source data-block, not copied. */
 
 struct Volume *BKE_volume_new_for_eval(const struct Volume *volume_src);
 struct Volume *BKE_volume_copy_for_eval(struct Volume *volume_src, bool reference);
@@ -160,12 +165,17 @@ bool BKE_volume_save(const struct Volume *volume,
 #ifdef __cplusplus
 #  include "BLI_float3.hh"
 #  include "BLI_float4x4.hh"
+#  include "BLI_string_ref.hh"
 
 bool BKE_volume_min_max(const Volume *volume, blender::float3 &r_min, blender::float3 &r_max);
 
 #  ifdef WITH_OPENVDB
 #    include <openvdb/openvdb.h>
 #    include <openvdb/points/PointDataGrid.h>
+
+VolumeGrid *BKE_volume_grid_add_vdb(Volume &volume,
+                                    blender::StringRef name,
+                                    openvdb::GridBase::Ptr vdb_grid);
 
 bool BKE_volume_grid_bounds(openvdb::GridBase::ConstPtr grid,
                             blender::float3 &r_min,
@@ -179,7 +189,7 @@ openvdb::GridBase::ConstPtr BKE_volume_grid_openvdb_for_read(const struct Volume
                                                              const struct VolumeGrid *grid);
 openvdb::GridBase::Ptr BKE_volume_grid_openvdb_for_write(const struct Volume *volume,
                                                          struct VolumeGrid *grid,
-                                                         const bool clear);
+                                                         bool clear);
 
 VolumeGridType BKE_volume_grid_type_openvdb(const openvdb::GridBase &grid);
 
@@ -219,9 +229,7 @@ auto BKE_volume_grid_type_operation(const VolumeGridType grid_type, OpType &&op)
 }
 
 openvdb::GridBase::Ptr BKE_volume_grid_create_with_changed_resolution(
-    const VolumeGridType grid_type,
-    const openvdb::GridBase &old_grid,
-    const float resolution_factor);
+    const VolumeGridType grid_type, const openvdb::GridBase &old_grid, float resolution_factor);
 
 #  endif
 #endif

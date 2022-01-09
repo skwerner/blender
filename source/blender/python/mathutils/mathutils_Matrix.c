@@ -526,7 +526,7 @@ static PyObject *C_Matrix_Rotation(PyObject *cls, PyObject *args)
                     "cannot create a 2x2 rotation matrix around arbitrary axis");
     return NULL;
   }
-  if ((matSize == 3 || matSize == 4) && (axis == NULL) && (vec == NULL)) {
+  if ((ELEM(matSize, 3, 4)) && (axis == NULL) && (vec == NULL)) {
     PyErr_SetString(PyExc_ValueError,
                     "Matrix.Rotation(): "
                     "axis of rotation for 3d and 4d matrices is required");
@@ -3382,9 +3382,6 @@ PyObject *Matrix_CreatePyObject_cb(
   return (PyObject *)self;
 }
 
-/**
- * \param mat: Initialized matrix value to use in-place, allocated with #PyMem_Malloc
- */
 PyObject *Matrix_CreatePyObject_alloc(float *mat,
                                       const ushort num_col,
                                       const ushort num_row,

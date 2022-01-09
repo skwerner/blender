@@ -21,12 +21,13 @@
  * \ingroup shdnodes
  */
 
-#include "node_shader_util.h"
+#include "node_shader_util.hh"
 
-/* **************** VALUE ******************** */
-static bNodeSocketTemplate sh_node_value_out[] = {
-    {SOCK_FLOAT, N_("Value"), 0.5f, 0, 0, 0, -FLT_MAX, FLT_MAX, PROP_NONE},
-    {-1, ""},
+namespace blender::nodes::node_shader_value_cc {
+
+static void sh_node_value_declare(NodeDeclarationBuilder &b)
+{
+  b.add_output<decl::Float>(N_("Value"));
 };
 
 static int gpu_shader_value(GPUMaterial *mat,
@@ -46,14 +47,18 @@ static void sh_node_value_build_multi_function(blender::nodes::NodeMultiFunction
   builder.construct_and_set_matching_fn<blender::fn::CustomMF_Constant<float>>(value->value);
 }
 
-void register_node_type_sh_value(void)
+}  // namespace blender::nodes::node_shader_value_cc
+
+void register_node_type_sh_value()
 {
+  namespace file_ns = blender::nodes::node_shader_value_cc;
+
   static bNodeType ntype;
 
-  sh_fn_node_type_base(&ntype, SH_NODE_VALUE, "Value", NODE_CLASS_INPUT, 0);
-  node_type_socket_templates(&ntype, nullptr, sh_node_value_out);
-  node_type_gpu(&ntype, gpu_shader_value);
-  ntype.build_multi_function = sh_node_value_build_multi_function;
+  sh_fn_node_type_base(&ntype, SH_NODE_VALUE, "Value", NODE_CLASS_INPUT);
+  ntype.declare = file_ns::sh_node_value_declare;
+  node_type_gpu(&ntype, file_ns::gpu_shader_value);
+  ntype.build_multi_function = file_ns::sh_node_value_build_multi_function;
 
   nodeRegisterType(&ntype);
 }

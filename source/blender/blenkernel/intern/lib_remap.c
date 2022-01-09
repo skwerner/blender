@@ -132,7 +132,8 @@ static int foreach_libblock_remap_callback(LibraryIDLinkCallbackData *cb_data)
     const bool is_obj = (GS(id_owner->name) == ID_OB);
     const bool is_obj_proxy = (is_obj &&
                                (((Object *)id_owner)->proxy || ((Object *)id_owner)->proxy_group));
-    const bool is_obj_editmode = (is_obj && BKE_object_is_in_editmode((Object *)id_owner));
+    const bool is_obj_editmode = (is_obj && BKE_object_is_in_editmode((Object *)id_owner) &&
+                                  (id_remap_data->flag & ID_REMAP_FORCE_OBDATA_IN_EDITMODE) == 0);
     const bool is_never_null = ((cb_flag & IDWALK_CB_NEVER_NULL) && (new_id == NULL) &&
                                 (id_remap_data->flag & ID_REMAP_FORCE_NEVER_NULL_USAGE) == 0);
     const bool skip_reference = (id_remap_data->flag & ID_REMAP_SKIP_OVERRIDE_LIBRARY) != 0;
@@ -281,6 +282,11 @@ static void libblock_remap_data_postprocess_object_update(Main *bmain,
      * to remove the NULL children from collections not used in any scene. */
     BKE_collections_object_remove_nulls(bmain);
   }
+  else {
+    /* Remapping may have created duplicates of CollectionObject pointing to the same object within
+     * the same collection. */
+    BKE_collections_object_remove_duplicates(bmain);
+  }
 
   BKE_main_collection_sync_remap(bmain);
 
@@ -318,6 +324,7 @@ static void libblock_remap_data_postprocess_collection_update(Main *bmain,
   else {
     /* Temp safe fix, but a "tad" brute force... We should probably be able to use parents from
      * old_collection instead? */
+    /* NOTE: Also takes care of duplicated child collections that remapping may have created. */
     BKE_main_collections_parent_relations_rebuild(bmain);
   }
 
@@ -455,10 +462,6 @@ static void libblock_remap_data(
 #endif
 }
 
-/**
- * Replace all references in given Main to \a old_id by \a new_id
- * (if \a new_id is NULL, it unlinks \a old_id).
- */
 void BKE_libblock_remap_locked(Main *bmain, void *old_idv, void *new_idv, const short remap_flags)
 {
   IDRemap id_remap_data;
@@ -564,13 +567,6 @@ void BKE_libblock_remap(Main *bmain, void *old_idv, void *new_idv, const short r
   BKE_main_unlock(bmain);
 }
 
-/**
- * Unlink given \a id from given \a bmain
- * (does not touch to indirect, i.e. library, usages of the ID).
- *
- * \param do_flag_never_null: If true, all IDs using \a idv in a 'non-NULL' way are flagged by
- * #LIB_TAG_DOIT flag (quite obviously, 'non-NULL' usages can never be unlinked by this function).
- */
 void BKE_libblock_unlink(Main *bmain,
                          void *idv,
                          const bool do_flag_never_null,
@@ -586,16 +582,6 @@ void BKE_libblock_unlink(Main *bmain,
   BKE_main_unlock(bmain);
 }
 
-/**
- * Similar to libblock_remap, but only affects IDs used by given \a idv ID.
- *
- * \param old_idv: Unlike BKE_libblock_remap, can be NULL,
- * in which case all ID usages by given \a idv will be cleared.
- * \param us_min_never_null: If \a true and new_id is NULL,
- * 'NEVER_NULL' ID usages keep their old id, but this one still gets its user count decremented
- * (needed when given \a idv is going to be deleted right after being unlinked).
- */
-/* Should be able to replace all _relink() funcs (constraints, rigidbody, etc.) ? */
 /* XXX Arg! Naming... :(
  *     _relink? avoids confusion with _remap, but is confusing with _unlink
  *     _remap_used_ids?
@@ -603,9 +589,13 @@ void BKE_libblock_unlink(Main *bmain,
  *     BKE_id_remap maybe?
  *     ... sigh
  */
+
 void BKE_libblock_relink_ex(
     Main *bmain, void *idv, void *old_idv, void *new_idv, const short remap_flags)
 {
+
+  /* Should be able to replace all _relink() funcs (constraints, rigidbody, etc.) ? */
+
   ID *id = idv;
   ID *old_id = old_idv;
   ID *new_id = new_idv;
@@ -669,57 +659,11 @@ void BKE_libblock_relink_ex(
   DEG_relations_tag_update(bmain);
 }
 
+static void libblock_relink_to_newid(Main *bmain, ID *id, const int remap_flag);
 static int id_relink_to_newid_looper(LibraryIDLinkCallbackData *cb_data)
 {
   const int cb_flag = cb_data->cb_flag;
-  if (cb_flag & IDWALK_CB_EMBEDDED) {
-    return IDWALK_RET_NOP;
-  }
-
-  ID **id_pointer = cb_data->id_pointer;
-  ID *id = *id_pointer;
-  if (id) {
-    /* See: NEW_ID macro */
-    if (id->newid) {
-      BKE_library_update_ID_link_user(id->newid, id, cb_flag);
-      id = id->newid;
-      *id_pointer = id;
-    }
-    if (id->tag & LIB_TAG_NEW) {
-      id->tag &= ~LIB_TAG_NEW;
-      BKE_libblock_relink_to_newid(id);
-    }
-  }
-  return IDWALK_RET_NOP;
-}
-
-/**
- * Similar to #libblock_relink_ex,
- * but is remapping IDs to their newid value if non-NULL, in given \a id.
- *
- * Very specific usage, not sure we'll keep it on the long run,
- * currently only used in Object/Collection duplication code...
- *
- * WARNING: This is a deprecated version of this function, should not be used by new code. See
- * #BKE_libblock_relink_to_newid_new below.
- */
-void BKE_libblock_relink_to_newid(ID *id)
-{
-  if (ID_IS_LINKED(id)) {
-    return;
-  }
-
-  BKE_library_foreach_ID_link(NULL, id, id_relink_to_newid_looper, NULL, 0);
-}
-
-/* ************************
- * FIXME: Port all usages of #BKE_libblock_relink_to_newid to this
- *        #BKE_libblock_relink_to_newid_new new code and remove old one.
- ************************** */
-static int id_relink_to_newid_looper_new(LibraryIDLinkCallbackData *cb_data)
-{
-  const int cb_flag = cb_data->cb_flag;
-  if (cb_flag & IDWALK_CB_EMBEDDED) {
+  if (cb_flag & (IDWALK_CB_EMBEDDED | IDWALK_CB_OVERRIDE_LIBRARY_REFERENCE)) {
     return IDWALK_RET_NOP;
   }
 
@@ -728,29 +672,34 @@ static int id_relink_to_newid_looper_new(LibraryIDLinkCallbackData *cb_data)
   ID **id_pointer = cb_data->id_pointer;
   ID *id = *id_pointer;
   if (id) {
+    const int remap_flag = POINTER_AS_INT(cb_data->user_data);
     /* See: NEW_ID macro */
     if (id->newid != NULL) {
-      BKE_libblock_relink_ex(bmain, id_owner, id, id->newid, ID_REMAP_SKIP_INDIRECT_USAGE);
+      const int remap_flag_final = remap_flag | ID_REMAP_SKIP_INDIRECT_USAGE |
+                                   ID_REMAP_SKIP_OVERRIDE_LIBRARY;
+      BKE_libblock_relink_ex(bmain, id_owner, id, id->newid, (short)remap_flag_final);
       id = id->newid;
     }
     if (id->tag & LIB_TAG_NEW) {
       id->tag &= ~LIB_TAG_NEW;
-      BKE_libblock_relink_to_newid_new(bmain, id);
+      libblock_relink_to_newid(bmain, id, remap_flag);
     }
   }
   return IDWALK_RET_NOP;
 }
 
-/**
- * Remaps ID usages of given ID to their `id->newid` pointer if not None, and proceeds recursively
- * in the dependency tree of IDs for all data-blocks tagged with `LIB_TAG_NEW`.
- *
- * NOTE: `LIB_TAG_NEW` is cleared
- *
- * Very specific usage, not sure we'll keep it on the long run,
- * currently only used in Object/Collection duplication code...
- */
-void BKE_libblock_relink_to_newid_new(Main *bmain, ID *id)
+static void libblock_relink_to_newid(Main *bmain, ID *id, const int remap_flag)
+{
+  if (ID_IS_LINKED(id)) {
+    return;
+  }
+
+  id->tag &= ~LIB_TAG_NEW;
+  BKE_library_foreach_ID_link(
+      bmain, id, id_relink_to_newid_looper, POINTER_FROM_INT(remap_flag), 0);
+}
+
+void BKE_libblock_relink_to_newid(Main *bmain, ID *id, const int remap_flag)
 {
   if (ID_IS_LINKED(id)) {
     return;
@@ -758,6 +707,8 @@ void BKE_libblock_relink_to_newid_new(Main *bmain, ID *id)
   /* We do not want to have those cached relationship data here. */
   BLI_assert(bmain->relations == NULL);
 
-  id->tag &= ~LIB_TAG_NEW;
-  BKE_library_foreach_ID_link(bmain, id, id_relink_to_newid_looper_new, NULL, 0);
+  BKE_layer_collection_resync_forbid();
+  libblock_relink_to_newid(bmain, id, remap_flag);
+  BKE_layer_collection_resync_allow();
+  BKE_main_collection_sync_remap(bmain);
 }

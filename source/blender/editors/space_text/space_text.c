@@ -302,7 +302,7 @@ static void text_cursor(wmWindow *win, ScrArea *area, ARegion *region)
   int wmcursor = WM_CURSOR_TEXT_EDIT;
 
   if (st->text && BLI_rcti_isect_pt(&st->runtime.scroll_region_handle,
-                                    win->eventstate->x - region->winrct.xmin,
+                                    win->eventstate->xy[0] - region->winrct.xmin,
                                     st->runtime.scroll_region_handle.ymin)) {
     wmcursor = WM_CURSOR_DEFAULT;
   }
@@ -417,7 +417,6 @@ static void text_id_remap(ScrArea *UNUSED(area), SpaceLink *slink, ID *old_id, I
 
 /********************* registration ********************/
 
-/* only called once, from space/spacetypes.c */
 void ED_spacetype_text(void)
 {
   SpaceType *st = MEM_callocN(sizeof(SpaceType), "spacetype text");

@@ -17,8 +17,8 @@
 #ifndef __KERNEL_OIIO_GLOBALS_H__
 #define __KERNEL_OIIO_GLOBALS_H__
 
-#include "util/util_thread.h"
-#include "util/util_vector.h"
+#include "util/thread.h"
+#include "util/vector.h"
 #include <OpenImageIO/texture.h>
 
 CCL_NAMESPACE_BEGIN

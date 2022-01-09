@@ -29,6 +29,7 @@
 #pragma once
 
 #include "BLI_compiler_attrs.h"
+#include "BLI_utildefines.h"
 
 struct wmGizmo;
 struct wmGizmoGroup;
@@ -162,6 +163,8 @@ typedef enum eWM_GizmoFlagGroupTypeFlag {
    */
   WM_GIZMOGROUPTYPE_VR_REDRAWS = (1 << 10),
 } eWM_GizmoFlagGroupTypeFlag;
+
+ENUM_OPERATORS(eWM_GizmoFlagGroupTypeFlag, WM_GIZMOGROUPTYPE_VR_REDRAWS);
 
 /**
  * #wmGizmoGroup.init_flag
@@ -380,7 +383,7 @@ typedef struct wmGizmoType {
 
   /**
    * Returns screen-space bounding box in the window space
-   * (compatible with #wmEvent.x #wmEvent.y).
+   * (compatible with #wmEvent.xy).
    *
    * Used for tool-tip placement (otherwise the cursor location is used).
    */
@@ -501,8 +504,6 @@ typedef struct wmGizmoGroup {
   } hide;
 
   bool tag_remove;
-
-  bool use_fallback_keymap;
 
   void *customdata;
   /** For freeing customdata from above. */

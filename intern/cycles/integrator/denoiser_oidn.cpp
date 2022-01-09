@@ -19,12 +19,12 @@
 #include <array>
 
 #include "device/device.h"
-#include "device/device_queue.h"
+#include "device/queue.h"
 #include "integrator/pass_accessor_cpu.h"
-#include "render/buffers.h"
-#include "util/util_array.h"
-#include "util/util_logging.h"
-#include "util/util_openimagedenoise.h"
+#include "session/buffers.h"
+#include "util/array.h"
+#include "util/log.h"
+#include "util/openimagedenoise.h"
 
 #include "kernel/device/cpu/compat.h"
 #include "kernel/device/cpu/kernel.h"
@@ -47,9 +47,6 @@ static bool oidn_progress_monitor_function(void *user_ptr, double /*n*/)
   OIDNDenoiser *oidn_denoiser = reinterpret_cast<OIDNDenoiser *>(user_ptr);
   return !oidn_denoiser->is_cancelled();
 }
-#endif
-
-#ifdef WITH_OPENIMAGEDENOISE
 
 class OIDNPass {
  public:
@@ -93,7 +90,7 @@ class OIDNPass {
    * Is required for albedo and normal passes. The color pass OIDN will perform auto-exposure, so
    * scaling is not needed for the color pass unless adaptive sampling is used.
    *
-   * NOTE: Do not scale the outout pass, as that requires to be a pointer in the original buffer.
+   * NOTE: Do not scale the output pass, as that requires to be a pointer in the original buffer.
    * All the scaling on the output needed for integration with adaptive sampling will happen
    * outside of generic pass handling. */
   bool need_scale = false;
@@ -169,6 +166,7 @@ class OIDNDenoiseContext {
     OIDNPass oidn_color_access_pass = read_input_pass(oidn_color_pass, oidn_output_pass);
 
     oidn::DeviceRef oidn_device = oidn::newDevice();
+    oidn_device.set("setAffinity", false);
     oidn_device.commit();
 
     /* Create a filter for denoising a beauty (color) image using prefiltered auxiliary images too.
@@ -289,7 +287,13 @@ class OIDNDenoiseContext {
      * pixels. */
     const PassAccessorCPU pass_accessor(pass_access_info, 1.0f, num_samples_);
 
-    pass_accessor.get_render_tile_pixels(render_buffers_, buffer_params_, destination);
+    BufferParams buffer_params = buffer_params_;
+    buffer_params.window_x = 0;
+    buffer_params.window_y = 0;
+    buffer_params.window_width = buffer_params.width;
+    buffer_params.window_height = buffer_params.height;
+
+    pass_accessor.get_render_tile_pixels(render_buffers_, buffer_params, destination);
   }
 
   /* Read pass pixels using PassAccessor into a temporary buffer which is owned by the pass.. */
@@ -479,7 +483,7 @@ class OIDNDenoiseContext {
     }
 
     if (num_samples_ == 1) {
-      /* If the avoid scaling if there is only one sample, to save up time (so we dont divide
+      /* If the avoid scaling if there is only one sample, to save up time (so we don't divide
        * buffer by 1). */
       return false;
     }
@@ -540,7 +544,6 @@ class OIDNDenoiseContext {
    * the fake values and denoising of passes which do need albedo can no longer happen. */
   bool albedo_replaced_with_fake_ = false;
 };
-#endif
 
 static unique_ptr<DeviceQueue> create_device_queue(const RenderBuffers *render_buffers)
 {
@@ -575,18 +578,20 @@ static void copy_render_buffers_to_device(unique_ptr<DeviceQueue> &queue,
   }
 }
 
+#endif
+
 bool OIDNDenoiser::denoise_buffer(const BufferParams &buffer_params,
                                   RenderBuffers *render_buffers,
                                   const int num_samples,
                                   bool allow_inplace_modification)
 {
+#ifdef WITH_OPENIMAGEDENOISE
   thread_scoped_lock lock(mutex_);
 
   /* Make sure the host-side data is available for denoising. */
   unique_ptr<DeviceQueue> queue = create_device_queue(render_buffers);
   copy_render_buffers_from_device(queue, render_buffers);
 
-#ifdef WITH_OPENIMAGEDENOISE
   OIDNDenoiseContext context(
       this, params_, buffer_params, render_buffers, num_samples, allow_inplace_modification);
 
@@ -613,6 +618,11 @@ bool OIDNDenoiser::denoise_buffer(const BufferParams &buffer_params,
      * copies data from the device it doesn't overwrite the denoiser buffers. */
     copy_render_buffers_to_device(queue, render_buffers);
   }
+#else
+  (void)buffer_params;
+  (void)render_buffers;
+  (void)num_samples;
+  (void)allow_inplace_modification;
 #endif
 
   /* This code is not supposed to run when compiled without OIDN support, so can assume if we made

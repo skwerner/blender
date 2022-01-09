@@ -29,6 +29,7 @@
 
 #include "BKE_animsys.h"
 #include "BKE_camera.h"
+#include "BKE_duplilist.h"
 #include "BKE_object.h"
 #include "BKE_screen.h"
 
@@ -269,7 +270,7 @@ void EEVEE_motion_blur_hair_cache_populate(EEVEE_ViewLayerData *UNUSED(sldata),
       GPUTexture *tex_prev = mb_hair->psys[psys_id].hair_pos_tx[MB_PREV];
       GPUTexture *tex_next = mb_hair->psys[psys_id].hair_pos_tx[MB_NEXT];
 
-      grp = DRW_shgroup_hair_create_sub(ob, psys, md, effects->motion_blur.hair_grp);
+      grp = DRW_shgroup_hair_create_sub(ob, psys, md, effects->motion_blur.hair_grp, NULL);
       DRW_shgroup_uniform_mat4(grp, "prevModelMatrix", mb_data->obmat[MB_PREV]);
       DRW_shgroup_uniform_mat4(grp, "currModelMatrix", mb_data->obmat[MB_CURR]);
       DRW_shgroup_uniform_mat4(grp, "nextModelMatrix", mb_data->obmat[MB_NEXT]);
@@ -315,6 +316,14 @@ void EEVEE_motion_blur_cache_populate(EEVEE_ViewLayerData *UNUSED(sldata),
                          (has_rigidbody && (rbo->flag & RBO_FLAG_USE_DEFORM) != 0);
 
   if (!(object_moves || is_deform)) {
+    return;
+  }
+
+  const DupliObject *dup = DRW_object_get_dupli(ob);
+  if (dup != NULL && dup->ob->data != dup->ob_data) {
+    /* Geometry instances do not support motion blur correctly yet. The #key used in
+     * #motion_blur_deform_data_get has to take ids of instances (#DupliObject.persistent_id) into
+     * account. Otherwise it can't find matching geometry instances at different points in time. */
     return;
   }
 
@@ -405,8 +414,8 @@ void EEVEE_motion_blur_cache_finish(EEVEE_Data *vedata)
     /* Push instances attributes to the GPU. */
     DRW_render_instance_buffer_finish();
 
-    /* Need to be called after DRW_render_instance_buffer_finish() */
-    /* Also we weed to have a correct fbo bound for DRW_hair_update */
+    /* Need to be called after #DRW_render_instance_buffer_finish() */
+    /* Also we weed to have a correct FBO bound for #DRW_hair_update. */
     GPU_framebuffer_bind(vedata->fbl->main_fb);
     DRW_hair_update();
 

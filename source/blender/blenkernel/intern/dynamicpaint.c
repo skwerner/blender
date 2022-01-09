@@ -112,7 +112,7 @@ static int neighStraightY[8] = {0, 1, 0, -1, 1, 1, -1, -1};
 #define SUBFRAME_RECURSION 5
 /* surface_getBrushFlags() return vals */
 #define BRUSH_USES_VELOCITY (1 << 0)
-/* brush mesh raycast status */
+/* Brush mesh ray-cast status. */
 #define HIT_VOLUME 1
 #define HIT_PROXIMITY 2
 /* dynamicPaint_findNeighborPixel() return codes */
@@ -317,7 +317,7 @@ static bool setError(DynamicPaintCanvasSettings *canvas, const char *string)
 static int dynamicPaint_surfaceNumOfPoints(DynamicPaintSurface *surface)
 {
   if (surface->format == MOD_DPAINT_SURFACE_F_PTEX) {
-    return 0; /* not supported atm */
+    return 0; /* Not supported at the moment. */
   }
   if (surface->format == MOD_DPAINT_SURFACE_F_VERTEX) {
     const Mesh *canvas_mesh = dynamicPaint_canvas_mesh_get(surface->canvas);
@@ -327,7 +327,6 @@ static int dynamicPaint_surfaceNumOfPoints(DynamicPaintSurface *surface)
   return 0;
 }
 
-/* get currently active surface (in user interface) */
 DynamicPaintSurface *get_activeSurface(DynamicPaintCanvasSettings *canvas)
 {
   return BLI_findlink(&canvas->surfaces, canvas->active_sur);
@@ -420,7 +419,6 @@ void dynamicPaintSurface_setUniqueName(DynamicPaintSurface *surface, const char 
       surface_duplicateNameExists, surface, name, '.', surface->name, sizeof(surface->name));
 }
 
-/* change surface data to defaults on new type */
 void dynamicPaintSurface_updateType(struct DynamicPaintSurface *surface)
 {
   if (surface->format == MOD_DPAINT_SURFACE_F_IMAGESEQ) {
@@ -763,7 +761,7 @@ static void surfaceGenerateGrid(struct DynamicPaintSurface *surface)
     copy_v3_v3(bData->dim, dim);
     min_dim = max_fff(td[0], td[1], td[2]) / 1000.0f;
 
-    /* deactivate zero axises */
+    /* deactivate zero axes */
     for (i = 0; i < 3; i++) {
       if (td[i] < min_dim) {
         td[i] = 1.0f;
@@ -784,7 +782,7 @@ static void surfaceGenerateGrid(struct DynamicPaintSurface *surface)
     dim_factor = (float)pow((double)volume / ((double)sData->total_points / 10000.0),
                             1.0 / (double)axis);
 
-    /* define final grid size using dim_factor, use min 3 for active axises */
+    /* define final grid size using dim_factor, use min 3 for active axes */
     for (i = 0; i < 3; i++) {
       grid->dim[i] = (int)floor(td[i] / dim_factor);
       CLAMP(grid->dim[i], (dim[i] >= min_dim) ? 3 : 1, 100);
@@ -855,7 +853,6 @@ static void surfaceGenerateGrid(struct DynamicPaintSurface *surface)
 
 /***************************** Freeing data ******************************/
 
-/* Free brush data */
 void dynamicPaint_freeBrush(struct DynamicPaintModifierData *pmd)
 {
   if (pmd->brush) {
@@ -992,7 +989,6 @@ void dynamicPaint_freeSurface(const DynamicPaintModifierData *pmd, DynamicPaintS
   MEM_freeN(surface);
 }
 
-/* Free canvas data */
 void dynamicPaint_freeCanvas(DynamicPaintModifierData *pmd)
 {
   if (pmd->canvas) {
@@ -1011,7 +1007,6 @@ void dynamicPaint_freeCanvas(DynamicPaintModifierData *pmd)
   }
 }
 
-/* Free whole dp modifier */
 void dynamicPaint_Modifier_free(DynamicPaintModifierData *pmd)
 {
   if (pmd == NULL) {
@@ -1024,11 +1019,6 @@ void dynamicPaint_Modifier_free(DynamicPaintModifierData *pmd)
 
 /***************************** Initialize and reset ******************************/
 
-/*
- * Creates a new surface and adds it to the list
- * If scene is null, frame range of 1-250 is used
- * A pointer to this surface is returned
- */
 DynamicPaintSurface *dynamicPaint_createNewSurface(DynamicPaintCanvasSettings *canvas,
                                                    Scene *scene)
 {
@@ -1106,9 +1096,6 @@ DynamicPaintSurface *dynamicPaint_createNewSurface(DynamicPaintCanvasSettings *c
   return surface;
 }
 
-/*
- * Initialize modifier data
- */
 bool dynamicPaint_createType(struct DynamicPaintModifierData *pmd, int type, struct Scene *scene)
 {
   if (pmd) {
@@ -1231,7 +1218,7 @@ void dynamicPaint_Modifier_copy(const struct DynamicPaintModifierData *pmd,
     /* copy existing surfaces */
     for (surface = pmd->canvas->surfaces.first; surface; surface = surface->next) {
       DynamicPaintSurface *t_surface = dynamicPaint_createNewSurface(tpmd->canvas, NULL);
-      if (flag & LIB_ID_CREATE_NO_MAIN) {
+      if (flag & LIB_ID_COPY_SET_COPIED_ON_WRITE) {
         /* TODO(sergey): Consider passing some tips to the surface
          * creation to avoid this allocate-and-free cache behavior. */
         BKE_ptcache_free_list(&t_surface->ptcaches);
@@ -1721,7 +1708,6 @@ static void dynamicPaint_setInitialColor(const Scene *scene, DynamicPaintSurface
   }
 }
 
-/* clears surface data back to zero */
 void dynamicPaint_clearSurface(const Scene *scene, DynamicPaintSurface *surface)
 {
   PaintSurfaceData *sData = surface->data;
@@ -1751,7 +1737,6 @@ void dynamicPaint_clearSurface(const Scene *scene, DynamicPaintSurface *surface)
   }
 }
 
-/* Completely (re)initializes surface (only for point cache types). */
 bool dynamicPaint_resetSurface(const Scene *scene, DynamicPaintSurface *surface)
 {
   int numOfPoints = dynamicPaint_surfaceNumOfPoints(surface);
@@ -2079,7 +2064,6 @@ static Mesh *dynamicPaint_Modifier_apply(DynamicPaintModifierData *pmd, Object *
   return result;
 }
 
-/* update cache frame range */
 void dynamicPaint_cacheUpdateFrames(DynamicPaintSurface *surface)
 {
   if (surface->pointcache) {
@@ -2189,7 +2173,6 @@ static void dynamicPaint_frameUpdate(DynamicPaintModifierData *pmd,
   }
 }
 
-/* Modifier call. Processes dynamic paint modifier step. */
 Mesh *dynamicPaint_Modifier_do(DynamicPaintModifierData *pmd,
                                struct Depsgraph *depsgraph,
                                Scene *scene,
@@ -3436,7 +3419,7 @@ void dynamicPaint_outputSurfaceImage(DynamicPaintSurface *surface,
 
 /***************************** Ray / Nearest Point Utils ******************************/
 
-/* A modified callback to bvh tree raycast.
+/* A modified callback to bvh tree ray-cast.
  * The tree must have been built using bvhtree_from_mesh_looptri.
  * userdata must be a BVHMeshCallbackUserdata built from the same mesh as the tree.
  *
@@ -4107,7 +4090,7 @@ static void dynamic_paint_paint_mesh_cell_point_cb_ex(
         hit.index = -1;
         hit.dist = brush_radius;
 
-        /* Do a face normal directional raycast, and use that distance */
+        /* Do a face normal directional ray-cast, and use that distance. */
         BLI_bvhtree_ray_cast(
             treeData->tree, ray_start, proj_ray, 0.0f, &hit, mesh_tris_spherecast_dp, treeData);
         if (hit.index != -1) {
@@ -4597,7 +4580,7 @@ static bool dynamicPaint_paintParticles(DynamicPaintSurface *surface,
   }
 
   /*
-   * Build a kd-tree to optimize distance search
+   * Build a KD-tree to optimize distance search
    */
   tree = BLI_kdtree_3d_new(psys->totpart);
 
@@ -5883,8 +5866,7 @@ static void dynamic_paint_surface_pre_step_cb(void *__restrict userdata,
   }
   /* dissolve for float types */
   else if (surface->flags & MOD_DPAINT_DISSOLVE &&
-           (surface->type == MOD_DPAINT_SURFACE_T_DISPLACE ||
-            surface->type == MOD_DPAINT_SURFACE_T_WEIGHT)) {
+           ELEM(surface->type, MOD_DPAINT_SURFACE_T_DISPLACE, MOD_DPAINT_SURFACE_T_WEIGHT)) {
     float *point = &((float *)sData->type_data)[index];
     /* log or linear */
     value_dissolve(
@@ -6370,9 +6352,6 @@ static int dynamicPaint_doStep(Depsgraph *depsgraph,
   return ret;
 }
 
-/**
- * Calculate a single frame and included sub-frames for surface.
- */
 int dynamicPaint_calculateFrame(DynamicPaintSurface *surface,
                                 struct Depsgraph *depsgraph,
                                 Scene *scene,

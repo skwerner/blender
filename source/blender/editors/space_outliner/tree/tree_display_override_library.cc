@@ -34,6 +34,11 @@
 namespace blender::ed::outliner {
 
 /* Convenience/readability. */
+/* Convenience/readability. */
+/* Convenience/readability. */
+/* Convenience/readability. */
+/* Convenience/readability. */
+/* Convenience/readability. */
 template<typename T> using List = ListBaseWrapper<T>;
 
 TreeDisplayOverrideLibrary::TreeDisplayOverrideLibrary(SpaceOutliner &space_outliner)
@@ -186,7 +191,7 @@ short TreeDisplayOverrideLibrary::id_filter_get() const
   return 0;
 }
 
-bool TreeDisplayOverrideLibrary::override_library_id_filter_poll(Library *lib, ID *id) const
+bool TreeDisplayOverrideLibrary::override_library_id_filter_poll(const Library *lib, ID *id) const
 {
   if (id->lib != lib) {
     return false;

@@ -17,10 +17,10 @@
 #pragma once
 
 #include "integrator/pass_accessor.h"
-#include "render/buffers.h"
-#include "render/pass.h"
-#include "util/util_types.h"
-#include "util/util_unique_ptr.h"
+#include "scene/pass.h"
+#include "session/buffers.h"
+#include "util/types.h"
+#include "util/unique_ptr.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -28,7 +28,7 @@ class BufferParams;
 class Device;
 class DeviceScene;
 class Film;
-class GPUDisplay;
+class PathTraceDisplay;
 class RenderBuffers;
 
 class PathTraceWork {
@@ -39,8 +39,8 @@ class PathTraceWork {
 
   /* Create path trace work which fits best the device.
    *
-   * The cancel request flag is used for a cheap check whether cancel is to berformed as soon as
-   * possible. This could be, for rexample, request to cancel rendering on camera navigation in
+   * The cancel request flag is used for a cheap check whether cancel is to be performed as soon as
+   * possible. This could be, for example, request to cancel rendering on camera navigation in
    * viewport. */
   static unique_ptr<PathTraceWork> create(Device *device,
                                           Film *film,
@@ -75,7 +75,10 @@ class PathTraceWork {
 
   /* Render given number of samples as a synchronous blocking call.
    * The samples are added to the render buffer associated with this work. */
-  virtual void render_samples(RenderStatistics &statistics, int start_sample, int samples_num) = 0;
+  virtual void render_samples(RenderStatistics &statistics,
+                              int start_sample,
+                              int samples_num,
+                              int sample_offset) = 0;
 
   /* Copy render result from this work to the corresponding place of the GPU display.
    *
@@ -83,11 +86,9 @@ class PathTraceWork {
    * noisy pass mode will be passed here when it is known that the buffer does not have denoised
    * passes yet (because denoiser did not run). If the denoised pass is requested and denoiser is
    * not used then this function will fall-back to the noisy pass instead. */
-  virtual void copy_to_gpu_display(GPUDisplay *gpu_display,
-                                   PassMode pass_mode,
-                                   int num_samples) = 0;
+  virtual void copy_to_display(PathTraceDisplay *display, PassMode pass_mode, int num_samples) = 0;
 
-  virtual void destroy_gpu_resources(GPUDisplay *gpu_display) = 0;
+  virtual void destroy_gpu_resources(PathTraceDisplay *display) = 0;
 
   /* Copy data from/to given render buffers.
    * Will copy pixels from a corresponding place (from multi-device point of view) of the render
@@ -104,10 +105,10 @@ class PathTraceWork {
    * - Copies work's render buffer to its device. */
   void copy_from_render_buffers(const RenderBuffers *render_buffers);
 
-  /* Special version of the `copy_from_render_buffers()` which only copies denosied passes from the
+  /* Special version of the `copy_from_render_buffers()` which only copies denoised passes from the
    * given render buffers, leaving rest of the passes.
    *
-   * Same notes about device copying aplies to this call as well. */
+   * Same notes about device copying applies to this call as well. */
   void copy_from_denoised_render_buffers(const RenderBuffers *render_buffers);
 
   /* Copy render buffers to/from device using an appropriate device queue when needed so that
@@ -119,7 +120,7 @@ class PathTraceWork {
    * things are executed in order with the `render_samples()`. */
   virtual bool zero_render_buffers() = 0;
 
-  /* Access pixels rendered by this work and copy them to the coresponding location in the
+  /* Access pixels rendered by this work and copy them to the corresponding location in the
    * destination.
    *
    * NOTE: Does not perform copy of buffers from the device. Use `copy_render_tile_from_device()`
@@ -162,8 +163,8 @@ class PathTraceWork {
 
   /* Get destination which offset and stride are configured so that writing to it will write to a
    * proper location of GPU display texture, taking current tile and device slice into account. */
-  PassAccessor::Destination get_gpu_display_destination_template(
-      const GPUDisplay *gpu_display) const;
+  PassAccessor::Destination get_display_destination_template(
+      const PathTraceDisplay *display) const;
 
   /* Device which will be used for path tracing.
    * Note that it is an actual render device (and never is a multi-device). */
@@ -182,7 +183,7 @@ class PathTraceWork {
   unique_ptr<RenderBuffers> buffers_;
 
   /* Effective parameters of the full, big tile, and current work render buffer.
-   * The latter might be different from buffers_->params when there is a resolution divider
+   * The latter might be different from `buffers_->params` when there is a resolution divider
    * involved. */
   BufferParams effective_full_params_;
   BufferParams effective_big_tile_params_;

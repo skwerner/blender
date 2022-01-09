@@ -23,42 +23,53 @@
 
 #include "node_geometry_util.hh"
 
-namespace blender::nodes {
+namespace blender::nodes::node_geo_curve_sample_cc {
 
-static void geo_node_curve_sample_declare(NodeDeclarationBuilder &b)
+NODE_STORAGE_FUNCS(NodeGeometryCurveSample)
+
+static void node_declare(NodeDeclarationBuilder &b)
 {
-  b.add_input<decl::Geometry>("Curve");
-  b.add_input<decl::Float>("Factor").min(0.0f).max(1.0f).subtype(PROP_FACTOR);
-  b.add_input<decl::Float>("Length").min(0.0f).subtype(PROP_DISTANCE);
-
-  b.add_output<decl::Vector>("Position");
-  b.add_output<decl::Vector>("Tangent");
-  b.add_output<decl::Vector>("Normal");
+  b.add_input<decl::Geometry>(N_("Curve"))
+      .only_realized_data()
+      .supported_type(GEO_COMPONENT_TYPE_CURVE);
+  b.add_input<decl::Float>(N_("Factor"))
+      .min(0.0f)
+      .max(1.0f)
+      .subtype(PROP_FACTOR)
+      .supports_field()
+      .make_available([](bNode &node) { node_storage(node).mode = GEO_NODE_CURVE_SAMPLE_FACTOR; });
+  b.add_input<decl::Float>(N_("Length"))
+      .min(0.0f)
+      .subtype(PROP_DISTANCE)
+      .supports_field()
+      .make_available([](bNode &node) { node_storage(node).mode = GEO_NODE_CURVE_SAMPLE_LENGTH; });
+  b.add_output<decl::Vector>(N_("Position")).dependent_field();
+  b.add_output<decl::Vector>(N_("Tangent")).dependent_field();
+  b.add_output<decl::Vector>(N_("Normal")).dependent_field();
 }
 
-static void geo_node_curve_sample_layout(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
+static void node_layout(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
 {
   uiItemR(layout, ptr, "mode", UI_ITEM_R_EXPAND, nullptr, ICON_NONE);
 }
 
-static void geo_node_curve_sample_type_init(bNodeTree *UNUSED(tree), bNode *node)
+static void node_type_init(bNodeTree *UNUSED(tree), bNode *node)
 {
-  NodeGeometryCurveSample *data = (NodeGeometryCurveSample *)MEM_callocN(
-      sizeof(NodeGeometryCurveSample), __func__);
+  NodeGeometryCurveSample *data = MEM_cnew<NodeGeometryCurveSample>(__func__);
   data->mode = GEO_NODE_CURVE_SAMPLE_LENGTH;
   node->storage = data;
 }
 
-static void geo_node_curve_sample_update(bNodeTree *UNUSED(ntree), bNode *node)
+static void node_update(bNodeTree *ntree, bNode *node)
 {
-  const NodeGeometryCurveSample &node_storage = *(NodeGeometryCurveSample *)node->storage;
-  const GeometryNodeCurveSampleMode mode = (GeometryNodeCurveSampleMode)node_storage.mode;
+  const NodeGeometryCurveSample &storage = node_storage(*node);
+  const GeometryNodeCurveSampleMode mode = (GeometryNodeCurveSampleMode)storage.mode;
 
   bNodeSocket *factor = ((bNodeSocket *)node->inputs.first)->next;
   bNodeSocket *length = factor->next;
 
-  nodeSetSocketAvailability(factor, mode == GEO_NODE_CURVE_SAMPLE_FACTOR);
-  nodeSetSocketAvailability(length, mode == GEO_NODE_CURVE_SAMPLE_LENGTH);
+  nodeSetSocketAvailability(ntree, factor, mode == GEO_NODE_CURVE_SAMPLE_FACTOR);
+  nodeSetSocketAvailability(ntree, length, mode == GEO_NODE_CURVE_SAMPLE_LENGTH);
 }
 
 template<typename T> static T sample_with_lookup(const Spline::LookupResult lookup, Span<T> data)
@@ -155,7 +166,7 @@ class SampleCurveFunction : public fn::MultiFunction {
       spline_indices[i] = std::max(index, 0);
     }
 
-    /* Storing lookups in an array is unecessary but will simplify custom attribute transfer. */
+    /* Storing lookups in an array is unnecessary but will simplify custom attribute transfer. */
     Array<Spline::LookupResult> lookups(mask.min_array_size());
     for (const int i : mask) {
       const float length_in_spline = lengths[i] - spline_lengths_[spline_indices[i]];
@@ -198,8 +209,8 @@ class SampleCurveFunction : public fn::MultiFunction {
 static Field<float> get_length_input_field(const GeoNodeExecParams &params,
                                            const float curve_total_length)
 {
-  const NodeGeometryCurveSample &node_storage = *(NodeGeometryCurveSample *)params.node().storage;
-  const GeometryNodeCurveSampleMode mode = (GeometryNodeCurveSampleMode)node_storage.mode;
+  const NodeGeometryCurveSample &storage = node_storage(params.node());
+  const GeometryNodeCurveSampleMode mode = (GeometryNodeCurveSampleMode)storage.mode;
 
   if (mode == GEO_NODE_CURVE_SAMPLE_LENGTH) {
     /* Just make sure the length is in bounds of the curve. */
@@ -227,34 +238,32 @@ static Field<float> get_length_input_field(const GeoNodeExecParams &params,
   return Field<float>(std::move(process_op), 0);
 }
 
-static void geo_node_curve_sample_exec(GeoNodeExecParams params)
+static void node_geo_exec(GeoNodeExecParams params)
 {
   GeometrySet geometry_set = params.extract_input<GeometrySet>("Curve");
 
-  auto return_default = [&]() {
-    params.set_output("Position", fn::make_constant_field<float3>({0.0f, 0.0f, 0.0f}));
-    params.set_output("Tangent", fn::make_constant_field<float3>({0.0f, 0.0f, 0.0f}));
-    params.set_output("Normal", fn::make_constant_field<float3>({0.0f, 0.0f, 0.0f}));
-  };
-
   const CurveComponent *component = geometry_set.get_component_for_read<CurveComponent>();
   if (component == nullptr) {
-    return return_default();
+    params.set_default_remaining_outputs();
+    return;
   }
 
   const CurveEval *curve = component->get_for_read();
   if (curve == nullptr) {
-    return return_default();
+    params.set_default_remaining_outputs();
+    return;
   }
 
   if (curve->splines().is_empty()) {
-    return return_default();
+    params.set_default_remaining_outputs();
+    return;
   }
 
   Array<float> spline_lengths = curve->accumulated_spline_lengths();
   const float total_length = spline_lengths.last();
   if (total_length == 0.0f) {
-    return return_default();
+    params.set_default_remaining_outputs();
+    return;
   }
 
   Field<float> length_field = get_length_input_field(params, total_length);
@@ -269,20 +278,22 @@ static void geo_node_curve_sample_exec(GeoNodeExecParams params)
   params.set_output("Normal", Field<float3>(sample_op, 2));
 }
 
-}  // namespace blender::nodes
+}  // namespace blender::nodes::node_geo_curve_sample_cc
 
 void register_node_type_geo_curve_sample()
 {
+  namespace file_ns = blender::nodes::node_geo_curve_sample_cc;
+
   static bNodeType ntype;
 
-  geo_node_type_base(&ntype, GEO_NODE_CURVE_SAMPLE, "Curve Sample", NODE_CLASS_GEOMETRY, 0);
-  ntype.geometry_node_execute = blender::nodes::geo_node_curve_sample_exec;
-  ntype.declare = blender::nodes::geo_node_curve_sample_declare;
-  node_type_init(&ntype, blender::nodes::geo_node_curve_sample_type_init);
-  node_type_update(&ntype, blender::nodes::geo_node_curve_sample_update);
+  geo_node_type_base(&ntype, GEO_NODE_SAMPLE_CURVE, "Sample Curve", NODE_CLASS_GEOMETRY);
+  ntype.geometry_node_execute = file_ns::node_geo_exec;
+  ntype.declare = file_ns::node_declare;
+  node_type_init(&ntype, file_ns::node_type_init);
+  node_type_update(&ntype, file_ns::node_update);
   node_type_storage(
       &ntype, "NodeGeometryCurveSample", node_free_standard_storage, node_copy_standard_storage);
-  ntype.draw_buttons = blender::nodes::geo_node_curve_sample_layout;
+  ntype.draw_buttons = file_ns::node_layout;
 
   nodeRegisterType(&ntype);
 }

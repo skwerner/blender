@@ -71,7 +71,6 @@
 /** \name Public Utilities
  * \{ */
 
-/* Perform validation for blending/extend settings */
 void ED_nla_postop_refresh(bAnimContext *ac)
 {
   ListBase anim_data = {NULL, NULL};
@@ -205,7 +204,6 @@ void NLA_OT_tweakmode_enter(wmOperatorType *ot)
 /** \name Disable Tweak-Mode Operator
  * \{ */
 
-/* NLA Editor internal API function for exiting tweak-mode. */
 bool nlaedit_disable_tweakmode(bAnimContext *ac, bool do_solo)
 {
   ListBase anim_data = {NULL, NULL};
@@ -402,9 +400,9 @@ static int nlaedit_previewrange_exec(bContext *C, wmOperator *UNUSED(op))
 void NLA_OT_previewrange_set(wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "Auto-Set Preview Range";
+  ot->name = "Set Preview Range to Selected";
   ot->idname = "NLA_OT_previewrange_set";
-  ot->description = "Automatically set Preview Range based on range of keyframes";
+  ot->description = "Set Preview Range based on extends of selected strips";
 
   /* api callbacks */
   ot->exec = nlaedit_previewrange_exec;
@@ -2193,8 +2191,19 @@ static int nlaedit_apply_scale_exec(bContext *C, wmOperator *UNUSED(op))
          * and recalculate the extents of the action now that it has been scaled
          * but leave everything else alone
          */
+        const float start = nlastrip_get_frame(strip, strip->actstart, NLATIME_CONVERT_MAP);
+        const float end = nlastrip_get_frame(strip, strip->actend, NLATIME_CONVERT_MAP);
+
+        if (strip->act->flag & ACT_FRAME_RANGE) {
+          strip->act->frame_start = nlastrip_get_frame(
+              strip, strip->act->frame_start, NLATIME_CONVERT_MAP);
+          strip->act->frame_end = nlastrip_get_frame(
+              strip, strip->act->frame_end, NLATIME_CONVERT_MAP);
+        }
+
         strip->scale = 1.0f;
-        calc_action_range(strip->act, &strip->actstart, &strip->actend, 0);
+        strip->actstart = start;
+        strip->actend = end;
 
         ale->update |= ANIM_UPDATE_DEPS;
       }

@@ -25,20 +25,28 @@ CCL_NAMESPACE_BEGIN
  * This is used for an array the size of the number of shaders in the scene
  * which is not usually huge, so might not be a significant bottleneck. */
 
-#include "util/util_atomic.h"
+#include "util/atomic.h"
 
-#define GPU_PARALLEL_PREFIX_SUM_DEFAULT_BLOCK_SIZE 512
+#ifdef __HIP__
+#  define GPU_PARALLEL_PREFIX_SUM_DEFAULT_BLOCK_SIZE 1024
+#else
+#  define GPU_PARALLEL_PREFIX_SUM_DEFAULT_BLOCK_SIZE 512
+#endif
 
-template<uint blocksize> __device__ void gpu_parallel_prefix_sum(int *values, const int num_values)
+__device__ void gpu_parallel_prefix_sum(const int global_id,
+                                        ccl_global int *counter,
+                                        ccl_global int *prefix_sum,
+                                        const int num_values)
 {
-  if (!(ccl_gpu_block_idx_x == 0 && ccl_gpu_thread_idx_x == 0)) {
+  if (global_id != 0) {
     return;
   }
 
   int offset = 0;
   for (int i = 0; i < num_values; i++) {
-    const int new_offset = offset + values[i];
-    values[i] = offset;
+    const int new_offset = offset + counter[i];
+    prefix_sum[i] = offset;
+    counter[i] = 0;
     offset = new_offset;
   }
 }

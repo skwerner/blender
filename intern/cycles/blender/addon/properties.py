@@ -33,6 +33,7 @@ from math import pi
 # enums
 
 from . import engine
+from . import camera
 
 enum_devices = (
     ('CPU', "CPU", "Use CPU for rendering"),
@@ -72,6 +73,8 @@ enum_panorama_types = (
     ('FISHEYE_EQUISOLID', "Fisheye Equisolid",
                           "Similar to most fisheye modern lens, takes sensor dimensions into consideration"),
     ('MIRRORBALL', "Mirror Ball", "Uses the mirror ball mapping"),
+    ('FISHEYE_LENS_POLYNOMIAL', "Fisheye Lens Polynomial",
+     "Defines the lens projection as polynomial to allow real world camera lenses to be mimicked."),
 )
 
 enum_curve_shape = (
@@ -86,8 +89,8 @@ enum_use_layer_samples = (
 )
 
 enum_sampling_pattern = (
-    ('SOBOL', "Sobol", "Use Sobol random sampling pattern"),
-    ('PROGRESSIVE_MUTI_JITTER', "Progressive Multi-Jitter", "Use Progressive Multi-Jitter random sampling pattern"),
+    ('SOBOL', "Sobol", "Use Sobol random sampling pattern", 0),
+    ('PROGRESSIVE_MULTI_JITTER', "Progressive Multi-Jitter", "Use Progressive Multi-Jitter random sampling pattern", 1),
 )
 
 enum_volume_sampling = (
@@ -111,6 +114,8 @@ enum_device_type = (
     ('CPU', "CPU", "CPU", 0),
     ('CUDA', "CUDA", "CUDA", 1),
     ('OPTIX', "OptiX", "OptiX", 3),
+    ('HIP', "HIP", "HIP", 4),
+    ('METAL', "Metal", "Metal", 5)
 )
 
 enum_texture_limit = (
@@ -123,7 +128,12 @@ enum_texture_limit = (
     ('4096', "4096", "Limit texture size to 4096 pixels", 6),
     ('8192', "8192", "Limit texture size to 8192 pixels", 7),
 )
- 
+
+enum_fast_gi_method = (
+    ('REPLACE', "Replace", "Replace global illumination with ambient occlusion after a specified number of bounces"),
+    ('ADD', "Add", "Add ambient occlusion to diffuse surfaces"),
+)
+
 # NOTE: Identifiers are expected to be an upper case version of identifiers from  `Pass::get_type_enum()`
 enum_view3d_shading_render_pass = (
     ('', "General", ""),
@@ -210,6 +220,12 @@ enum_denoising_prefilter = (
     ('NONE', "None", "No prefiltering, use when guiding passes are noise-free", 1),
     ('FAST', "Fast", "Denoise color and guiding passes together. Improves quality when guiding passes are noisy using least amount of extra processing time", 2),
     ('ACCURATE', "Accurate", "Prefilter noisy guiding passes before denoising color. Improves quality when guiding passes are noisy using extra processing time", 3),
+)
+
+enum_direct_light_sampling_type = (
+    ('MULTIPLE_IMPORTANCE_SAMPLING', "Multiple Importance Sampling", "Multiple importance sampling is used to combine direct light contributions from next-event estimation and forward path tracing", 0),
+    ('FORWARD_PATH_TRACING', "Forward Path Tracing", "Direct light contributions are only sampled using forward path tracing", 1),
+    ('NEXT_EVENT_ESTIMATION', "Next-Event Estimation", "Direct light contributions are only sampled using next-event estimation", 2),
 )
 
 def update_render_passes(self, context):
@@ -319,6 +335,13 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         default=1024,
     )
 
+    sample_offset: IntProperty(
+        name="Sample Offset",
+        description="Number of samples to skip when starting render",
+        min=0, max=(1 << 24),
+        default=0,
+    )
+
     time_limit: FloatProperty(
         name="Time Limit",
         description="Limit the render time (excluding synchronization time)."
@@ -331,9 +354,27 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
 
     sampling_pattern: EnumProperty(
         name="Sampling Pattern",
-        description="Random sampling pattern used by the integrator",
+        description="Random sampling pattern used by the integrator. When adaptive sampling is enabled, Progressive Multi-Jitter is always used instead of Sobol",
         items=enum_sampling_pattern,
-        default='PROGRESSIVE_MUTI_JITTER',
+        default='PROGRESSIVE_MULTI_JITTER',
+    )
+
+    scrambling_distance: FloatProperty(
+        name="Scrambling Distance",
+        default=1.0,
+        min=0.0, max=1.0,
+        description="Reduce randomization between pixels to improve GPU rendering performance, at the cost of possible rendering artifacts if set too low. Only works when not using adaptive sampling",
+    )
+    preview_scrambling_distance: BoolProperty(
+        name="Scrambling Distance viewport",
+        default=False,
+        description="Uses the Scrambling Distance value for the viewport. Faster but may flicker",
+    )
+
+    auto_scrambling_distance: BoolProperty(
+        name="Automatic Scrambling Distance",
+        default=False,
+        description="Automatically reduce the randomization between pixels to improve GPU rendering performance, at the cost of possible rendering artifacts. Only works when not using adaptive sampling",
     )
 
     use_layer_samples: EnumProperty(
@@ -389,6 +430,13 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         description="Minimum AA samples for adaptive sampling, to discover noisy features before stopping sampling. Zero for automatic setting based on noise threshold, for viewport renders",
         min=0, max=4096,
         default=0,
+    )
+
+    direct_light_sampling_type: EnumProperty(
+        name="Direct Light Sampling",
+        description="The type of strategy used for sampling direct light contributions",
+        items=enum_direct_light_sampling_type,
+        default='MULTIPLE_IMPORTANCE_SAMPLING',
     )
 
     min_light_bounces: IntProperty(
@@ -799,6 +847,14 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         description="Approximate diffuse indirect light with background tinted ambient occlusion. This provides fast alternative to full global illumination, for interactive viewport rendering or final renders with reduced quality",
         default=False,
     )
+
+    fast_gi_method: EnumProperty(
+        name="Fast GI Method",
+        default='REPLACE',
+        description="Fast GI approximation method",
+        items=enum_fast_gi_method
+    )
+
     ao_bounces: IntProperty(
         name="AO Bounces",
         default=1,
@@ -814,15 +870,15 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
     )
 
     use_auto_tile: BoolProperty(
-        name="Auto Tiles",
-        description="Automatically split image into tiles",
+        name="Use Tiling",
+        description="Render high resolution images in tiles to reduce memory usage, using the specified tile size. Tiles are cached to disk while rendering to save memory",
         default=True,
     )
     tile_size: IntProperty(
         name="Tile Size",
         default=2048,
         description="",
-        min=0, max=16384,
+        min=8, max=8192,
     )
 
     # Various fine-tuning debug flags
@@ -912,6 +968,32 @@ class CyclesCameraSettings(bpy.types.PropertyGroup):
         min=-pi, max=pi,
         subtype='ANGLE',
         default=pi,
+    )
+
+    fisheye_polynomial_k0: FloatProperty(
+        name="Fisheye Polynomial K0",
+        description="Coefficient K0 of the lens polinomial",
+        default=camera.default_fisheye_polynomial[0], precision=6, step=0.1, subtype='ANGLE',
+    )
+    fisheye_polynomial_k1: FloatProperty(
+        name="Fisheye Polynomial K1",
+        description="Coefficient K1 of the lens polinomial",
+        default=camera.default_fisheye_polynomial[1], precision=6, step=0.1, subtype='ANGLE',
+    )
+    fisheye_polynomial_k2: FloatProperty(
+        name="Fisheye Polynomial K2",
+        description="Coefficient K2 of the lens polinomial",
+        default=camera.default_fisheye_polynomial[2], precision=6, step=0.1, subtype='ANGLE',
+    )
+    fisheye_polynomial_k3: FloatProperty(
+        name="Fisheye Polynomial K3",
+        description="Coefficient K3 of the lens polinomial",
+        default=camera.default_fisheye_polynomial[3], precision=6, step=0.1, subtype='ANGLE',
+    )
+    fisheye_polynomial_k4: FloatProperty(
+        name="Fisheye Polynomial K4",
+        description="Coefficient K4 of the lens polinomial",
+        default=camera.default_fisheye_polynomial[4], precision=6, step=0.1, subtype='ANGLE',
     )
 
     @classmethod
@@ -1272,12 +1354,6 @@ class CyclesCurveRenderSettings(bpy.types.PropertyGroup):
 
 class CyclesRenderLayerSettings(bpy.types.PropertyGroup):
 
-    pass_debug_render_time: BoolProperty(
-        name="Debug Render Time",
-        description="Render time in milliseconds per sample and pixel",
-        default=False,
-        update=update_render_passes,
-    )
     pass_debug_sample_count: BoolProperty(
         name="Debug Sample Count",
         description="Number of samples/camera rays per pixel",
@@ -1342,12 +1418,17 @@ class CyclesPreferences(bpy.types.AddonPreferences):
 
     def get_device_types(self, context):
         import _cycles
-        has_cuda, has_optix = _cycles.get_device_types()
+        has_cuda, has_optix, has_hip, has_metal = _cycles.get_device_types()
         list = [('NONE', "None", "Don't use compute device", 0)]
         if has_cuda:
             list.append(('CUDA', "CUDA", "Use CUDA for GPU acceleration", 1))
         if has_optix:
             list.append(('OPTIX', "OptiX", "Use OptiX for GPU acceleration", 3))
+        if has_hip:
+            list.append(('HIP', "HIP", "Use HIP for GPU acceleration", 4))
+        if has_metal:
+            list.append(('METAL', "Metal", "Use Metal for GPU acceleration", 5))
+
         return list
 
     compute_device_type: EnumProperty(
@@ -1372,7 +1453,7 @@ class CyclesPreferences(bpy.types.AddonPreferences):
 
     def update_device_entries(self, device_list):
         for device in device_list:
-            if not device[1] in {'CUDA', 'OPTIX', 'CPU'}:
+            if not device[1] in {'CUDA', 'OPTIX', 'CPU', 'HIP', 'METAL'}:
                 continue
             # Try to find existing Device entry
             entry = self.find_existing_device_entry(device)
@@ -1406,7 +1487,7 @@ class CyclesPreferences(bpy.types.AddonPreferences):
             elif entry.type == 'CPU':
                 cpu_devices.append(entry)
         # Extend all GPU devices with CPU.
-        if compute_device_type != 'CPU':
+        if len(devices) and compute_device_type != 'CPU':
             devices.extend(cpu_devices)
         return devices
 
@@ -1416,7 +1497,7 @@ class CyclesPreferences(bpy.types.AddonPreferences):
         import _cycles
         # Ensure `self.devices` is not re-allocated when the second call to
         # get_devices_for_type is made, freeing items from the first list.
-        for device_type in ('CUDA', 'OPTIX', 'OPENCL'):
+        for device_type in ('CUDA', 'OPTIX', 'HIP', 'METAL'):
             self.update_device_entries(_cycles.available_devices(device_type))
 
     # Deprecated: use refresh_devices instead.
@@ -1424,12 +1505,18 @@ class CyclesPreferences(bpy.types.AddonPreferences):
         self.refresh_devices()
         return None
 
+    def get_compute_device_type(self):
+        if self.compute_device_type == '':
+            return 'NONE'
+        return self.compute_device_type
+
     def get_num_gpu_devices(self):
         import _cycles
-        device_list = _cycles.available_devices(self.compute_device_type)
+        compute_device_type = self.get_compute_device_type()
+        device_list = _cycles.available_devices(compute_device_type)
         num = 0
         for device in device_list:
-            if device[1] != self.compute_device_type:
+            if device[1] != compute_device_type:
                 continue
             for dev in self.devices:
                 if dev.use and dev.id == device[2]:
@@ -1450,8 +1537,20 @@ class CyclesPreferences(bpy.types.AddonPreferences):
 
         if not found_device:
             col = box.column(align=True)
-            col.label(text="No compatible GPUs found for path tracing", icon='INFO')
-            col.label(text="Cycles will render on the CPU", icon='BLANK1')
+            col.label(text="No compatible GPUs found for Cycles", icon='INFO')
+
+            if device_type == 'CUDA':
+                col.label(text="Requires NVIDIA GPU with compute capability 3.0", icon='BLANK1')
+            elif device_type == 'OPTIX':
+                col.label(text="Requires NVIDIA GPU with compute capability 5.0", icon='BLANK1')
+                col.label(text="and NVIDIA driver version 470 or newer", icon='BLANK1')
+            elif device_type == 'HIP':
+                import sys
+                col.label(text="Requires discrete AMD GPU with RDNA architecture", icon='BLANK1')
+                if sys.platform[:3] == "win":
+                    col.label(text="and AMD Radeon Pro 21.Q4 driver or newer", icon='BLANK1')
+            elif device_type == 'METAL':
+                col.label(text="Requires Apple Silicon and macOS 12.0 or newer", icon='BLANK1')
             return
 
         for device in devices:
@@ -1461,15 +1560,16 @@ class CyclesPreferences(bpy.types.AddonPreferences):
         row = layout.row()
         row.prop(self, "compute_device_type", expand=True)
 
-        if self.compute_device_type == 'NONE':
+        compute_device_type = self.get_compute_device_type()
+        if compute_device_type == 'NONE':
             return
         row = layout.row()
-        devices = self.get_devices_for_type(self.compute_device_type)
-        self._draw_devices(row, self.compute_device_type, devices)
+        devices = self.get_devices_for_type(compute_device_type)
+        self._draw_devices(row, compute_device_type, devices)
 
         import _cycles
         has_peer_memory = 0
-        for device in _cycles.available_devices(self.compute_device_type):
+        for device in _cycles.available_devices(compute_device_type):
             if device[3] and self.find_existing_device_entry(device).use:
                 has_peer_memory += 1
         if has_peer_memory > 1:

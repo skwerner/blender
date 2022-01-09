@@ -16,13 +16,13 @@
 
 #include "integrator/denoiser_device.h"
 
+#include "device/denoise.h"
 #include "device/device.h"
-#include "device/device_denoise.h"
-#include "device/device_memory.h"
-#include "device/device_queue.h"
-#include "render/buffers.h"
-#include "util/util_logging.h"
-#include "util/util_progress.h"
+#include "device/memory.h"
+#include "device/queue.h"
+#include "session/buffers.h"
+#include "util/log.h"
+#include "util/progress.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -77,7 +77,7 @@ bool DeviceDenoiser::denoise_buffer(const BufferParams &buffer_params,
     local_render_buffers.reset(buffer_params);
 
     /* NOTE: The local buffer is allocated for an exact size of the effective render size, while
-     * the input render buffer is allcoated for the lowest resolution divider possible. So it is
+     * the input render buffer is allocated for the lowest resolution divider possible. So it is
      * important to only copy actually needed part of the input buffer. */
     memcpy(local_render_buffers.buffer.data(),
            render_buffers->buffer.data(),

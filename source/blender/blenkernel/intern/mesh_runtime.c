@@ -45,18 +45,46 @@
  * \{ */
 
 /**
- * Default values defined at read time.
+ * \brief Initialize the runtime mutexes of the given mesh.
+ *
+ * Any existing mutexes will be overridden.
  */
-void BKE_mesh_runtime_reset(Mesh *mesh)
+static void mesh_runtime_init_mutexes(Mesh *mesh)
 {
-  memset(&mesh->runtime, 0, sizeof(mesh->runtime));
   mesh->runtime.eval_mutex = MEM_mallocN(sizeof(ThreadMutex), "mesh runtime eval_mutex");
   BLI_mutex_init(mesh->runtime.eval_mutex);
+  mesh->runtime.render_mutex = MEM_mallocN(sizeof(ThreadMutex), "mesh runtime render_mutex");
+  BLI_mutex_init(mesh->runtime.render_mutex);
 }
 
-/* Clear all pointers which we don't want to be shared on copying the datablock.
- * However, keep all the flags which defines what the mesh is (for example, that
- * it's deformed only, or that its custom data layers are out of date.) */
+/**
+ * \brief free the mutexes of the given mesh runtime.
+ */
+static void mesh_runtime_free_mutexes(Mesh *mesh)
+{
+  if (mesh->runtime.eval_mutex != NULL) {
+    BLI_mutex_end(mesh->runtime.eval_mutex);
+    MEM_freeN(mesh->runtime.eval_mutex);
+    mesh->runtime.eval_mutex = NULL;
+  }
+  if (mesh->runtime.render_mutex != NULL) {
+    BLI_mutex_end(mesh->runtime.render_mutex);
+    MEM_freeN(mesh->runtime.render_mutex);
+    mesh->runtime.render_mutex = NULL;
+  }
+}
+
+void BKE_mesh_runtime_init_data(Mesh *mesh)
+{
+  mesh_runtime_init_mutexes(mesh);
+}
+
+void BKE_mesh_runtime_free_data(Mesh *mesh)
+{
+  BKE_mesh_runtime_clear_cache(mesh);
+  mesh_runtime_free_mutexes(mesh);
+}
+
 void BKE_mesh_runtime_reset_on_copy(Mesh *mesh, const int UNUSED(flag))
 {
   Mesh_Runtime *runtime = &mesh->runtime;
@@ -69,17 +97,11 @@ void BKE_mesh_runtime_reset_on_copy(Mesh *mesh, const int UNUSED(flag))
   runtime->bvh_cache = NULL;
   runtime->shrinkwrap_data = NULL;
 
-  mesh->runtime.eval_mutex = MEM_mallocN(sizeof(ThreadMutex), "mesh runtime eval_mutex");
-  BLI_mutex_init(mesh->runtime.eval_mutex);
+  mesh_runtime_init_mutexes(mesh);
 }
 
 void BKE_mesh_runtime_clear_cache(Mesh *mesh)
 {
-  if (mesh->runtime.eval_mutex != NULL) {
-    BLI_mutex_end(mesh->runtime.eval_mutex);
-    MEM_freeN(mesh->runtime.eval_mutex);
-    mesh->runtime.eval_mutex = NULL;
-  }
   if (mesh->runtime.mesh_eval != NULL) {
     mesh->runtime.mesh_eval->edit_mesh = NULL;
     BKE_id_free(NULL, mesh->runtime.mesh_eval);
@@ -90,7 +112,6 @@ void BKE_mesh_runtime_clear_cache(Mesh *mesh)
   BKE_mesh_runtime_clear_edit_data(mesh);
 }
 
-/* This is a ported copy of DM_ensure_looptri_data(dm) */
 /**
  * Ensure the array is large enough
  *
@@ -99,6 +120,7 @@ void BKE_mesh_runtime_clear_cache(Mesh *mesh)
  */
 static void mesh_ensure_looptri_data(Mesh *mesh)
 {
+  /* This is a ported copy of `DM_ensure_looptri_data(dm)`. */
   const uint totpoly = mesh->totpoly;
   const int looptris_len = poly_to_tri_count(totpoly, mesh->totloop);
 
@@ -124,7 +146,6 @@ static void mesh_ensure_looptri_data(Mesh *mesh)
   }
 }
 
-/* This is a ported copy of CDDM_recalc_looptri(dm). */
 void BKE_mesh_runtime_looptri_recalc(Mesh *mesh)
 {
   mesh_ensure_looptri_data(mesh);
@@ -144,9 +165,9 @@ void BKE_mesh_runtime_looptri_recalc(Mesh *mesh)
   mesh->runtime.looptris.array_wip = NULL;
 }
 
-/* This is a ported copy of dm_getNumLoopTri(dm). */
 int BKE_mesh_runtime_looptri_len(const Mesh *mesh)
 {
+  /* This is a ported copy of `dm_getNumLoopTri(dm)`. */
   const int looptri_len = poly_to_tri_count(mesh->totpoly, mesh->totloop);
   BLI_assert(ELEM(mesh->runtime.looptris.len, 0, looptri_len));
   return looptri_len;
@@ -158,11 +179,6 @@ static void mesh_runtime_looptri_recalc_isolated(void *userdata)
   BKE_mesh_runtime_looptri_recalc(mesh);
 }
 
-/**
- * \note This function only fills a cache, and therefore the mesh argument can
- * be considered logically const. Concurrent access is protected by a mutex.
- * \note This is a ported copy of dm_getLoopTriArray(dm).
- */
 const MLoopTri *BKE_mesh_runtime_looptri_ensure(const Mesh *mesh)
 {
   ThreadMutex *mesh_eval_mutex = (ThreadMutex *)mesh->runtime.eval_mutex;
@@ -184,7 +200,6 @@ const MLoopTri *BKE_mesh_runtime_looptri_ensure(const Mesh *mesh)
   return looptri;
 }
 
-/* This is a copy of DM_verttri_from_looptri(). */
 void BKE_mesh_runtime_verttri_from_looptri(MVertTri *r_verttri,
                                            const MLoop *mloop,
                                            const MLoopTri *looptri,
@@ -276,10 +291,10 @@ void BKE_mesh_batch_cache_free(Mesh *me)
 /** \} */
 
 /* -------------------------------------------------------------------- */
-/** \name Mesh runtime debug helpers.
+/** \name Mesh Runtime Debug Helpers
  * \{ */
-/* evaluated mesh info printing function,
- * to help track down differences output */
+
+/* Evaluated mesh info printing function, to help track down differences output. */
 
 #ifndef NDEBUG
 #  include "BLI_dynstr.h"
@@ -374,7 +389,6 @@ void BKE_mesh_runtime_debug_print(Mesh *me_eval)
   MEM_freeN(str);
 }
 
-/* XXX Should go in customdata file? */
 void BKE_mesh_runtime_debug_print_cdlayers(CustomData *data)
 {
   int i;

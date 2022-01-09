@@ -361,17 +361,8 @@ static TaskPool *deg_evaluate_task_pool_create(DepsgraphEvalState *state)
   return BLI_task_pool_create_suspended(state, TASK_PRIORITY_HIGH);
 }
 
-/**
- * Evaluate all nodes tagged for updating,
- * \warning This is usually done as part of main loop, but may also be
- * called from frame-change update.
- *
- * \note Time sources should be all valid!
- */
 void deg_evaluate_on_refresh(Depsgraph *graph)
 {
-  graph_tag_ids_for_visible_update(graph);
-
   /* Nothing to update, early out. */
   if (graph->entry_tags.is_empty()) {
     return;

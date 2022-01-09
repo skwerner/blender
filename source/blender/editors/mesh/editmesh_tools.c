@@ -3706,10 +3706,7 @@ static int edbm_shape_propagate_to_all_exec(bContext *C, wmOperator *op)
     return OPERATOR_CANCELLED;
   }
   if (tot_shapekeys == 0) {
-    BKE_report(op->reports,
-               RPT_ERROR,
-               objects_len > 1 ? "Meshes do not have shape keys" :
-                                 "Mesh does not have shape keys");
+    BKE_report(op->reports, RPT_ERROR, "Mesh(es) do not have shape keys");
     return OPERATOR_CANCELLED;
   }
 
@@ -8229,7 +8226,6 @@ enum {
   EDBM_CLNOR_MODAL_POINTTO_SET_USE_SELECTED = 114,
 };
 
-/* Called in transform_ops.c, on each regeneration of key-maps. */
 wmKeyMap *point_normals_modal_keymap(wmKeyConfig *keyconf)
 {
   static const EnumPropertyItem modal_items[] = {

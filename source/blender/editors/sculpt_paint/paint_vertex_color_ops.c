@@ -48,7 +48,7 @@ static bool vertex_weight_paint_mode_poll(bContext *C)
 {
   Object *ob = CTX_data_active_object(C);
   Mesh *me = BKE_mesh_from_object(ob);
-  return (ob && (ob->mode == OB_MODE_VERTEX_PAINT || ob->mode == OB_MODE_WEIGHT_PAINT)) &&
+  return (ob && (ELEM(ob->mode, OB_MODE_VERTEX_PAINT, OB_MODE_WEIGHT_PAINT))) &&
          (me && me->totpoly && me->dvert);
 }
 
@@ -209,9 +209,6 @@ static void vertex_color_smooth_looptag(Mesh *me, const bool *mlooptag)
   const MPoly *mp;
   int(*scol)[4];
   bool has_shared = false;
-
-  /* if no mloopcol: do not do */
-  /* if mtexpoly: only the involved faces, otherwise all */
 
   if (me->mloopcol == NULL || me->totvert == 0 || me->totpoly == 0) {
     return;

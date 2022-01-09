@@ -283,7 +283,20 @@
     .colorband = NULL, \
   }
 
-#define _DNA_DEFAULT_WeightGpencilModifierData \
+#define _DNA_DEFAULT_WeightProxGpencilModifierData \
+  { \
+    .target_vgname = "", \
+    .material = NULL, \
+    .layername = "", \
+    .vgname = "", \
+    .pass_index = 0, \
+    .flag = 0, \
+    .layer_pass = 0, \
+    .dist_start = 0.0f, \
+    .dist_end = 20.0f, \
+  }
+
+#define _DNA_DEFAULT_WeightAngleGpencilModifierData \
   { \
     .target_vgname = "", \
     .material = NULL, \
@@ -293,8 +306,6 @@
     .flag = 0, \
     .axis = 1, \
     .layer_pass = 0, \
-    .dist_start = 0.0f, \
-    .dist_end = 20.0f, \
   }
 
 #define _DNA_DEFAULT_LineartGpencilModifierData \
@@ -307,16 +318,26 @@
     .calculation_flags = LRT_ALLOW_DUPLI_OBJECTS | LRT_ALLOW_CLIPPING_BOUNDARIES | LRT_USE_CREASE_ON_SHARP_EDGES, \
     .angle_splitting_threshold = DEG2RAD(60.0f), \
     .chaining_image_threshold = 0.001f, \
-    .overscan = 0.1f,\
+    .chain_smooth_tolerance = 0.2f,\
+    .stroke_depth_offset = 0.05,\
   }
 
 #define _DNA_DEFAULT_LengthGpencilModifierData \
   { \
     .start_fac = 0.1f,\
     .end_fac = 0.1f,\
-    .overshoot_fac = 0.01f,\
+    .overshoot_fac = 0.1f,\
     .pass_index = 0,\
     .material = NULL,\
+    .flag = GP_LENGTH_USE_CURVATURE,\
+    .point_density = 30.0f,\
+    .segment_influence = 0.0f,\
+    .max_angle = DEG2RAD(170.0f),\
+    .rand_start_fac = 0.0f,\
+    .rand_end_fac = 0.0f,\
+    .rand_offset = 0.0f,\
+    .seed = 0,\
+    .step = 4,\
   }
 
 #define _DNA_DEFAULT_DashGpencilModifierData \
@@ -335,6 +356,27 @@
     .radius = 1.0f, \
     .opacity = 1.0f, \
     .mat_nr = -1, \
+  }
+
+#define _DNA_DEFAULT_ShrinkwrapGpencilModifierData \
+  { \
+    .target = NULL, \
+    .aux_target = NULL, \
+    .keep_dist = 0.05f, \
+    .shrink_type = MOD_SHRINKWRAP_NEAREST_SURFACE, \
+    .shrink_opts = MOD_SHRINKWRAP_PROJECT_ALLOW_POS_DIR, \
+    .shrink_mode = 0, \
+    .proj_limit = 0.0f, \
+    .proj_axis = 0, \
+    .subsurf_levels = 0, \
+    .material = NULL, \
+    .layername = "", \
+    .vgname = "", \
+    .pass_index = 0, \
+    .flag = 0, \
+    .layer_pass = 0, \
+    .smooth_factor = 0.05f, \
+    .smooth_step = 1, \
   }
 
 

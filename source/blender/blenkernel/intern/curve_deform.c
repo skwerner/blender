@@ -311,7 +311,7 @@ static void curve_deform_coords_impl(const Object *ob_curve,
   } \
   ((void)0)
 
-      /* already in 'cd.curvespace', prev for loop */
+      /* Already in 'cd.curvespace', previous for loop. */
 #define DEFORM_OP_CLAMPED(dvert) \
   { \
     const float weight = invert_vgroup ? 1.0f - BKE_defvert_find_weight(dvert, defgrp_index) : \
@@ -369,7 +369,7 @@ static void curve_deform_coords_impl(const Object *ob_curve,
       }
 
       for (a = 0; a < vert_coords_len; a++) {
-        /* already in 'cd.curvespace', prev for loop */
+        /* Already in 'cd.curvespace', previous for loop. */
         calc_curve_deform(ob_curve, vert_coords[a], defaxis, &cd, NULL);
         mul_m4_v3(cd.objectspace, vert_coords[a]);
       }
@@ -410,12 +410,6 @@ void BKE_curve_deform_coords_with_editmesh(const Object *ob_curve,
                            em_target);
 }
 
-/**
- * \param orco: Input vec and orco = local coord in curve space
- * orco is original not-animated or deformed reference point.
- *
- * The result written in vec and r_mat.
- */
 void BKE_curve_deform_co(const Object *ob_curve,
                          const Object *ob_target,
                          const float orco[3],

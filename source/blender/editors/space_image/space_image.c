@@ -126,13 +126,7 @@ static SpaceLink *image_create(const ScrArea *UNUSED(area), const Scene *UNUSED(
   simage->tile_grid_shape[0] = 1;
   simage->tile_grid_shape[1] = 1;
 
-  /* tool header */
-  region = MEM_callocN(sizeof(ARegion), "tool header for image");
-
-  BLI_addtail(&simage->regionbase, region);
-  region->regiontype = RGN_TYPE_TOOL_HEADER;
-  region->alignment = (U.uiflag & USER_HEADER_BOTTOM) ? RGN_ALIGN_BOTTOM : RGN_ALIGN_TOP;
-  region->flag = RGN_FLAG_HIDDEN | RGN_FLAG_HIDDEN_BY_USER;
+  simage->custom_grid_subdiv = 10;
 
   /* header */
   region = MEM_callocN(sizeof(ARegion), "header for image");
@@ -140,6 +134,14 @@ static SpaceLink *image_create(const ScrArea *UNUSED(area), const Scene *UNUSED(
   BLI_addtail(&simage->regionbase, region);
   region->regiontype = RGN_TYPE_HEADER;
   region->alignment = (U.uiflag & USER_HEADER_BOTTOM) ? RGN_ALIGN_BOTTOM : RGN_ALIGN_TOP;
+
+  /* tool header */
+  region = MEM_callocN(sizeof(ARegion), "tool header for image");
+
+  BLI_addtail(&simage->regionbase, region);
+  region->regiontype = RGN_TYPE_TOOL_HEADER;
+  region->alignment = (U.uiflag & USER_HEADER_BOTTOM) ? RGN_ALIGN_BOTTOM : RGN_ALIGN_TOP;
+  region->flag = RGN_FLAG_HIDDEN | RGN_FLAG_HIDDEN_BY_USER;
 
   /* buttons/list view */
   region = MEM_callocN(sizeof(ARegion), "buttons for image");
@@ -256,7 +258,7 @@ static void image_keymap(struct wmKeyConfig *keyconf)
 static bool image_drop_poll(bContext *C, wmDrag *drag, const wmEvent *event)
 {
   ScrArea *area = CTX_wm_area(C);
-  if (ED_region_overlap_isect_any_xy(area, &event->x)) {
+  if (ED_region_overlap_isect_any_xy(area, event->xy)) {
     return false;
   }
   if (drag->type == WM_DRAG_PATH) {
@@ -295,7 +297,7 @@ static void image_refresh(const bContext *C, ScrArea *area)
   ima = ED_space_image(sima);
   BKE_image_user_frame_calc(ima, &sima->iuser, scene->r.cfra);
 
-  /* check if we have to set the image from the editmesh */
+  /* Check if we have to set the image from the edit-mesh. */
   if (ima && (ima->source == IMA_SRC_VIEWER && sima->mode == SI_MODE_MASK)) {
     if (scene->nodetree) {
       Mask *mask = ED_space_image_get_mask(sima);
@@ -1040,7 +1042,6 @@ static void image_space_subtype_item_extend(bContext *UNUSED(C),
 
 /**************************** spacetype *****************************/
 
-/* only called once, from space/spacetypes.c */
 void ED_spacetype_image(void)
 {
   SpaceType *st = MEM_callocN(sizeof(SpaceType), "spacetype image");

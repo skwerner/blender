@@ -729,13 +729,6 @@ extern GHOST_TSuccess GHOST_ReleaseOpenGLContext(GHOST_ContextHandle contexthand
 extern unsigned int GHOST_GetContextDefaultOpenGLFramebuffer(GHOST_ContextHandle contexthandle);
 
 /**
- * Returns whether a context is rendered upside down compared to OpenGL. This only needs to be
- * called if there's a non-OpenGL context, which is really the exception.
- * So generally, this does not need to be called.
- */
-extern int GHOST_isUpsideDownContext(GHOST_ContextHandle contexthandle);
-
-/**
  * Get the OpenGL frame-buffer handle that serves as a default frame-buffer.
  */
 extern unsigned int GHOST_GetDefaultOpenGLFramebuffer(GHOST_WindowHandle windwHandle);
@@ -1139,6 +1132,30 @@ unsigned int GHOST_XrGetActionCount(GHOST_XrContextHandle xr_context, const char
 void GHOST_XrGetActionCustomdataArray(GHOST_XrContextHandle xr_context,
                                       const char *action_set_name,
                                       void **r_customdata_array);
+
+/* controller model */
+/**
+ * Load the OpenXR controller model.
+ */
+int GHOST_XrLoadControllerModel(GHOST_XrContextHandle xr_context, const char *subaction_path);
+
+/**
+ * Unload the OpenXR controller model.
+ */
+void GHOST_XrUnloadControllerModel(GHOST_XrContextHandle xr_context, const char *subaction_path);
+
+/**
+ * Update component transforms for the OpenXR controller model.
+ */
+int GHOST_XrUpdateControllerModelComponents(GHOST_XrContextHandle xr_context,
+                                            const char *subaction_path);
+
+/**
+ * Get vertex data for the OpenXR controller model.
+ */
+int GHOST_XrGetControllerModelData(GHOST_XrContextHandle xr_context,
+                                   const char *subaction_path,
+                                   GHOST_XrControllerModelData *r_data);
 
 #endif /* WITH_XR_OPENXR */
 

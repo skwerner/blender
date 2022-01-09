@@ -188,3 +188,37 @@ bool ED_region_contains_xy(const ARegion *region, const int event_xy[2])
   }
   return false;
 }
+
+ARegion *ED_area_find_region_xy_visual(const ScrArea *area,
+                                       const int regiontype,
+                                       const int event_xy[2])
+{
+  if (!area) {
+    return NULL;
+  }
+
+  /* Check overlapped regions first. */
+  LISTBASE_FOREACH (ARegion *, region, &area->regionbase) {
+    if (!region->overlap) {
+      continue;
+    }
+    if (ELEM(regiontype, RGN_TYPE_ANY, region->regiontype)) {
+      if (ED_region_contains_xy(region, event_xy)) {
+        return region;
+      }
+    }
+  }
+  /* Now non-overlapping ones. */
+  LISTBASE_FOREACH (ARegion *, region, &area->regionbase) {
+    if (region->overlap) {
+      continue;
+    }
+    if (ELEM(regiontype, RGN_TYPE_ANY, region->regiontype)) {
+      if (ED_region_contains_xy(region, event_xy)) {
+        return region;
+      }
+    }
+  }
+
+  return NULL;
+}

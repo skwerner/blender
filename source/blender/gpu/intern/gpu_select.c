@@ -20,8 +20,8 @@
 /** \file
  * \ingroup gpu
  *
- * Interface for accessing gpu-related methods for selection. The semantics are
- * similar to glRenderMode(GL_SELECT) from older OpenGL versions.
+ * Interface for accessing GPU-related methods for selection. The semantics are
+ * similar to `glRenderMode(GL_SELECT)` from older OpenGL versions.
  */
 #include <stdlib.h>
 #include <string.h>
@@ -37,6 +37,10 @@
 #include "BLI_utildefines.h"
 
 #include "gpu_select_private.h"
+
+/* -------------------------------------------------------------------- */
+/** \name Internal Types
+ * \{ */
 
 /* Internal algorithm used */
 enum {
@@ -61,9 +65,12 @@ typedef struct GPUSelectState {
 
 static GPUSelectState g_select_state = {0};
 
-/**
- * initialize and provide buffer for results
- */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Public API
+ * \{ */
+
 void GPU_select_begin(uint *buffer, uint bufsize, const rcti *input, char mode, int oldhits)
 {
   if (mode == GPU_SELECT_NEAREST_SECOND_PASS) {
@@ -97,14 +104,6 @@ void GPU_select_begin(uint *buffer, uint bufsize, const rcti *input, char mode, 
   }
 }
 
-/**
- * loads a new selection id and ends previous query, if any.
- * In second pass of selection it also returns
- * if id has been hit on the first pass already.
- * Thus we can skip drawing un-hit objects.
- *
- * \warning We rely on the order of object rendering on passes to be the same for this to work.
- */
 bool GPU_select_load_id(uint id)
 {
   /* if no selection mode active, ignore */
@@ -123,11 +122,6 @@ bool GPU_select_load_id(uint id)
   }
 }
 
-/**
- * Cleanup and flush selection results to buffer.
- * Return number of hits and hits in buffer.
- * if \a dopass is true, we will do a second pass with occlusion queries to get the closest hit.
- */
 uint GPU_select_end(void)
 {
   uint hits = 0;
@@ -149,12 +143,14 @@ uint GPU_select_end(void)
   return hits;
 }
 
-/* ----------------------------------------------------------------------------
- * Caching
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Caching
  *
  * Support multiple begin/end's as long as they are within the initial region.
- * Currently only used by ALGO_GL_PICK.
- */
+ * Currently only used by #ALGO_GL_PICK.
+ * \{ */
 
 void GPU_select_cache_begin(void)
 {
@@ -187,16 +183,12 @@ bool GPU_select_is_cached(void)
   return g_select_state.use_cache && gpu_select_pick_is_cached();
 }
 
-/* ----------------------------------------------------------------------------
- * Utilities
- */
+/** \} */
 
-/**
- * Helper function, nothing special but avoids doing inline since hits aren't sorted by depth
- * and purpose of 4x buffer indices isn't so clear.
- *
- * Note that comparing depth as uint is fine.
- */
+/* -------------------------------------------------------------------- */
+/** \name Utilities
+ * \{ */
+
 const uint *GPU_select_buffer_near(const uint *buffer, int hits)
 {
   const uint *buffer_near = NULL;
@@ -230,7 +222,6 @@ uint GPU_select_buffer_remove_by_id(uint *buffer, int hits, uint select_id)
   return hits_final;
 }
 
-/* Part of the solution copied from `rect_subregion_stride_calc`. */
 void GPU_select_buffer_stride_realign(const rcti *src, const rcti *dst, uint *r_buf)
 {
   const int x = dst->xmin - src->xmin;
@@ -269,3 +260,5 @@ void GPU_select_buffer_stride_realign(const rcti *src, const rcti *dst, uint *r_
   }
   memset(r_buf, 0, (last_px_id + 1) * sizeof(*r_buf));
 }
+
+/** \} */

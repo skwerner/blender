@@ -96,6 +96,7 @@ class CPPType : NonCopyable, NonMovable {
   int64_t size_ = 0;
   int64_t alignment_ = 0;
   uintptr_t alignment_mask_ = 0;
+  bool is_trivial_ = false;
   bool is_trivially_destructible_ = false;
   bool has_special_member_functions_ = false;
 
@@ -204,6 +205,18 @@ class CPPType : NonCopyable, NonMovable {
   bool is_trivially_destructible() const
   {
     return is_trivially_destructible_;
+  }
+
+  /**
+   * When true, the value is like a normal C type, it can be copied around with #memcpy and does
+   * not have to be destructed.
+   *
+   * C++ equivalent:
+   *   std::is_trivial_v<T>;
+   */
+  bool is_trivial() const
+  {
+    return is_trivial_;
   }
 
   bool is_default_constructible() const
@@ -340,7 +353,6 @@ class CPPType : NonCopyable, NonMovable {
    */
   void copy_assign(const void *src, void *dst) const
   {
-    BLI_assert(src != dst);
     BLI_assert(this->pointer_can_point_to_instance(src));
     BLI_assert(this->pointer_can_point_to_instance(dst));
 
@@ -371,7 +383,7 @@ class CPPType : NonCopyable, NonMovable {
    */
   void copy_construct(const void *src, void *dst) const
   {
-    BLI_assert(src != dst);
+    BLI_assert(src != dst || is_trivial_);
     BLI_assert(this->pointer_can_point_to_instance(src));
     BLI_assert(this->pointer_can_point_to_instance(dst));
 
@@ -402,7 +414,6 @@ class CPPType : NonCopyable, NonMovable {
    */
   void move_assign(void *src, void *dst) const
   {
-    BLI_assert(src != dst);
     BLI_assert(this->pointer_can_point_to_instance(src));
     BLI_assert(this->pointer_can_point_to_instance(dst));
 
@@ -433,7 +444,7 @@ class CPPType : NonCopyable, NonMovable {
    */
   void move_construct(void *src, void *dst) const
   {
-    BLI_assert(src != dst);
+    BLI_assert(src != dst || is_trivial_);
     BLI_assert(this->pointer_can_point_to_instance(src));
     BLI_assert(this->pointer_can_point_to_instance(dst));
 
@@ -464,7 +475,7 @@ class CPPType : NonCopyable, NonMovable {
    */
   void relocate_assign(void *src, void *dst) const
   {
-    BLI_assert(src != dst);
+    BLI_assert(src != dst || is_trivial_);
     BLI_assert(this->pointer_can_point_to_instance(src));
     BLI_assert(this->pointer_can_point_to_instance(dst));
 
@@ -495,7 +506,7 @@ class CPPType : NonCopyable, NonMovable {
    */
   void relocate_construct(void *src, void *dst) const
   {
-    BLI_assert(src != dst);
+    BLI_assert(src != dst || is_trivial_);
     BLI_assert(this->pointer_can_point_to_instance(src));
     BLI_assert(this->pointer_can_point_to_instance(dst));
 

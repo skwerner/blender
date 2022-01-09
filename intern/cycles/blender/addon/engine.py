@@ -28,7 +28,7 @@ def _configure_argument_parser():
                         action='store_true')
     parser.add_argument("--cycles-device",
                         help="Set the device to use for Cycles, overriding user preferences and the scene setting."
-                             "Valid options are 'CPU', 'CUDA' or 'OPTIX'."
+                             "Valid options are 'CPU', 'CUDA', 'OPTIX', 'HIP' or 'METAL'."
                              "Additionally, you can append '+CPU' to any GPU type for hybrid rendering.",
                         default=None)
     return parser
@@ -211,7 +211,6 @@ def list_render_passes(scene, srl):
     if crl.use_pass_shadow_catcher:        yield ("Shadow Catcher",      "RGB",  'COLOR')
 
     # Debug passes.
-    if crl.pass_debug_render_time:             yield ("Debug Render Time",             "X",   'VALUE')
     if crl.pass_debug_sample_count:            yield ("Debug Sample Count",            "X",   'VALUE')
 
     # Cryptomatte passes.
@@ -234,6 +233,7 @@ def list_render_passes(scene, srl):
     if crl.denoising_store_passes:
         yield ("Denoising Normal",          "XYZ", 'VECTOR')
         yield ("Denoising Albedo",          "RGB", 'COLOR')
+        yield ("Denoising Depth",           "Z", 'VALUE')
 
     # Custom AOV passes.
     for aov in srl.aovs:

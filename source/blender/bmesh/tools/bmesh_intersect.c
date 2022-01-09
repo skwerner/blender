@@ -901,7 +901,7 @@ static int isect_bvhtree_point_v3(BVHTree *tree, const float **looptris, const f
   const float dir[3] = {1.0f, 0.0f, 0.0f};
 
   /* Need to initialize hit even tho it's not used.
-   * This is to make it so kd-tree believes we didn't intersect anything and
+   * This is to make it so KD-tree believes we didn't intersect anything and
    * keeps calling the intersect callback.
    */
   hit.index = -1;
@@ -947,14 +947,6 @@ static int isect_bvhtree_point_v3(BVHTree *tree, const float **looptris, const f
 
 #endif /* USE_BVH */
 
-/**
- * Intersect tessellated faces
- * leaving the resulting edges tagged.
- *
- * \param test_fn: Return value: -1: skip, 0: tree_a, 1: tree_b (use_self == false)
- * \param boolean_mode: -1: no-boolean, 0: intersection... see #BMESH_ISECT_BOOLEAN_ISECT.
- * \return true if the mesh is changed (intersections cut or faces removed from boolean).
- */
 bool BM_mesh_intersect(BMesh *bm,
                        struct BMLoop *(*looptris)[3],
                        const int looptris_tot,

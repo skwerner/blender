@@ -98,7 +98,6 @@ void initNumInput(NumInput *n)
   n->str_cur = 0;
 }
 
-/* str must be NUM_STR_REP_LEN * (idx_max + 1) length. */
 void outputNumInput(NumInput *n, char *str, UnitSettings *unit_settings)
 {
   short j;
@@ -201,9 +200,6 @@ bool hasNumInput(const NumInput *n)
   return false;
 }
 
-/**
- * \warning \a vec must be set beforehand otherwise we risk uninitialized vars.
- */
 bool applyNumInput(NumInput *n, float *vec)
 {
   short i, j;
@@ -472,8 +468,7 @@ bool handleNumInput(bContext *C, NumInput *n, const wmEvent *event)
       return true;
     case EVT_PADPERIOD:
     case EVT_PERIODKEY:
-      /* Force numdot, some OSs/countries generate a comma char in this case,
-       * sic...  (T37992) */
+      /* Force number-pad "." since some OS's/countries generate a comma char, see: T37992 */
       ascii[0] = '.';
       utf8_buf = ascii;
       break;

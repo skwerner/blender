@@ -27,7 +27,7 @@
 define HELP_TEXT
 
 Blender Convenience Targets
-   Provided for building Blender, (multiple at once can be used).
+   Provided for building Blender (multiple targets can be used at once).
 
    * debug:         Build a debug binary.
    * full:          Enable all supported dependencies & options.
@@ -40,6 +40,8 @@ Blender Convenience Targets
    * ninja:         Use ninja build tool for faster builds.
    * ccache:        Use ccache for faster rebuilds.
 
+   Note: when passing in multiple targets their order is not important.
+   So for a fast build you can for e.g. run 'make lite ccache ninja'.
    Note: passing the argument 'BUILD_DIR=path' when calling make will override the default build dir.
    Note: passing the argument 'BUILD_CMAKE_ARGS=args' lets you add cmake arguments.
 
@@ -49,7 +51,7 @@ Other Convenience Targets
    * config:        Run cmake configuration tool to set build options.
    * deps:          Build library dependencies (intended only for platform maintainers).
 
-                    The existance of locally build dependancies overrides the pre-built dependencies from subversion.
+                    The existance of locally build dependencies overrides the pre-built dependencies from subversion.
                     These must be manually removed from '../lib/' to go back to using the pre-compiled libraries.
 
 Project Files

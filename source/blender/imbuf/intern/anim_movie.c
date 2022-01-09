@@ -58,6 +58,8 @@
 #include "BLI_threads.h"
 #include "BLI_utildefines.h"
 
+#include "DNA_scene_types.h"
+
 #include "MEM_guardedalloc.h"
 
 #ifdef WITH_AVI
@@ -939,14 +941,36 @@ static void ffmpeg_postprocess(struct anim *anim)
   }
 }
 
-/* decode one video frame also considering the packet read into cur_packet */
+static void ffmpeg_decode_store_frame_pts(struct anim *anim)
+{
+  anim->cur_pts = av_get_pts_from_frame(anim->pFrame);
 
+  if (anim->pFrame->key_frame) {
+    anim->cur_key_frame_pts = anim->cur_pts;
+  }
+
+  av_log(anim->pFormatCtx,
+         AV_LOG_DEBUG,
+         "  FRAME DONE: cur_pts=%" PRId64 ", guessed_pts=%" PRId64 "\n",
+         (anim->pFrame->pts == AV_NOPTS_VALUE) ? -1 : (int64_t)anim->pFrame->pts,
+         (int64_t)anim->cur_pts);
+}
+
+/* decode one video frame also considering the packet read into cur_packet */
 static int ffmpeg_decode_video_frame(struct anim *anim)
 {
-  int rval = 0;
-
   av_log(anim->pFormatCtx, AV_LOG_DEBUG, "  DECODE VIDEO FRAME\n");
 
+  /* Sometimes, decoder returns more than one frame per sent packet. Check if frames are available.
+   * This frames must be read, otherwise decoding will fail. See T91405. */
+  anim->pFrameComplete = avcodec_receive_frame(anim->pCodecCtx, anim->pFrame) == 0;
+  if (anim->pFrameComplete) {
+    av_log(anim->pFormatCtx, AV_LOG_DEBUG, "  DECODE FROM CODEC BUFFER\n");
+    ffmpeg_decode_store_frame_pts(anim);
+    return 1;
+  }
+
+  int rval = 0;
   if (anim->cur_packet->stream_index == anim->videoStream) {
     av_packet_unref(anim->cur_packet);
     anim->cur_packet->stream_index = -1;
@@ -963,22 +987,11 @@ static int ffmpeg_decode_video_frame(struct anim *anim)
            (anim->cur_packet->pts == AV_NOPTS_VALUE) ? -1 : (int64_t)anim->cur_packet->pts,
            (anim->cur_packet->flags & AV_PKT_FLAG_KEY) ? " KEY" : "");
     if (anim->cur_packet->stream_index == anim->videoStream) {
-      anim->pFrameComplete = 0;
-
       avcodec_send_packet(anim->pCodecCtx, anim->cur_packet);
       anim->pFrameComplete = avcodec_receive_frame(anim->pCodecCtx, anim->pFrame) == 0;
 
       if (anim->pFrameComplete) {
-        anim->cur_pts = av_get_pts_from_frame(anim->pFrame);
-
-        if (anim->pFrame->key_frame) {
-          anim->cur_key_frame_pts = anim->cur_pts;
-        }
-        av_log(anim->pFormatCtx,
-               AV_LOG_DEBUG,
-               "  FRAME DONE: cur_pts=%" PRId64 ", guessed_pts=%" PRId64 "\n",
-               (anim->pFrame->pts == AV_NOPTS_VALUE) ? -1 : (int64_t)anim->pFrame->pts,
-               (int64_t)anim->cur_pts);
+        ffmpeg_decode_store_frame_pts(anim);
         break;
       }
     }
@@ -988,22 +1001,11 @@ static int ffmpeg_decode_video_frame(struct anim *anim)
 
   if (rval == AVERROR_EOF) {
     /* Flush any remaining frames out of the decoder. */
-    anim->pFrameComplete = 0;
-
     avcodec_send_packet(anim->pCodecCtx, NULL);
     anim->pFrameComplete = avcodec_receive_frame(anim->pCodecCtx, anim->pFrame) == 0;
 
     if (anim->pFrameComplete) {
-      anim->cur_pts = av_get_pts_from_frame(anim->pFrame);
-
-      if (anim->pFrame->key_frame) {
-        anim->cur_key_frame_pts = anim->cur_pts;
-      }
-      av_log(anim->pFormatCtx,
-             AV_LOG_DEBUG,
-             "  FRAME DONE (after EOF): cur_pts=%" PRId64 ", guessed_pts=%" PRId64 "\n",
-             (anim->pFrame->pts == AV_NOPTS_VALUE) ? -1 : (int64_t)anim->pFrame->pts,
-             (int64_t)anim->cur_pts);
+      ffmpeg_decode_store_frame_pts(anim);
       rval = 0;
     }
   }
@@ -1443,7 +1445,15 @@ static ImBuf *ffmpeg_fetchibuf(struct anim *anim, int position, IMB_Timecode_Typ
    *
    * The issue was reported to FFmpeg under ticket #8747 in the FFmpeg tracker
    * and is fixed in the newer versions than 4.3.1. */
-  anim->cur_frame_final = IMB_allocImBuf(anim->x, anim->y, 32, 0);
+
+  const AVPixFmtDescriptor *pix_fmt_descriptor = av_pix_fmt_desc_get(anim->pCodecCtx->pix_fmt);
+
+  int planes = R_IMF_PLANES_RGBA;
+  if ((pix_fmt_descriptor->flags & AV_PIX_FMT_FLAG_ALPHA) == 0) {
+    planes = R_IMF_PLANES_RGB;
+  }
+
+  anim->cur_frame_final = IMB_allocImBuf(anim->x, anim->y, planes, 0);
   anim->cur_frame_final->rect = MEM_mallocN_aligned(
       (size_t)4 * anim->x * anim->y, 32, "ffmpeg ibuf");
   anim->cur_frame_final->mall |= IB_rect;
@@ -1496,16 +1506,16 @@ static void free_anim_ffmpeg(struct anim *anim)
 
 #endif
 
-/* Try next picture to read */
-/* No picture, try to open next animation */
-/* Succeed, remove first image from animation */
-
-static ImBuf *anim_getnew(struct anim *anim)
+/**
+ * Try to initialize the #anim struct.
+ * Returns true on success.
+ */
+static bool anim_getnew(struct anim *anim)
 {
-  struct ImBuf *ibuf = NULL;
-
+  BLI_assert(anim->curtype == ANIM_NONE);
   if (anim == NULL) {
-    return NULL;
+    /* Nothing to initialize. */
+    return false;
   }
 
   free_anim_movie(anim);
@@ -1518,44 +1528,43 @@ static ImBuf *anim_getnew(struct anim *anim)
   free_anim_ffmpeg(anim);
 #endif
 
-  if (anim->curtype != 0) {
-    return NULL;
-  }
   anim->curtype = imb_get_anim_type(anim->name);
 
   switch (anim->curtype) {
-    case ANIM_SEQUENCE:
-      ibuf = IMB_loadiffname(anim->name, anim->ib_flags, anim->colorspace);
+    case ANIM_SEQUENCE: {
+      ImBuf *ibuf = IMB_loadiffname(anim->name, anim->ib_flags, anim->colorspace);
       if (ibuf) {
         BLI_strncpy(anim->first, anim->name, sizeof(anim->first));
         anim->duration_in_frames = 1;
+        IMB_freeImBuf(ibuf);
+      }
+      else {
+        return false;
       }
       break;
+    }
     case ANIM_MOVIE:
       if (startmovie(anim)) {
-        return NULL;
+        return false;
       }
-      ibuf = IMB_allocImBuf(anim->x, anim->y, 24, 0); /* fake */
       break;
 #ifdef WITH_AVI
     case ANIM_AVI:
       if (startavi(anim)) {
         printf("couldn't start avi\n");
-        return NULL;
+        return false;
       }
-      ibuf = IMB_allocImBuf(anim->x, anim->y, 24, 0);
       break;
 #endif
 #ifdef WITH_FFMPEG
     case ANIM_FFMPEG:
       if (startffmpeg(anim)) {
-        return 0;
+        return false;
       }
-      ibuf = IMB_allocImBuf(anim->x, anim->y, 24, 0);
       break;
 #endif
   }
-  return ibuf;
+  return true;
 }
 
 struct ImBuf *IMB_anim_previewframe(struct anim *anim)
@@ -1589,14 +1598,10 @@ struct ImBuf *IMB_anim_absolute(struct anim *anim,
   filter_y = (anim->ib_flags & IB_animdeinterlace);
 
   if (preview_size == IMB_PROXY_NONE) {
-    if (anim->curtype == 0) {
-      ibuf = anim_getnew(anim);
-      if (ibuf == NULL) {
+    if (anim->curtype == ANIM_NONE) {
+      if (!anim_getnew(anim)) {
         return NULL;
       }
-
-      IMB_freeImBuf(ibuf); /* ???? */
-      ibuf = NULL;
     }
 
     if (position < 0) {

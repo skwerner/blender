@@ -46,7 +46,6 @@
 
 #include "eevee_private.h"
 
-/* Return true if init properly. */
 bool EEVEE_render_init(EEVEE_Data *ved, RenderEngine *engine, struct Depsgraph *depsgraph)
 {
   EEVEE_Data *vedata = (EEVEE_Data *)ved;
@@ -194,7 +193,6 @@ void EEVEE_render_cache_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
   EEVEE_cryptomatte_cache_init(sldata, vedata);
 }
 
-/* Used by light cache. in this case engine is NULL. */
 void EEVEE_render_cache(void *vedata,
                         struct Object *ob,
                         struct RenderEngine *engine,
@@ -240,7 +238,7 @@ void EEVEE_render_cache(void *vedata,
   }
 
   if (ob_visibility & OB_VISIBLE_SELF) {
-    if (ELEM(ob->type, OB_MESH, OB_CURVE, OB_SURF, OB_FONT, OB_MBALL)) {
+    if (ELEM(ob->type, OB_MESH, OB_SURF, OB_MBALL)) {
       EEVEE_materials_cache_populate(vedata, sldata, ob, &cast_shadow);
       if (do_cryptomatte) {
         EEVEE_cryptomatte_cache_populate(data, sldata, ob);

@@ -51,8 +51,8 @@
 #  include "BLI_mesh_boolean.hh"
 
 #  ifdef WITH_TBB
-#    include "tbb/parallel_reduce.h"
-#    include "tbb/spin_mutex.h"
+#    include <tbb/parallel_reduce.h>
+#    include <tbb/spin_mutex.h>
 #  endif
 
 // #  define PERFDEBUG
@@ -1370,6 +1370,11 @@ static bool is_pwn(const IMesh &tm, const TriMeshTopology &tmtopo)
   }
 
   threading::parallel_for(tris.index_range(), 2048, [&](IndexRange range) {
+    if (!is_pwn.load()) {
+      /* Early out if mesh is already determined to be non-pwn. */
+      return;
+    }
+
     for (int j : range) {
       const Edge &edge = tris[j].first;
       int tot_orient = 0;
@@ -1395,9 +1400,7 @@ static bool is_pwn(const IMesh &tm, const TriMeshTopology &tmtopo)
           std::cout << "edge causing non-pwn: " << edge << "\n";
         }
         is_pwn = false;
-#  ifdef WITH_TBB
-        tbb::task::self().cancel_group_execution();
-#  endif
+        break;
       }
     }
   });
@@ -3673,10 +3676,6 @@ static void dump_test_spec(IMesh &imesh)
   }
 }
 
-/**
- * Do the boolean operation op on the polygon mesh imesh_in.
- * See the header file for a complete description.
- */
 IMesh boolean_mesh(IMesh &imesh,
                    BoolOpType op,
                    int nshapes,

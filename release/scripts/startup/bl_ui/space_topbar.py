@@ -481,6 +481,7 @@ class TOPBAR_MT_file_export(Menu):
     bl_owner_use_filter = False
 
     def draw(self, _context):
+        self.layout.operator("wm.obj_export", text="Wavefront OBJ (.obj) - New")
         if bpy.app.build_options.collada:
             self.layout.operator("wm.collada_export",
                                  text="Collada (Default) (.dae)")
@@ -588,7 +589,7 @@ class TOPBAR_MT_edit(Menu):
 
         layout.separator()
 
-        layout.operator("ed.undo_history", text="Undo History...")
+        layout.menu("TOPBAR_MT_undo_history")
 
         layout.separator()
 
@@ -634,6 +635,8 @@ class TOPBAR_MT_window(Menu):
 
         layout = self.layout
 
+        operator_context_default = layout.operator_context
+
         layout.operator("wm.window_new")
         layout.operator("wm.window_new_main")
 
@@ -655,7 +658,14 @@ class TOPBAR_MT_window(Menu):
         layout.separator()
 
         layout.operator("screen.screenshot")
+
+        # Showing the status in the area doesn't work well in this case.
+        # - From the top-bar, the text replaces the file-menu (not so bad but strange).
+        # - From menu-search it replaces the area that the user may want to screen-shot.
+        # Setting the context to screen causes the status to show in the global status-bar.
+        layout.operator_context = 'INVOKE_SCREEN'
         layout.operator("screen.screenshot_area")
+        layout.operator_context = operator_context_default
 
         if sys.platform[:3] == "win":
             layout.separator()

@@ -230,14 +230,6 @@ static bool binary_search_anim_path(const float *accum_len_arr,
   }
 }
 
-/**
- * Calculate the deformation implied by the curve path at a given parametric position,
- * and returns whether this operation succeeded.
- *
- * \param ctime: Time is normalized range <0-1>.
- *
- * \return success.
- */
 bool BKE_where_on_path(const Object *ob,
                        float ctime,
                        float r_vec[4],
@@ -252,6 +244,10 @@ bool BKE_where_on_path(const Object *ob,
   Curve *cu = ob->data;
   if (ob->runtime.curve_cache == NULL) {
     CLOG_WARN(&LOG, "No curve cache!");
+    return false;
+  }
+  if (ob->runtime.curve_cache->anim_path_accum_length == NULL) {
+    CLOG_WARN(&LOG, "No anim path!");
     return false;
   }
   /* We only use the first curve. */

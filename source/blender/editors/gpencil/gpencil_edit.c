@@ -51,6 +51,7 @@
 
 #include "BKE_brush.h"
 #include "BKE_context.h"
+#include "BKE_deform.h"
 #include "BKE_global.h"
 #include "BKE_gpencil.h"
 #include "BKE_gpencil_curve.h"
@@ -1381,11 +1382,6 @@ void GPENCIL_OT_extrude(wmOperatorType *ot)
  *   from several different layers into a single layer.
  * \{ */
 
-/**
- * list of #bGPDstroke instances
- *
- * \note is exposed within the editors/gpencil module so that other tools can use it too.
- */
 ListBase gpencil_strokes_copypastebuf = {NULL, NULL};
 
 /* Hash for hanging on to all the colors used by strokes in the buffer
@@ -1429,7 +1425,6 @@ static void gpencil_strokes_copypastebuf_colors_name_to_material_free(GHash *nam
   BLI_ghash_free(name_to_ma, MEM_freeN, NULL);
 }
 
-/* Free copy/paste buffer data */
 void ED_gpencil_strokes_copybuf_free(void)
 {
   bGPDstroke *gps, *gpsn;
@@ -1462,10 +1457,6 @@ void ED_gpencil_strokes_copybuf_free(void)
   gpencil_strokes_copypastebuf.first = gpencil_strokes_copypastebuf.last = NULL;
 }
 
-/**
- * Ensure that destination datablock has all the colors the pasted strokes need.
- * Helper function for copy-pasting strokes
- */
 GHash *gpencil_copybuf_validate_colormap(bContext *C)
 {
   Main *bmain = CTX_data_main(C);
@@ -2635,7 +2626,7 @@ static int gpencil_delete_selected_points(bContext *C)
             else {
               /* delete unwanted points by splitting stroke into several smaller ones */
               BKE_gpencil_stroke_delete_tagged_points(
-                  gpd, gpf, gps, gps->next, GP_SPOINT_SELECT, false, 0);
+                  gpd, gpf, gps, gps->next, GP_SPOINT_SELECT, false, false, 0);
             }
 
             changed = true;
@@ -2654,7 +2645,6 @@ static int gpencil_delete_selected_points(bContext *C)
   return OPERATOR_CANCELLED;
 }
 
-/* simple wrapper to external call */
 int gpencil_delete_selected_point_wrap(bContext *C)
 {
   return gpencil_delete_selected_points(C);
@@ -3319,10 +3309,6 @@ static bool gpencil_cyclical_set_curve_edit_poll_property(const bContext *C,
   return true;
 }
 
-/**
- * Similar to #CURVE_OT_cyclic_toggle or #MASK_OT_cyclic_toggle, but with
- * option to force opened/closed strokes instead of just toggle behavior.
- */
 void GPENCIL_OT_stroke_cyclical_set(wmOperatorType *ot)
 {
   PropertyRNA *prop;
@@ -3434,9 +3420,6 @@ static int gpencil_stroke_caps_set_exec(bContext *C, wmOperator *op)
   return OPERATOR_FINISHED;
 }
 
-/**
- * Change Stroke caps mode Rounded or Flat
- */
 void GPENCIL_OT_stroke_caps_set(wmOperatorType *ot)
 {
   static const EnumPropertyItem toggle_type[] = {
@@ -3556,7 +3539,7 @@ static int gpencil_stroke_join_exec(bContext *C, wmOperator *op)
 
   int tot_strokes = 0;
   /** Alloc memory. */
-  tJoinStrokes *strokes_list = MEM_malloc_arrayN(sizeof(tJoinStrokes), max_join_strokes, __func__);
+  tJoinStrokes *strokes_list = MEM_malloc_arrayN(max_join_strokes, sizeof(tJoinStrokes), __func__);
   tJoinStrokes *elem = NULL;
   /* Read all selected strokes to create a list. */
   CTX_DATA_BEGIN (C, bGPDlayer *, gpl, editable_gpencil_layers) {
@@ -3758,7 +3741,6 @@ static int gpencil_strokes_reproject_exec(bContext *C, wmOperator *op)
   bGPdata *gpd = ED_gpencil_data_get_active(C);
   Scene *scene = CTX_data_scene(C);
   Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
-  ARegion *region = CTX_wm_region(C);
   int oldframe = (int)DEG_get_ctime(depsgraph);
   const eGP_ReprojectModes mode = RNA_enum_get(op->ptr, "type");
   const bool keep_original = RNA_boolean_get(op->ptr, "keep_original");
@@ -3767,7 +3749,7 @@ static int gpencil_strokes_reproject_exec(bContext *C, wmOperator *op)
 
   /* Init snap context for geometry projection. */
   SnapObjectContext *sctx = NULL;
-  sctx = ED_transform_snap_object_context_create_view3d(scene, 0, region, CTX_wm_view3d(C));
+  sctx = ED_transform_snap_object_context_create(scene, 0);
 
   bool changed = false;
   /* Init space conversion stuff. */
@@ -3967,7 +3949,7 @@ static void gpencil_smooth_stroke(bContext *C, wmOperator *op)
 
           /* perform smoothing */
           if (smooth_position) {
-            BKE_gpencil_stroke_smooth_point(gps, i, factor);
+            BKE_gpencil_stroke_smooth_point(gps, i, factor, false);
           }
           if (smooth_strength) {
             BKE_gpencil_stroke_smooth_strength(gps, i, factor);
@@ -4588,6 +4570,9 @@ static int gpencil_stroke_separate_exec(bContext *C, wmOperator *op)
   id_us_min(ob_dst->data);
   ob_dst->data = (bGPdata *)gpd_dst;
 
+  BKE_defgroup_copy_list(&gpd_dst->vertex_group_names, &gpd_src->vertex_group_names);
+  gpd_dst->vertex_group_active_index = gpd_src->vertex_group_active_index;
+
   /* Loop old data-block and separate parts. */
   if (ELEM(mode, GP_SEPARATE_POINT, GP_SEPARATE_STROKE)) {
     CTX_DATA_BEGIN (C, bGPDlayer *, gpl, editable_gpencil_layers) {
@@ -4657,11 +4642,11 @@ static int gpencil_stroke_separate_exec(bContext *C, wmOperator *op)
 
                   /* delete selected points from destination stroke */
                   BKE_gpencil_stroke_delete_tagged_points(
-                      gpd_dst, gpf_dst, gps_dst, NULL, GP_SPOINT_SELECT, false, 0);
+                      gpd_dst, gpf_dst, gps_dst, NULL, GP_SPOINT_SELECT, false, false, 0);
 
                   /* delete selected points from origin stroke */
                   BKE_gpencil_stroke_delete_tagged_points(
-                      gpd_src, gpf, gps, gps->next, GP_SPOINT_SELECT, false, 0);
+                      gpd_src, gpf, gps, gps->next, GP_SPOINT_SELECT, false, false, 0);
                 }
               }
               /* selected strokes mode */
@@ -4729,7 +4714,7 @@ static int gpencil_stroke_separate_exec(bContext *C, wmOperator *op)
   /* Remove unused slots. */
   int actcol = ob_dst->actcol;
   for (int slot = 1; slot <= ob_dst->totcol; slot++) {
-    while (slot <= ob_dst->totcol && !BKE_object_material_slot_used(ob_dst->data, slot)) {
+    while (slot <= ob_dst->totcol && !BKE_object_material_slot_used(ob_dst, slot)) {
       ob_dst->actcol = slot;
       BKE_object_material_slot_remove(bmain, ob_dst);
       if (actcol >= slot) {
@@ -4840,11 +4825,11 @@ static int gpencil_stroke_split_exec(bContext *C, wmOperator *op)
 
               /* delete selected points from destination stroke */
               BKE_gpencil_stroke_delete_tagged_points(
-                  gpd, gpf, gps_dst, NULL, GP_SPOINT_SELECT, true, 0);
+                  gpd, gpf, gps_dst, NULL, GP_SPOINT_SELECT, true, false, 0);
 
               /* delete selected points from origin stroke */
               BKE_gpencil_stroke_delete_tagged_points(
-                  gpd, gpf, gps, gps->next, GP_SPOINT_SELECT, false, 0);
+                  gpd, gpf, gps, gps->next, GP_SPOINT_SELECT, false, false, 0);
             }
           }
         }
@@ -5040,7 +5025,7 @@ static void gpencil_cutter_dissolve(bGPdata *gpd,
     }
 
     BKE_gpencil_stroke_delete_tagged_points(
-        gpd, hit_layer->actframe, hit_stroke, gpsn, GP_SPOINT_TAG, false, 1);
+        gpd, hit_layer->actframe, hit_stroke, gpsn, GP_SPOINT_TAG, false, flat_caps, 1);
   }
 }
 
@@ -5352,6 +5337,7 @@ void GPENCIL_OT_stroke_merge_by_distance(wmOperatorType *ot)
       ot->srna, "use_unselected", 0, "Unselected", "Use whole stroke, not only selected points");
   RNA_def_property_flag(prop, PROP_SKIP_SAVE);
 }
+
 /** \} */
 
 /* -------------------------------------------------------------------- */

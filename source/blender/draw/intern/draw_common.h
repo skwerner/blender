@@ -29,6 +29,7 @@ struct Object;
 struct ParticleSystem;
 struct RegionView3D;
 struct ViewLayer;
+struct GPUMaterial;
 
 #define UBO_FIRST_COLOR colorWire
 #define UBO_LAST_COLOR colorUVShadow
@@ -42,8 +43,6 @@ typedef struct GlobalsUboStorage {
   float colorWireEdit[4];
   float colorActive[4];
   float colorSelect[4];
-  float colorDupliSelect[4];
-  float colorDupli[4];
   float colorLibrarySelect[4];
   float colorLibrary[4];
   float colorTransform[4];
@@ -162,6 +161,10 @@ struct DRWView *DRW_view_create_with_zoffset(const struct DRWView *parent_view,
                                              const struct RegionView3D *rv3d,
                                              float offset);
 
+/**
+ * Get the wire color theme_id of an object based on its state
+ * \a r_color is a way to get a pointer to the static color var associated
+ */
 int DRW_object_wire_theme_get(struct Object *ob, struct ViewLayer *view_layer, float **r_color);
 float *DRW_color_background_blend_get(int theme_id);
 
@@ -170,12 +173,18 @@ bool DRW_object_axis_orthogonal_to_view(struct Object *ob, int axis);
 
 /* draw_hair.c */
 
-/* This creates a shading group with display hairs.
- * The draw call is already added by this function, just add additional uniforms. */
+/**
+ * This creates a shading group with display hairs.
+ * The draw call is already added by this function, just add additional uniforms.
+ */
 struct DRWShadingGroup *DRW_shgroup_hair_create_sub(struct Object *object,
                                                     struct ParticleSystem *psys,
                                                     struct ModifierData *md,
-                                                    struct DRWShadingGroup *shgrp);
+                                                    struct DRWShadingGroup *shgrp,
+                                                    struct GPUMaterial *gpu_material);
+/**
+ * \note Only valid after #DRW_hair_update().
+ */
 struct GPUVertBuf *DRW_hair_pos_buffer_get(struct Object *object,
                                            struct ParticleSystem *psys,
                                            struct ModifierData *md);
@@ -201,6 +210,7 @@ void DRW_smoke_free(struct FluidModifierData *fmd);
 void DRW_smoke_free_velocity(struct FluidModifierData *fmd);
 
 /* draw_common.c */
+
 struct DRW_Global {
   /** If needed, contains all global/Theme colors
    * Add needed theme colors / values to DRW_globals_update() and update UBO

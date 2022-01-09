@@ -52,7 +52,7 @@
 #include "WM_types.h"
 
 /* NOTE: image_panel_properties() uses pointer to sima->image directly. */
-Image *ED_space_image(SpaceImage *sima)
+Image *ED_space_image(const SpaceImage *sima)
 {
   return sima->image;
 }
@@ -113,7 +113,7 @@ void ED_space_image_auto_set(const bContext *C, SpaceImage *sima)
   }
 }
 
-Mask *ED_space_image_get_mask(SpaceImage *sima)
+Mask *ED_space_image_get_mask(const SpaceImage *sima)
 {
   return sima->mask_info.mask;
 }
@@ -177,7 +177,6 @@ void ED_space_image_release_buffer(SpaceImage *sima, ImBuf *ibuf, void *lock)
   }
 }
 
-/* Get the SpaceImage flag that is valid for the given ibuf. */
 int ED_space_image_get_display_channel_mask(ImBuf *ibuf)
 {
   int result = (SI_USE_ALPHA | SI_SHOW_ALPHA | SI_SHOW_ZBUF | SI_SHOW_R | SI_SHOW_G | SI_SHOW_B);
@@ -318,7 +317,6 @@ void ED_image_get_uv_aspect(Image *ima, ImageUser *iuser, float *r_aspx, float *
   }
 }
 
-/* takes event->mval */
 void ED_image_mouse_pos(SpaceImage *sima, const ARegion *region, const int mval[2], float co[2])
 {
   int sx, sy, width, height;
@@ -377,10 +375,6 @@ void ED_image_point_pos__reverse(SpaceImage *sima,
   r_co[1] = (co[1] * height * zoomy) + (float)sy;
 }
 
-/**
- * This is more a user-level functionality, for going to next/prev used slot,
- * Stepping onto the last unused slot too.
- */
 bool ED_image_slot_cycle(struct Image *image, int direction)
 {
   const int cur = image->render_slot;
@@ -434,7 +428,7 @@ void ED_space_image_scopes_update(const struct bContext *C,
   /* We also don't update scopes of render result during render. */
   if (G.is_rendering) {
     const Image *image = sima->image;
-    if (image != NULL && (image->type == IMA_TYPE_R_RESULT || image->type == IMA_TYPE_COMPOSITE)) {
+    if (image != NULL && (ELEM(image->type, IMA_TYPE_R_RESULT, IMA_TYPE_COMPOSITE))) {
       return;
     }
   }
@@ -445,12 +439,12 @@ void ED_space_image_scopes_update(const struct bContext *C,
                     &scene->display_settings);
 }
 
-bool ED_space_image_show_render(SpaceImage *sima)
+bool ED_space_image_show_render(const SpaceImage *sima)
 {
   return (sima->image && ELEM(sima->image->type, IMA_TYPE_R_RESULT, IMA_TYPE_COMPOSITE));
 }
 
-bool ED_space_image_show_paint(SpaceImage *sima)
+bool ED_space_image_show_paint(const SpaceImage *sima)
 {
   if (ED_space_image_show_render(sima)) {
     return false;
@@ -459,7 +453,7 @@ bool ED_space_image_show_paint(SpaceImage *sima)
   return (sima->mode == SI_MODE_PAINT);
 }
 
-bool ED_space_image_show_uvedit(SpaceImage *sima, Object *obedit)
+bool ED_space_image_show_uvedit(const SpaceImage *sima, Object *obedit)
 {
   if (sima) {
     if (ED_space_image_show_render(sima)) {
@@ -482,7 +476,6 @@ bool ED_space_image_show_uvedit(SpaceImage *sima, Object *obedit)
   return false;
 }
 
-/* matches clip function */
 bool ED_space_image_check_show_maskedit(SpaceImage *sima, Object *obedit)
 {
   /* check editmode - this is reserved for UV editing */

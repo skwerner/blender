@@ -30,7 +30,8 @@
 extern "C" {
 #endif
 
-/* themes; defines in BIF_resource.h */
+/* Themes; defines in `BIF_resource.h`. */
+
 struct ColorBand;
 
 /* ************************ style definitions ******************** */
@@ -50,27 +51,29 @@ typedef enum eUIFont_ID {
   /* UIFONT_CUSTOM2 = 3, */ /* UNUSED */
 } eUIFont_ID;
 
-/* default fonts to load/initialize */
-/* first font is the default (index 0), others optional */
+/**
+ * Default fonts to load/initialize.
+ * First font is the default (index 0), others optional.
+ */
+#
+#
 typedef struct uiFont {
   struct uiFont *next, *prev;
   /** 1024 = FILE_MAX. */
-  char filename[1024];
+  char filepath[1024];
   /** From blfont lib. */
   short blf_id;
   /** Own id (eUIFont_ID). */
   short uifont_id;
-  /** Fonts that read from left to right. */
-  short r_to_l;
-  char _pad0[2];
 } uiFont;
 
 /** This state defines appearance of text. */
 typedef struct uiFontStyle {
   /** Saved in file, 0 is default. */
   short uifont_id;
+  char _pad1[2];
   /** Actual size depends on 'global' dpi. */
-  short points;
+  float points;
   /** Style hint. */
   short italic, bold;
   /** Value is amount of pixels blur. */
@@ -82,6 +85,7 @@ typedef struct uiFontStyle {
   float shadowalpha;
   /** 1 value, typically white or black anyway. */
   float shadowcolor;
+  char _pad2[4];
 } uiFontStyle;
 
 /* this is fed to the layout engine and widget code */
@@ -206,6 +210,9 @@ typedef struct ThemeUI {
   /** Intensity of the border icons. >0 will render an border around themed
    * icons. */
   float icon_border_intensity;
+  float panel_roundness;
+  char _pad2[4];
+
 } ThemeUI;
 
 /* try to put them all in one, if needed a special struct can be created as well
@@ -319,6 +326,8 @@ typedef struct ThemeSpace {
   unsigned char vertex_size, outline_width, obcenter_dia, facedot_size;
   unsigned char noodle_curving;
   unsigned char grid_levels;
+  char _pad5[3];
+  float dash_alpha;
 
   /* syntax for textwindow and nodes */
   unsigned char syntaxl[4], syntaxs[4]; /* in nodespace used for backdrop matte */
@@ -341,6 +350,7 @@ typedef struct ThemeSpace {
   unsigned char active_strip[4], selected_strip[4];
 
   /** For dopesheet - scale factor for size of keyframes (i.e. height of channels). */
+  char _pad7[1];
   float keyframe_scale_fac;
 
   unsigned char editmesh_active[4];
@@ -437,7 +447,7 @@ typedef enum eBackgroundGradientTypes {
   TH_BACKGROUND_GRADIENT_RADIAL = 2,
 } eBackgroundGradientTypes;
 
-/* set of colors for use as a custom color set for Objects/Bones wire drawing */
+/** Set of colors for use as a custom color set for Objects/Bones wire drawing. */
 typedef struct ThemeWireColor {
   unsigned char solid[4];
   unsigned char select[4];
@@ -457,6 +467,10 @@ typedef enum eWireColor_Flags {
 typedef struct ThemeCollectionColor {
   unsigned char color[4];
 } ThemeCollectionColor;
+
+typedef struct ThemeStripColor {
+  unsigned char color[4];
+} ThemeStripColor;
 
 /**
  * A theme.
@@ -500,8 +514,10 @@ typedef struct bTheme {
   /* See COLLECTION_COLOR_TOT for the number of collection colors. */
   ThemeCollectionColor collection_color[8];
 
+  /* See SEQUENCE_COLOR_TOT for the total number of strip colors. */
+  ThemeStripColor strip_color[9];
+
   int active_theme_area;
-  char _pad0[4];
 } bTheme;
 
 #define UI_THEMESPACE_START(btheme) \
@@ -545,7 +561,7 @@ typedef struct bUserMenuItem_Op {
   bUserMenuItem item;
   char op_idname[64];
   struct IDProperty *prop;
-  char opcontext;
+  char opcontext; /* #wmOperatorCallContext */
   char _pad0[7];
 } bUserMenuItem_Op;
 
@@ -635,7 +651,10 @@ typedef struct UserDef_Experimental {
   /* Debug options, always available. */
   char use_undo_legacy;
   char no_override_auto_resync;
+  char no_proxy_to_override_conversion;
   char use_cycles_debug;
+  char use_geometry_nodes_legacy;
+  char show_asset_debug_info;
   char SANITIZE_AFTER_HERE;
   /* The following options are automatically sanitized (set to 0)
    * when the release cycle is not alpha. */
@@ -646,8 +665,7 @@ typedef struct UserDef_Experimental {
   char use_sculpt_tools_tilt;
   char use_extended_asset_browser;
   char use_override_templates;
-  char use_geometry_nodes_fields;
-  char _pad[4];
+  char _pad[2];
   /** `makesdna` does not allow empty structs. */
 } UserDef_Experimental;
 
@@ -925,7 +943,8 @@ typedef struct UserDef {
   short sequencer_proxy_setup; /* eUserpref_SeqProxySetup */
 
   float collection_instance_empty_size;
-  char _pad10[2];
+  char text_flag;
+  char _pad10[1];
 
   char file_preview_type; /* eUserpref_File_Preview_Type */
   char statusbar_flag;    /* eUserpref_StatusBar_Flag */
@@ -942,7 +961,7 @@ typedef struct UserDef {
   UserDef_Runtime runtime;
 } UserDef;
 
-/* from blenkernel blender.c */
+/** From blenkernel `blender.c`. */
 extern UserDef U;
 
 /* ***************** USERDEF ****************** */
@@ -1125,6 +1144,7 @@ typedef enum eUserpref_GPU_Flag {
   USER_GPU_FLAG_NO_DEPT_PICK = (1 << 0),
   USER_GPU_FLAG_NO_EDIT_MODE_SMOOTH_WIRE = (1 << 1),
   USER_GPU_FLAG_OVERLAY_SMOOTH_WIRE = (1 << 2),
+  USER_GPU_FLAG_SUBDIVISION_EVALUATION = (1 << 3),
 } eUserpref_GPU_Flag;
 
 /** #UserDef.tablet_api */
@@ -1235,6 +1255,9 @@ typedef enum eDupli_ID_Flags {
   USER_DUP_HAIR = (1 << 14),
   USER_DUP_POINTCLOUD = (1 << 15),
   USER_DUP_VOLUME = (1 << 16),
+  USER_DUP_LATTICE = (1 << 17),
+  USER_DUP_CAMERA = (1 << 18),
+  USER_DUP_SPEAKER = (1 << 19),
 
   USER_DUP_OBDATA = (~0) & ((1 << 24) - 1),
 
@@ -1245,6 +1268,14 @@ typedef enum eDupli_ID_Flags {
   /* Duplicate (and hence make local) linked data. */
   USER_DUP_LINKED_ID = (1 << 30),
 } eDupli_ID_Flags;
+
+/**
+ * Text Editor options
+ * #UserDef.text_flag
+ */
+typedef enum eTextEdit_Flags {
+  USER_TEXT_EDIT_AUTO_CLOSE = (1 << 0),
+} eTextEdit_Flags;
 
 /**
  * Text draw options

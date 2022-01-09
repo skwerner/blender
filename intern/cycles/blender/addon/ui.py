@@ -26,27 +26,31 @@ from bpy.types import Panel
 from bl_ui.properties_grease_pencil_common import GreasePencilSimplifyPanel
 from bl_ui.properties_view_layer import ViewLayerCryptomattePanel, ViewLayerAOVPanel
 
+class CyclesPresetPanel(PresetPanel, Panel):
+    COMPAT_ENGINES = {'CYCLES'}
+    preset_operator = "script.execute_preset"
 
-class CYCLES_PT_sampling_presets(PresetPanel, Panel):
+    @staticmethod
+    def post_cb(context):
+        # Modify an arbitrary built-in scene property to force a depsgraph
+        # update, because add-on properties don't. (see T62325)
+        render = context.scene.render
+        render.filter_size = render.filter_size
+
+class CYCLES_PT_sampling_presets(CyclesPresetPanel):
     bl_label = "Sampling Presets"
     preset_subdir = "cycles/sampling"
-    preset_operator = "script.execute_preset"
     preset_add_operator = "render.cycles_sampling_preset_add"
-    COMPAT_ENGINES = {'CYCLES'}
 
-class CYCLES_PT_viewport_sampling_presets(PresetPanel, Panel):
+class CYCLES_PT_viewport_sampling_presets(CyclesPresetPanel):
     bl_label = "Viewport Sampling Presets"
     preset_subdir = "cycles/viewport_sampling"
-    preset_operator = "script.execute_preset"
     preset_add_operator = "render.cycles_viewport_sampling_preset_add"
-    COMPAT_ENGINES = {'CYCLES'}
 
-class CYCLES_PT_integrator_presets(PresetPanel, Panel):
+class CYCLES_PT_integrator_presets(CyclesPresetPanel):
     bl_label = "Integrator Presets"
     preset_subdir = "cycles/integrator"
-    preset_operator = "script.execute_preset"
     preset_add_operator = "render.cycles_integrator_preset_add"
-    COMPAT_ENGINES = {'CYCLES'}
 
 
 class CyclesButtonsPanel:
@@ -93,11 +97,21 @@ def use_cpu(context):
     return (get_device_type(context) == 'NONE' or cscene.device == 'CPU')
 
 
+def use_metal(context):
+    cscene = context.scene.cycles
+
+    return (get_device_type(context) == 'METAL' and cscene.device == 'GPU')
+
 def use_cuda(context):
     cscene = context.scene.cycles
 
     return (get_device_type(context) == 'CUDA' and cscene.device == 'GPU')
 
+
+def use_hip(context):
+    cscene = context.scene.cycles
+
+    return (get_device_type(context) == 'HIP' and cscene.device == 'GPU')
 
 def use_optix(context):
     cscene = context.scene.cycles
@@ -278,8 +292,21 @@ class CYCLES_RENDER_PT_sampling_advanced(CyclesButtonsPanel, Panel):
         row.prop(cscene, "use_animated_seed", text="", icon='TIME')
 
         col = layout.column(align=True)
-        col.active = not(cscene.use_adaptive_sampling)
+        col.active = not (cscene.use_adaptive_sampling and cscene.use_preview_adaptive_sampling)
         col.prop(cscene, "sampling_pattern", text="Pattern")
+
+        col = layout.column(align=True)
+        col.prop(cscene, "sample_offset")
+
+        layout.separator()
+
+        heading = layout.column(align=True, heading="Scrambling Distance")
+        heading.active = not (cscene.use_adaptive_sampling and cscene.use_preview_adaptive_sampling)
+        heading.prop(cscene, "auto_scrambling_distance", text="Automatic")
+        sub = heading.row()
+        sub.active = not cscene.use_preview_adaptive_sampling
+        sub.prop(cscene, "preview_scrambling_distance", text="Viewport")
+        heading.prop(cscene, "scrambling_distance", text="Multiplier")
 
         layout.separator()
 
@@ -456,14 +483,18 @@ class CYCLES_RENDER_PT_light_paths_fast_gi(CyclesButtonsPanel, Panel):
         layout.active = cscene.use_fast_gi
 
         col = layout.column(align=True)
-        col.prop(cscene, "ao_bounces", text="Viewport Bounces")
-        col.prop(cscene, "ao_bounces_render", text="Render Bounces")
+        col.prop(cscene, "fast_gi_method", text="Method")
 
         if world:
           light = world.light_settings
           col = layout.column(align=True)
           col.prop(light, "ao_factor", text="AO Factor")
           col.prop(light, "distance", text="AO Distance")
+
+        if cscene.fast_gi_method == 'REPLACE':
+            col = layout.column(align=True)
+            col.prop(cscene, "ao_bounces", text="Viewport Bounces")
+            col.prop(cscene, "ao_bounces_render", text="Render Bounces")
 
 
 class CYCLES_RENDER_PT_motion_blur(CyclesButtonsPanel, Panel):
@@ -613,8 +644,8 @@ class CYCLES_RENDER_PT_performance_threads(CyclesButtonsPanel, Panel):
         sub.prop(rd, "threads")
 
 
-class CYCLES_RENDER_PT_performance_tiles(CyclesButtonsPanel, Panel):
-    bl_label = "Tiles"
+class CYCLES_RENDER_PT_performance_memory(CyclesButtonsPanel, Panel):
+    bl_label = "Memory"
     bl_parent_id = "CYCLES_RENDER_PT_performance"
 
     def draw(self, context):
@@ -821,7 +852,6 @@ class CYCLES_RENDER_PT_passes_data(CyclesButtonsPanel, Panel):
         col.prop(view_layer, "use_pass_material_index")
 
         col = layout.column(heading="Debug", align=True)
-        col.prop(cycles_view_layer, "pass_debug_render_time", text="Render Time")
         col.prop(cycles_view_layer, "pass_debug_sample_count", text="Sample Count")
 
         layout.prop(view_layer, "pass_alpha_threshold")
@@ -1011,8 +1041,8 @@ class CYCLES_PT_context_material(CyclesButtonsPanel, Panel):
                 row.prop(slot, "link", text="", icon=icon_link, icon_only=True)
 
         elif mat:
-            split.template_ID(space, "pin_id")
-            split.separator()
+            layout.template_ID(space, "pin_id")
+            layout.separator()
 
 
 class CYCLES_OBJECT_PT_motion_blur(CyclesButtonsPanel, Panel):
@@ -1024,7 +1054,7 @@ class CYCLES_OBJECT_PT_motion_blur(CyclesButtonsPanel, Panel):
     def poll(cls, context):
         ob = context.object
         if CyclesButtonsPanel.poll(context) and ob:
-            if ob.type in {'MESH', 'CURVE', 'CURVE', 'SURFACE', 'FONT', 'META', 'CAMERA'}:
+            if ob.type in {'MESH', 'CURVE', 'CURVE', 'SURFACE', 'FONT', 'META', 'CAMERA', 'HAIR', 'POINTCLOUD'}:
                 return True
             if ob.instance_type == 'COLLECTION' and ob.instance_collection:
                 return True
@@ -1063,7 +1093,7 @@ class CYCLES_OBJECT_PT_motion_blur(CyclesButtonsPanel, Panel):
 
 
 def has_geometry_visibility(ob):
-    return ob and ((ob.type in {'MESH', 'CURVE', 'SURFACE', 'FONT', 'META', 'LIGHT'}) or
+    return ob and ((ob.type in {'MESH', 'CURVE', 'SURFACE', 'FONT', 'META', 'LIGHT', 'VOLUME', 'POINTCLOUD', 'HAIR'}) or
                    (ob.instance_type == 'COLLECTION' and ob.instance_collection))
 
 
@@ -1828,37 +1858,38 @@ class CYCLES_RENDER_PT_debug(CyclesDebugButtonsPanel, Panel):
 
     def draw(self, context):
         layout = self.layout
+        layout.use_property_split = True
+        layout.use_property_decorate = False  # No animation.
 
         scene = context.scene
         cscene = scene.cycles
 
-        col = layout.column()
+        col = layout.column(heading="CPU")
 
-        col.label(text="CPU Flags:")
         row = col.row(align=True)
         row.prop(cscene, "debug_use_cpu_sse2", toggle=True)
         row.prop(cscene, "debug_use_cpu_sse3", toggle=True)
         row.prop(cscene, "debug_use_cpu_sse41", toggle=True)
         row.prop(cscene, "debug_use_cpu_avx", toggle=True)
         row.prop(cscene, "debug_use_cpu_avx2", toggle=True)
-        col.prop(cscene, "debug_bvh_layout")
+        col.prop(cscene, "debug_bvh_layout", text="BVH")
 
         col.separator()
 
-        col = layout.column()
-        col.label(text="CUDA Flags:")
+        col = layout.column(heading="CUDA")
         col.prop(cscene, "debug_use_cuda_adaptive_compile")
+        col = layout.column(heading="OptiX")
+        col.prop(cscene, "debug_use_optix_debug", text="Module Debug")
 
         col.separator()
 
-        col = layout.column()
-        col.label(text="OptiX Flags:")
-        col.prop(cscene, "debug_use_optix_debug")
+        col.prop(cscene, "debug_bvh_type", text="Viewport BVH")
 
         col.separator()
 
-        col = layout.column()
-        col.prop(cscene, "debug_bvh_type")
+        import _cycles
+        if _cycles.with_debug:
+            col.prop(cscene, "direct_light_sampling_type")
 
 
 class CYCLES_RENDER_PT_simplify(CyclesButtonsPanel, Panel):
@@ -2141,7 +2172,7 @@ classes = (
     CYCLES_RENDER_PT_film_transparency,
     CYCLES_RENDER_PT_performance,
     CYCLES_RENDER_PT_performance_threads,
-    CYCLES_RENDER_PT_performance_tiles,
+    CYCLES_RENDER_PT_performance_memory,
     CYCLES_RENDER_PT_performance_acceleration_structure,
     CYCLES_RENDER_PT_performance_final_render,
     CYCLES_RENDER_PT_performance_viewport,

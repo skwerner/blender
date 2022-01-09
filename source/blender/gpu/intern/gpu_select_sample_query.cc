@@ -20,8 +20,8 @@
 /** \file
  * \ingroup gpu
  *
- * Interface for accessing gpu-related methods for selection. The semantics will be
- * similar to glRenderMode(GL_SELECT) since the goal is to maintain compatibility.
+ * Interface for accessing GPU-related methods for selection. The semantics will be
+ * similar to `glRenderMode(GL_SELECT)` since the goal is to maintain compatibility.
  */
 
 #include <cstdlib>
@@ -151,7 +151,7 @@ bool gpu_select_query_load_id(uint id)
   return true;
 }
 
-uint gpu_select_query_end(void)
+uint gpu_select_query_end()
 {
   uint hits = 0;
   const uint maxhits = g_query_state.bufsize;

@@ -19,21 +19,21 @@
 
 #include <stdlib.h>
 
-#include "bvh/bvh_params.h"
+#include "bvh/params.h"
 
-#include "device/device_denoise.h"
-#include "device/device_memory.h"
+#include "device/denoise.h"
+#include "device/memory.h"
 
-#include "util/util_function.h"
-#include "util/util_list.h"
-#include "util/util_logging.h"
-#include "util/util_stats.h"
-#include "util/util_string.h"
-#include "util/util_texture.h"
-#include "util/util_thread.h"
-#include "util/util_types.h"
-#include "util/util_unique_ptr.h"
-#include "util/util_vector.h"
+#include "util/function.h"
+#include "util/list.h"
+#include "util/log.h"
+#include "util/stats.h"
+#include "util/string.h"
+#include "util/texture.h"
+#include "util/thread.h"
+#include "util/types.h"
+#include "util/unique_ptr.h"
+#include "util/vector.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -51,6 +51,8 @@ enum DeviceType {
   DEVICE_CUDA,
   DEVICE_MULTI,
   DEVICE_OPTIX,
+  DEVICE_HIP,
+  DEVICE_METAL,
   DEVICE_DUMMY,
 };
 
@@ -58,6 +60,8 @@ enum DeviceTypeMask {
   DEVICE_MASK_CPU = (1 << DEVICE_CPU),
   DEVICE_MASK_CUDA = (1 << DEVICE_CUDA),
   DEVICE_MASK_OPTIX = (1 << DEVICE_OPTIX),
+  DEVICE_MASK_HIP = (1 << DEVICE_HIP),
+  DEVICE_MASK_METAL = (1 << DEVICE_METAL),
   DEVICE_MASK_ALL = ~0
 };
 
@@ -71,7 +75,6 @@ class DeviceInfo {
   int num;
   bool display_device;        /* GPU is used as a display device. */
   bool has_nanovdb;           /* Support NanoVDB volumes. */
-  bool has_half_images;       /* Support half-float textures. */
   bool has_osl;               /* Support Open Shading Language. */
   bool has_profiling;         /* Supports runtime collection of profiling info. */
   bool has_peer_memory;       /* GPU has P2P access to memory of another GPU. */
@@ -88,7 +91,6 @@ class DeviceInfo {
     num = 0;
     cpu_threads = 0;
     display_device = false;
-    has_half_images = false;
     has_nanovdb = false;
     has_osl = false;
     has_profiling = false;
@@ -119,7 +121,7 @@ class Device {
 
   string error_msg;
 
-  virtual device_ptr mem_alloc_sub_ptr(device_memory & /*mem*/, int /*offset*/, int /*size*/)
+  virtual device_ptr mem_alloc_sub_ptr(device_memory & /*mem*/, size_t /*offset*/, size_t /*size*/)
   {
     /* Only required for devices that implement denoising. */
     assert(false);
@@ -149,10 +151,6 @@ class Device {
     fprintf(stderr, "%s\n", error.c_str());
     fflush(stderr);
   }
-  virtual bool show_samples() const
-  {
-    return false;
-  }
   virtual BVHLayoutMask get_bvh_layout_mask() const = 0;
 
   /* statistics */
@@ -178,7 +176,7 @@ class Device {
    * These may not be used on GPU or multi-devices. */
 
   /* Get CPU kernel functions for native instruction set. */
-  virtual const CPUKernels *get_cpu_kernels() const;
+  static const CPUKernels &get_cpu_kernels();
   /* Get kernel globals to pass to kernels. */
   virtual void get_cpu_kernel_thread_globals(
       vector<CPUKernelThreadGlobals> & /*kernel_thread_globals*/);
@@ -214,7 +212,7 @@ class Device {
    * The interoperability comes here by the meaning that the device is capable of computing result
    * directly into an OpenGL (or other graphics library) buffer. */
 
-  /* Check display si to be updated using graphics interoperability.
+  /* Check display is to be updated using graphics interoperability.
    * The interoperability can not be used is it is not supported by the device. But the device
    * might also force disable the interoperability if it detects that it will be slower than
    * copying pixels from the render buffer. */
@@ -274,7 +272,7 @@ class Device {
 
   virtual void mem_alloc(device_memory &mem) = 0;
   virtual void mem_copy_to(device_memory &mem) = 0;
-  virtual void mem_copy_from(device_memory &mem, int y, int w, int h, int elem) = 0;
+  virtual void mem_copy_from(device_memory &mem, size_t y, size_t w, size_t h, size_t elem) = 0;
   virtual void mem_zero(device_memory &mem) = 0;
   virtual void mem_free(device_memory &mem) = 0;
 
@@ -285,6 +283,8 @@ class Device {
   static vector<DeviceInfo> cuda_devices;
   static vector<DeviceInfo> optix_devices;
   static vector<DeviceInfo> cpu_devices;
+  static vector<DeviceInfo> hip_devices;
+  static vector<DeviceInfo> metal_devices;
   static uint devices_initialized_mask;
 };
 

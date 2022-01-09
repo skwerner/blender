@@ -34,6 +34,7 @@
 #include "DNA_scene_types.h"
 #include "DNA_sequence_types.h"
 #include "DNA_shader_fx_types.h"
+#include "DNA_text_types.h"
 
 #include "BLI_listbase.h"
 #include "BLI_utildefines.h"
@@ -63,6 +64,7 @@
 #include "ED_screen.h"
 #include "ED_select_utils.h"
 #include "ED_sequencer.h"
+#include "ED_text.h"
 #include "ED_undo.h"
 
 #include "SEQ_select.h"
@@ -182,7 +184,6 @@ static void do_outliner_item_mode_toggle_generic(bContext *C, TreeViewContext *t
   ED_undo_group_end(C);
 }
 
-/* Toggle the item's interaction mode if supported */
 void outliner_item_mode_toggle(bContext *C,
                                TreeViewContext *tvc,
                                TreeElement *te,
@@ -737,9 +738,14 @@ static void tree_element_layer_collection_activate(bContext *C, TreeElement *te)
   WM_main_add_notifier(NC_SCENE | ND_LAYER | NS_LAYER_COLLECTION | NA_ACTIVATED, NULL);
 }
 
+static void tree_element_text_activate(bContext *C, TreeElement *te)
+{
+  Text *text = (Text *)te->store_elem->id;
+  ED_text_activate_in_screen(C, text);
+}
+
 /* ---------------------------------------------- */
 
-/* generic call for ID data check or make/check active in UI */
 void tree_element_activate(bContext *C,
                            const TreeViewContext *tvc,
                            TreeElement *te,
@@ -764,12 +770,12 @@ void tree_element_activate(bContext *C,
     case ID_CA:
       tree_element_camera_activate(C, tvc->scene, te);
       break;
+    case ID_TXT:
+      tree_element_text_activate(C, te);
+      break;
   }
 }
 
-/**
- * Generic call for non-id data to make active in UI
- */
 void tree_element_type_active_set(bContext *C,
                                   const TreeViewContext *tvc,
                                   TreeElement *te,
@@ -1075,9 +1081,6 @@ eOLDrawState tree_element_active_state_get(const TreeViewContext *tvc,
   return OL_DRAWSEL_NONE;
 }
 
-/**
- * Generic call for non-id data to check the active state in UI.
- */
 eOLDrawState tree_element_type_active_state_get(const bContext *C,
                                                 const TreeViewContext *tvc,
                                                 const TreeElement *te,
@@ -1435,7 +1438,6 @@ static void do_outliner_item_activate_tree_element(bContext *C,
   }
 }
 
-/* Select the item using the set flags */
 void outliner_item_select(bContext *C,
                           SpaceOutliner *space_outliner,
                           TreeElement *te,

@@ -60,7 +60,6 @@
 /** \name Utilities
  * \{ */
 
-/* returns 1 in case (de)selection was successful */
 bool select_beztriple(BezTriple *bezt, bool selstatus, uint8_t flag, eVisible_Types hidden)
 {
   if ((bezt->hide == 0) || (hidden == HIDDEN)) {
@@ -80,7 +79,6 @@ bool select_beztriple(BezTriple *bezt, bool selstatus, uint8_t flag, eVisible_Ty
   return false;
 }
 
-/* returns 1 in case (de)selection was successful */
 bool select_bpoint(BPoint *bp, bool selstatus, uint8_t flag, bool hidden)
 {
   if ((bp->hide == 0) || (hidden == 1)) {
@@ -1464,15 +1462,10 @@ static int select_nth_exec(bContext *C, wmOperator *op)
 
   if (!changed) {
     if (obact->type == OB_SURF) {
-      BKE_report(
-          op->reports,
-          RPT_ERROR,
-          (objects_len == 1 ? "Surface has no active point" : "Surfaces have no active point"));
+      BKE_report(op->reports, RPT_ERROR, "Surface(s) have no active point");
     }
     else {
-      BKE_report(op->reports,
-                 RPT_ERROR,
-                 (objects_len == 1 ? "Curve has no active point" : "Curves have no active point"));
+      BKE_report(op->reports, RPT_ERROR, "Curve(s) have no active point");
     }
     return OPERATOR_CANCELLED;
   }

@@ -21,12 +21,11 @@
 #  include "device/cuda/util.h"
 #  include "device/device.h"
 
-#  include "util/util_map.h"
+#  include "util/map.h"
 
 #  ifdef WITH_CUDA_DYNLOAD
 #    include "cuew.h"
 #  else
-#    include "util/util_opengl.h"
 #    include <cuda.h>
 #    include <cudaGL.h>
 #  endif
@@ -77,8 +76,6 @@ class CUDADevice : public Device {
 
   static bool have_precompiled_kernels();
 
-  virtual bool show_samples() const override;
-
   virtual BVHLayoutMask get_bvh_layout_mask() const override;
 
   void set_error(const string &error) override;
@@ -120,13 +117,13 @@ class CUDADevice : public Device {
 
   void mem_copy_to(device_memory &mem) override;
 
-  void mem_copy_from(device_memory &mem, int y, int w, int h, int elem) override;
+  void mem_copy_from(device_memory &mem, size_t y, size_t w, size_t h, size_t elem) override;
 
   void mem_zero(device_memory &mem) override;
 
   void mem_free(device_memory &mem) override;
 
-  device_ptr mem_alloc_sub_ptr(device_memory &mem, int offset, int /*size*/) override;
+  device_ptr mem_alloc_sub_ptr(device_memory &mem, size_t offset, size_t /*size*/) override;
 
   virtual void const_copy_to(const char *name, void *host, size_t size) override;
 

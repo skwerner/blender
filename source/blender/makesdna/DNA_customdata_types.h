@@ -84,7 +84,8 @@ typedef struct CustomData {
    * MUST be >= CD_NUMTYPES, but we can't use a define here.
    * Correct size is ensured in CustomData_update_typemap assert().
    */
-  int typemap[51];
+  int typemap[52];
+  char _pad[4];
   /** Number of layers, size of layers array. */
   int totlayer, maxlayer;
   /** In editmode, total size of all data layers. */
@@ -133,7 +134,6 @@ typedef enum CustomDataType {
   CD_CLOTH_ORCO = 23,
   /* CD_RECAST = 24, */ /* UNUSED */
 
-  /* BMESH ONLY START */
   CD_MPOLY = 25,
   CD_MLOOP = 26,
   CD_SHAPE_KEYINDEX = 27,
@@ -143,7 +143,6 @@ typedef enum CustomDataType {
   CD_ORIGSPACE_MLOOP = 31,
   CD_PREVIEW_MLOOPCOL = 32,
   CD_BM_ELEM_PYPTR = 33,
-  /* BMESH ONLY END */
 
   CD_PAINT_MASK = 34,
   CD_GRID_PAINT_MASK = 35,
@@ -163,10 +162,11 @@ typedef enum CustomDataType {
   CD_PROP_COLOR = 47,
   CD_PROP_FLOAT3 = 48,
   CD_PROP_FLOAT2 = 49,
-
   CD_PROP_BOOL = 50,
 
-  CD_NUMTYPES = 51,
+  CD_HAIRLENGTH = 51,
+
+  CD_NUMTYPES = 52,
 } CustomDataType;
 
 /* Bits for CustomDataMask */
@@ -194,7 +194,6 @@ typedef enum CustomDataType {
 #define CD_MASK_CLOTH_ORCO (1 << CD_CLOTH_ORCO)
 // #define CD_MASK_RECAST (1 << CD_RECAST)  /* DEPRECATED */
 
-/* BMESH ONLY START */
 #define CD_MASK_MPOLY (1 << CD_MPOLY)
 #define CD_MASK_MLOOP (1 << CD_MLOOP)
 #define CD_MASK_SHAPE_KEYINDEX (1 << CD_SHAPE_KEYINDEX)
@@ -204,7 +203,6 @@ typedef enum CustomDataType {
 #define CD_MASK_ORIGSPACE_MLOOP (1LL << CD_ORIGSPACE_MLOOP)
 #define CD_MASK_PREVIEW_MLOOPCOL (1LL << CD_PREVIEW_MLOOPCOL)
 #define CD_MASK_BM_ELEM_PYPTR (1LL << CD_BM_ELEM_PYPTR)
-/* BMESH ONLY END */
 
 #define CD_MASK_PAINT_MASK (1LL << CD_PAINT_MASK)
 #define CD_MASK_GRID_PAINT_MASK (1LL << CD_GRID_PAINT_MASK)
@@ -219,6 +217,8 @@ typedef enum CustomDataType {
 #define CD_MASK_PROP_FLOAT3 (1ULL << CD_PROP_FLOAT3)
 #define CD_MASK_PROP_FLOAT2 (1ULL << CD_PROP_FLOAT2)
 #define CD_MASK_PROP_BOOL (1ULL << CD_PROP_BOOL)
+
+#define CD_MASK_HAIRLENGTH (1ULL << CD_HAIRLENGTH)
 
 /** Multires loop data. */
 #define CD_MASK_MULTIRES_GRIDS (CD_MASK_MDISPS | CD_GRID_PAINT_MASK)

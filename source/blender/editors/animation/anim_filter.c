@@ -362,11 +362,6 @@ static bool nlaedit_get_context(bAnimContext *ac, SpaceNla *snla)
 
 /* ----------- Public API --------------- */
 
-/* Obtain current anim-data context,
- * given that context info from Blender context has already been set:
- * - AnimContext to write to is provided as pointer to var on stack so that we don't have
- *   allocation/freeing costs (which are not that avoidable with channels).
- */
 bool ANIM_animdata_context_getdata(bAnimContext *ac)
 {
   SpaceLink *sl = ac->sl;
@@ -397,11 +392,6 @@ bool ANIM_animdata_context_getdata(bAnimContext *ac)
   return (ok && ac->data);
 }
 
-/* Obtain current anim-data context from Blender Context info
- * - AnimContext to write to is provided as pointer to var on stack so that we don't have
- *   allocation/freeing costs (which are not that avoidable with channels).
- * - Clears data and sets the information from Blender Context which is useful
- */
 bool ANIM_animdata_get_context(const bContext *C, bAnimContext *ac)
 {
   Main *bmain = CTX_data_main(C);
@@ -1900,7 +1890,8 @@ static size_t animdata_filter_gpencil(bAnimContext *ac,
       if ((filter_mode & ANIMFILTER_DATA_VISIBLE) && !(ads->filterflag & ADS_FILTER_INCL_HIDDEN)) {
         /* Layer visibility - we check both object and base,
          * since these may not be in sync yet. */
-        if ((base->flag & BASE_VISIBLE_DEPSGRAPH) == 0) {
+        if ((base->flag & BASE_VISIBLE_DEPSGRAPH) == 0 ||
+            (base->flag & BASE_VISIBLE_VIEWLAYER) == 0) {
           continue;
         }
 
@@ -3087,7 +3078,10 @@ static size_t animdata_filter_dopesheet_movieclips(bAnimContext *ac,
 }
 
 /* Helper for animdata_filter_dopesheet() - For checking if an object should be included or not */
-static bool animdata_filter_base_is_ok(bDopeSheet *ads, Base *base, int filter_mode)
+static bool animdata_filter_base_is_ok(bDopeSheet *ads,
+                                       Base *base,
+                                       const eObjectMode object_mode,
+                                       int filter_mode)
 {
   Object *ob = base->object;
 
@@ -3144,10 +3138,21 @@ static bool animdata_filter_base_is_ok(bDopeSheet *ads, Base *base, int filter_m
   }
 
   /* check selection and object type filters */
-  if ((ads->filterflag & ADS_FILTER_ONLYSEL) &&
-      !((base->flag & BASE_SELECTED) /*|| (base == sce->basact) */)) {
-    /* only selected should be shown */
-    return false;
+  if (ads->filterflag & ADS_FILTER_ONLYSEL) {
+    if (object_mode & OB_MODE_POSE) {
+      /* When in pose-mode handle all pose-mode objects.
+       * This avoids problems with pose-mode where objects may be unselected,
+       * where a selected bone of an unselected object would be hidden. see: T81922. */
+      if (!(base->object->mode & object_mode)) {
+        return false;
+      }
+    }
+    else {
+      /* only selected should be shown (ignore active) */
+      if (!(base->flag & BASE_SELECTED)) {
+        return false;
+      }
+    }
   }
 
   /* check if object belongs to the filtering group if option to filter
@@ -3185,7 +3190,7 @@ static Base **animdata_filter_ds_sorted_bases(bDopeSheet *ads,
 
   Base **sorted_bases = MEM_mallocN(sizeof(Base *) * tot_bases, "Dopesheet Usable Sorted Bases");
   LISTBASE_FOREACH (Base *, base, &view_layer->object_bases) {
-    if (animdata_filter_base_is_ok(ads, base, filter_mode)) {
+    if (animdata_filter_base_is_ok(ads, base, OB_MODE_OBJECT, filter_mode)) {
       sorted_bases[num_bases++] = base;
     }
   }
@@ -3278,8 +3283,10 @@ static size_t animdata_filter_dopesheet(bAnimContext *ac,
     /* Filter and add contents of each base (i.e. object) without them sorting first
      * NOTE: This saves performance in cases where order doesn't matter
      */
+    Object *obact = OBACT(view_layer);
+    const eObjectMode object_mode = obact ? obact->mode : OB_MODE_OBJECT;
     LISTBASE_FOREACH (Base *, base, &view_layer->object_bases) {
-      if (animdata_filter_base_is_ok(ads, base, filter_mode)) {
+      if (animdata_filter_base_is_ok(ads, base, object_mode, filter_mode)) {
         /* since we're still here, this object should be usable */
         items += animdata_filter_dopesheet_ob(ac, anim_data, ads, base, filter_mode);
       }
@@ -3443,14 +3450,6 @@ static size_t animdata_filter_remove_duplis(ListBase *anim_data)
 
 /* ----------- Public API --------------- */
 
-/**
- * This function filters the active data source to leave only animation channels suitable for
- * usage by the caller. It will return the length of the list
- *
- * \param anim_data: Is a pointer to a #ListBase,
- * to which the filtered animation channels will be placed for use.
- * \param filter_mode: how should the data be filtered - bit-mapping accessed flags.
- */
 size_t ANIM_animdata_filter(bAnimContext *ac,
                             ListBase *anim_data,
                             eAnimFilter_Flags filter_mode,

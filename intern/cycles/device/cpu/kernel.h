@@ -17,11 +17,13 @@
 #pragma once
 
 #include "device/cpu/kernel_function.h"
-#include "util/util_types.h"
+#include "util/half.h"
+#include "util/types.h"
 
 CCL_NAMESPACE_BEGIN
 
-struct KernelGlobals;
+struct KernelGlobalsCPU;
+struct KernelFilmConvert;
 struct IntegratorStateCPU;
 struct TileInfo;
 
@@ -30,17 +32,17 @@ class CPUKernels {
   /* Integrator. */
 
   using IntegratorFunction =
-      CPUKernelFunction<void (*)(const KernelGlobals *kg, IntegratorStateCPU *state)>;
+      CPUKernelFunction<void (*)(const KernelGlobalsCPU *kg, IntegratorStateCPU *state)>;
   using IntegratorShadeFunction = CPUKernelFunction<void (*)(
-      const KernelGlobals *kg, IntegratorStateCPU *state, ccl_global float *render_buffer)>;
-  using IntegratorInitFunction = CPUKernelFunction<bool (*)(const KernelGlobals *kg,
+      const KernelGlobalsCPU *kg, IntegratorStateCPU *state, ccl_global float *render_buffer)>;
+  using IntegratorInitFunction = CPUKernelFunction<bool (*)(const KernelGlobalsCPU *kg,
                                                             IntegratorStateCPU *state,
                                                             KernelWorkTile *tile,
                                                             ccl_global float *render_buffer)>;
 
   IntegratorInitFunction integrator_init_from_camera;
   IntegratorInitFunction integrator_init_from_bake;
-  IntegratorFunction integrator_intersect_closest;
+  IntegratorShadeFunction integrator_intersect_closest;
   IntegratorFunction integrator_intersect_shadow;
   IntegratorFunction integrator_intersect_subsurface;
   IntegratorFunction integrator_intersect_volume_stack;
@@ -54,15 +56,16 @@ class CPUKernels {
   /* Shader evaluation. */
 
   using ShaderEvalFunction = CPUKernelFunction<void (*)(
-      const KernelGlobals *kg, const KernelShaderEvalInput *, float4 *, const int)>;
+      const KernelGlobalsCPU *kg, const KernelShaderEvalInput *, float *, const int)>;
 
   ShaderEvalFunction shader_eval_displace;
   ShaderEvalFunction shader_eval_background;
+  ShaderEvalFunction shader_eval_curve_shadow_transparency;
 
   /* Adaptive stopping. */
 
   using AdaptiveSamplingConvergenceCheckFunction =
-      CPUKernelFunction<bool (*)(const KernelGlobals *kg,
+      CPUKernelFunction<bool (*)(const KernelGlobalsCPU *kg,
                                  ccl_global float *render_buffer,
                                  int x,
                                  int y,
@@ -72,7 +75,7 @@ class CPUKernels {
                                  int stride)>;
 
   using AdaptiveSamplingFilterXFunction =
-      CPUKernelFunction<void (*)(const KernelGlobals *kg,
+      CPUKernelFunction<void (*)(const KernelGlobalsCPU *kg,
                                  ccl_global float *render_buffer,
                                  int y,
                                  int start_x,
@@ -81,7 +84,7 @@ class CPUKernels {
                                  int stride)>;
 
   using AdaptiveSamplingFilterYFunction =
-      CPUKernelFunction<void (*)(const KernelGlobals *kg,
+      CPUKernelFunction<void (*)(const KernelGlobalsCPU *kg,
                                  ccl_global float *render_buffer,
                                  int x,
                                  int start_y,
@@ -97,13 +100,44 @@ class CPUKernels {
   /* Cryptomatte. */
 
   using CryptomattePostprocessFunction = CPUKernelFunction<void (*)(
-      const KernelGlobals *kg, ccl_global float *render_buffer, int pixel_index)>;
+      const KernelGlobalsCPU *kg, ccl_global float *render_buffer, int pixel_index)>;
 
   CryptomattePostprocessFunction cryptomatte_postprocess;
 
-  /* Bake. */
+  /* Film Convert. */
+  using FilmConvertFunction = CPUKernelFunction<void (*)(const KernelFilmConvert *kfilm_convert,
+                                                         const float *buffer,
+                                                         float *pixel,
+                                                         const int width,
+                                                         const int buffer_stride,
+                                                         const int pixel_stride)>;
+  using FilmConvertHalfRGBAFunction =
+      CPUKernelFunction<void (*)(const KernelFilmConvert *kfilm_convert,
+                                 const float *buffer,
+                                 half4 *pixel,
+                                 const int width,
+                                 const int buffer_stride)>;
 
-  CPUKernelFunction<void (*)(const KernelGlobals *, float *, int, int, int, int, int)> bake;
+#define KERNEL_FILM_CONVERT_FUNCTION(name) \
+  FilmConvertFunction film_convert_##name; \
+  FilmConvertHalfRGBAFunction film_convert_half_rgba_##name;
+
+  KERNEL_FILM_CONVERT_FUNCTION(depth)
+  KERNEL_FILM_CONVERT_FUNCTION(mist)
+  KERNEL_FILM_CONVERT_FUNCTION(sample_count)
+  KERNEL_FILM_CONVERT_FUNCTION(float)
+
+  KERNEL_FILM_CONVERT_FUNCTION(light_path)
+  KERNEL_FILM_CONVERT_FUNCTION(float3)
+
+  KERNEL_FILM_CONVERT_FUNCTION(motion)
+  KERNEL_FILM_CONVERT_FUNCTION(cryptomatte)
+  KERNEL_FILM_CONVERT_FUNCTION(shadow_catcher)
+  KERNEL_FILM_CONVERT_FUNCTION(shadow_catcher_matte_with_shadow)
+  KERNEL_FILM_CONVERT_FUNCTION(combined)
+  KERNEL_FILM_CONVERT_FUNCTION(float4)
+
+#undef KERNEL_FILM_CONVERT_FUNCTION
 
   CPUKernels();
 };

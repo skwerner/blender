@@ -44,9 +44,11 @@ set(INC
   ../../../intern/atomic
   ../../../intern/glew-mx
   ../../../intern/guardedalloc
+  ../../../intern/opensubdiv
 
   # dna_type_offsets.h
   ${CMAKE_CURRENT_BINARY_DIR}/../makesdna/intern
+  ${OPENSUBDIV_INCLUDE_DIRS}
 )
 
 set(SRC
@@ -61,6 +63,7 @@ set(SRC
   intern/mesh_extractors/extract_mesh_ibo_lines_paint_mask.cc
   intern/mesh_extractors/extract_mesh_ibo_points.cc
   intern/mesh_extractors/extract_mesh_ibo_tris.cc
+  intern/mesh_extractors/extract_mesh_vbo_attributes.cc
   intern/mesh_extractors/extract_mesh_vbo_edge_fac.cc
   intern/mesh_extractors/extract_mesh_vbo_edit_data.cc
   intern/mesh_extractors/extract_mesh_vbo_edituv_data.cc
@@ -84,12 +87,13 @@ set(SRC
   intern/draw_cache_impl_curve.cc
   intern/draw_cache_impl_displist.c
   intern/draw_cache_impl_gpencil.c
-  intern/draw_cache_impl_hair.c
+  intern/draw_cache_impl_hair.cc
   intern/draw_cache_impl_lattice.c
   intern/draw_cache_impl_mesh.c
   intern/draw_cache_impl_metaball.c
   intern/draw_cache_impl_particles.c
   intern/draw_cache_impl_pointcloud.c
+  intern/draw_cache_impl_subdivision.cc
   intern/draw_cache_impl_volume.c
   intern/draw_color_management.cc
   intern/draw_common.c
@@ -106,10 +110,14 @@ set(SRC
   intern/draw_manager_texture.c
   intern/draw_select_buffer.c
   intern/draw_shader.c
+  intern/draw_texture_pool.cc
   intern/draw_view.c
+  intern/draw_view_data.cc
+  intern/smaa_textures.c
   engines/basic/basic_engine.c
-  engines/image/image_engine.c
-  engines/image/image_shader.c
+  engines/basic/basic_shader.c
+  engines/image/image_engine.cc
+  engines/image/image_shader.cc
   engines/eevee/eevee_bloom.c
   engines/eevee/eevee_cryptomatte.c
   engines/eevee/eevee_data.c
@@ -188,7 +196,6 @@ set(SRC
   engines/overlay/overlay_wireframe.c
 
   DRW_engine.h
-  DRW_engine_types.h
   DRW_select_buffer.h
   intern/DRW_render.h
   intern/draw_cache.h
@@ -205,17 +212,24 @@ set(SRC
   intern/draw_manager_testing.h
   intern/draw_manager_text.h
   intern/draw_shader.h
+  intern/draw_subdivision.h
+  intern/draw_texture_pool.h
   intern/draw_view.h
+  intern/draw_view_data.h
   intern/mesh_extractors/extract_mesh.h
   intern/smaa_textures.h
   engines/basic/basic_engine.h
+  engines/basic/basic_private.h
   engines/eevee/eevee_engine.h
   engines/eevee/eevee_lightcache.h
   engines/eevee/eevee_lut.h
   engines/eevee/eevee_private.h
   engines/external/external_engine.h
+  engines/image/image_drawing_mode_image_space.hh
   engines/image/image_engine.h
-  engines/image/image_private.h
+  engines/image/image_private.hh
+  engines/image/image_space_image.hh
+  engines/image/image_space_node.hh
   engines/workbench/workbench_engine.h
   engines/workbench/workbench_private.h
   engines/select/select_engine.h
@@ -362,6 +376,18 @@ data_to_c_simple(intern/shaders/common_view_lib.glsl SRC)
 data_to_c_simple(intern/shaders/common_fxaa_lib.glsl SRC)
 data_to_c_simple(intern/shaders/common_smaa_lib.glsl SRC)
 data_to_c_simple(intern/shaders/common_fullscreen_vert.glsl SRC)
+data_to_c_simple(intern/shaders/common_subdiv_custom_data_interp_comp.glsl SRC)
+data_to_c_simple(intern/shaders/common_subdiv_ibo_lines_comp.glsl SRC)
+data_to_c_simple(intern/shaders/common_subdiv_ibo_tris_comp.glsl SRC)
+data_to_c_simple(intern/shaders/common_subdiv_lib.glsl SRC)
+data_to_c_simple(intern/shaders/common_subdiv_normals_accumulate_comp.glsl SRC)
+data_to_c_simple(intern/shaders/common_subdiv_normals_finalize_comp.glsl SRC)
+data_to_c_simple(intern/shaders/common_subdiv_patch_evaluation_comp.glsl SRC)
+data_to_c_simple(intern/shaders/common_subdiv_vbo_edge_fac_comp.glsl SRC)
+data_to_c_simple(intern/shaders/common_subdiv_vbo_edituv_strech_angle_comp.glsl SRC)
+data_to_c_simple(intern/shaders/common_subdiv_vbo_edituv_strech_area_comp.glsl SRC)
+data_to_c_simple(intern/shaders/common_subdiv_vbo_lnor_comp.glsl SRC)
+data_to_c_simple(intern/shaders/common_subdiv_vbo_sculpt_data_comp.glsl SRC)
 
 data_to_c_simple(engines/gpencil/shaders/gpencil_frag.glsl SRC)
 data_to_c_simple(engines/gpencil/shaders/gpencil_vert.glsl SRC)
@@ -527,8 +553,8 @@ if(WITH_GTESTS)
       tests/draw_testing.hh
     )
     set(TEST_INC
-      "../../../intern/ghost/"
-      "../gpu/tests/"
+      ../../../intern/ghost
+      ../gpu/tests
     )
     set(TEST_LIB
     )

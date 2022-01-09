@@ -435,6 +435,13 @@ static V3fArraySamplePtr get_velocity_prop(const ICompoundProperty &schema,
       const ICompoundProperty &prop = ICompoundProperty(schema, header.getName());
 
       if (has_property(prop, name)) {
+        /* Header cannot be null here, as its presence is checked via has_property, so it is safe
+         * to dereference. */
+        const PropertyHeader *header = prop.getPropertyHeader(name);
+        if (!IV3fArrayProperty::matches(*header)) {
+          continue;
+        }
+
         const IV3fArrayProperty &velocity_prop = IV3fArrayProperty(prop, name, 0);
         if (velocity_prop) {
           return velocity_prop.getValue(selector);
@@ -442,7 +449,7 @@ static V3fArraySamplePtr get_velocity_prop(const ICompoundProperty &schema,
       }
     }
     else if (header.isArray()) {
-      if (header.getName() == name) {
+      if (header.getName() == name && IV3fArrayProperty::matches(header)) {
         const IV3fArrayProperty &velocity_prop = IV3fArrayProperty(schema, name, 0);
         return velocity_prop.getValue(selector);
       }
@@ -456,12 +463,16 @@ static void read_velocity(const V3fArraySamplePtr &velocities,
                           const CDStreamConfig &config,
                           const float velocity_scale)
 {
+  const int num_velocity_vectors = static_cast<int>(velocities->size());
+  if (num_velocity_vectors != config.mesh->totvert) {
+    /* Files containing videogrammetry data may be malformed and export velocity data on missing
+     * frames (most likely by copying the last valid data). */
+    return;
+  }
+
   CustomDataLayer *velocity_layer = BKE_id_attribute_new(
       &config.mesh->id, "velocity", CD_PROP_FLOAT3, ATTR_DOMAIN_POINT, nullptr);
   float(*velocity)[3] = (float(*)[3])velocity_layer->data;
-
-  const int num_velocity_vectors = static_cast<int>(velocities->size());
-  BLI_assert(num_velocity_vectors == config.mesh->totvert);
 
   for (int i = 0; i < num_velocity_vectors; i++) {
     const Imath::V3f &vel_in = (*velocities)[i];

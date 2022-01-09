@@ -28,10 +28,10 @@
 #    define NOMINMAX
 #    define TBB_MIN_MAX_CLEANUP
 #  endif
-#  include "tbb/parallel_reduce.h"
 #  include <tbb/blocked_range.h>
 #  include <tbb/parallel_for.h>
 #  include <tbb/parallel_for_each.h>
+#  include <tbb/parallel_reduce.h>
 #  include <tbb/task_arena.h>
 #  ifdef WIN32
 /* We cannot keep this defined, since other parts of the code deal with this on their own, leading
@@ -67,14 +67,19 @@ void parallel_for(IndexRange range, int64_t grain_size, const Function &function
     return;
   }
 #ifdef WITH_TBB
-  tbb::parallel_for(tbb::blocked_range<int64_t>(range.first(), range.one_after_last(), grain_size),
-                    [&](const tbb::blocked_range<int64_t> &subrange) {
-                      function(IndexRange(subrange.begin(), subrange.size()));
-                    });
+  /* Invoking tbb for small workloads has a large overhead. */
+  if (range.size() >= grain_size) {
+    tbb::parallel_for(
+        tbb::blocked_range<int64_t>(range.first(), range.one_after_last(), grain_size),
+        [&](const tbb::blocked_range<int64_t> &subrange) {
+          function(IndexRange(subrange.begin(), subrange.size()));
+        });
+    return;
+  }
 #else
   UNUSED_VARS(grain_size);
-  function(range);
 #endif
+  function(range);
 }
 
 template<typename Value, typename Function, typename Reduction>

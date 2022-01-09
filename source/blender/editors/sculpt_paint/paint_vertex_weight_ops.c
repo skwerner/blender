@@ -339,8 +339,8 @@ static const EnumPropertyItem *weight_paint_sample_enum_itemf(bContext *C,
         uint index;
 
         const int mval[2] = {
-            win->eventstate->x - vc.region->winrct.xmin,
-            win->eventstate->y - vc.region->winrct.ymin,
+            win->eventstate->xy[0] - vc.region->winrct.xmin,
+            win->eventstate->xy[1] - vc.region->winrct.ymin,
         };
 
         view3d_operator_needs_opengl(C);
@@ -408,10 +408,11 @@ static int weight_sample_group_exec(bContext *C, wmOperator *op)
   return OPERATOR_FINISHED;
 }
 
-/* TODO: we could make this a menu into OBJECT_OT_vertex_group_set_active
- * rather than its own operator */
 void PAINT_OT_weight_sample_group(wmOperatorType *ot)
 {
+  /* TODO: we could make this a menu into #OBJECT_OT_vertex_group_set_active
+   * rather than its own operator */
+
   PropertyRNA *prop = NULL;
 
   /* identifiers */

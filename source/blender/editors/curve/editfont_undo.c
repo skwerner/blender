@@ -33,9 +33,9 @@
 #include "DNA_scene_types.h"
 
 #include "BKE_context.h"
-#include "BKE_font.h"
 #include "BKE_main.h"
 #include "BKE_undo_system.h"
+#include "BKE_vfont.h"
 
 #include "DEG_depsgraph.h"
 
@@ -405,7 +405,6 @@ static void font_undosys_foreach_ID_ref(UndoStep *us_p,
   foreach_ID_ref_fn(user_data, ((UndoRefID *)&us->obedit_ref));
 }
 
-/* Export for ED_undo_sys. */
 void ED_font_undosys_type(UndoType *ut)
 {
   ut->name = "Edit Font";

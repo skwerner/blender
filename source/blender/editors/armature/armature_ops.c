@@ -33,9 +33,10 @@
 
 /* ************************** registration **********************************/
 
-/* Both operators ARMATURE_OT_xxx and POSE_OT_xxx here */
 void ED_operatortypes_armature(void)
 {
+  /* Both operators `ARMATURE_OT_*` and `POSE_OT_*` are registered here. */
+
   /* EDIT ARMATURE */
   WM_operatortype_append(ARMATURE_OT_bone_primitive_add);
 
@@ -150,6 +151,7 @@ void ED_operatortypes_armature(void)
   WM_operatortype_append(POSE_OT_push_rest);
   WM_operatortype_append(POSE_OT_relax_rest);
   WM_operatortype_append(POSE_OT_breakdown);
+  WM_operatortype_append(POSE_OT_blend_to_neighbors);
 }
 
 void ED_operatormacros_armature(void)

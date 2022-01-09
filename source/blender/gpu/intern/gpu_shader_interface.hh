@@ -74,7 +74,7 @@ class ShaderInterface {
   ShaderInterface();
   virtual ~ShaderInterface();
 
-  void debug_print(void);
+  void debug_print();
 
   inline const ShaderInput *attr_get(const char *name) const
   {
@@ -130,17 +130,19 @@ class ShaderInterface {
 
   inline uint32_t set_input_name(ShaderInput *input, char *name, uint32_t name_len) const;
 
-  /* Finalize interface construction by sorting the ShaderInputs for faster lookups. */
-  void sort_inputs(void);
+  /**
+   * Finalize interface construction by sorting the #ShaderInputs for faster lookups.
+   */
+  void sort_inputs();
 
  private:
   inline const ShaderInput *input_lookup(const ShaderInput *const inputs,
-                                         const uint inputs_len,
+                                         uint inputs_len,
                                          const char *name) const;
 
   inline const ShaderInput *input_lookup(const ShaderInput *const inputs,
-                                         const uint inputs_len,
-                                         const int binding) const;
+                                         uint inputs_len,
+                                         int binding) const;
 };
 
 inline const char *ShaderInterface::builtin_uniform_name(GPUUniformBuiltin u)

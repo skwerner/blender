@@ -127,6 +127,8 @@ typedef struct tGPDfill {
   struct bGPDstroke *gps_mouse;
   /** Pointer to report messages. */
   struct ReportList *reports;
+  /** For operations that require occlusion testing. */
+  struct ViewDepths *depths;
   /** flags */
   short flag;
   /** avoid too fast events */
@@ -1070,7 +1072,7 @@ static void gpencil_erase_processed_area(tGPDfill *tgpf)
 
   /* First set in blue the perimeter. */
   for (int i = 0; i < tgpf->sbuffer_used && point2D; i++, point2D++) {
-    int image_idx = ibuf->x * (int)point2D->y + (int)point2D->x;
+    int image_idx = ibuf->x * (int)point2D->m_xy[1] + (int)point2D->m_xy[0];
     set_pixel(ibuf, image_idx, blue_col);
   }
 
@@ -1374,7 +1376,7 @@ static void gpencil_get_depth_array(tGPDfill *tgpf)
     /* need to restore the original projection settings before packing up */
     view3d_region_operator_needs_opengl(tgpf->win, tgpf->region);
     ED_view3d_depth_override(
-        tgpf->depsgraph, tgpf->region, tgpf->v3d, NULL, V3D_DEPTH_NO_GPENCIL, NULL);
+        tgpf->depsgraph, tgpf->region, tgpf->v3d, NULL, V3D_DEPTH_NO_GPENCIL, &tgpf->depths);
 
     /* Since strokes are so fine, when using their depth we need a margin
      * otherwise they might get missed. */
@@ -1385,18 +1387,17 @@ static void gpencil_get_depth_array(tGPDfill *tgpf)
     int interp_depth = 0;
     int found_depth = 0;
 
+    const ViewDepths *depths = tgpf->depths;
     tgpf->depth_arr = MEM_mallocN(sizeof(float) * totpoints, "depth_points");
 
     for (i = 0, ptc = tgpf->sbuffer; i < totpoints; i++, ptc++) {
 
       int mval_i[2];
-      round_v2i_v2fl(mval_i, &ptc->x);
+      round_v2i_v2fl(mval_i, ptc->m_xy);
 
-      if ((ED_view3d_autodist_depth(tgpf->region, mval_i, depth_margin, tgpf->depth_arr + i) ==
-           0) &&
-          (i &&
-           (ED_view3d_autodist_depth_seg(
-                tgpf->region, mval_i, mval_prev, depth_margin + 1, tgpf->depth_arr + i) == 0))) {
+      if ((ED_view3d_depth_read_cached(depths, mval_i, depth_margin, tgpf->depth_arr + i) == 0) &&
+          (i && (ED_view3d_depth_read_cached_seg(
+                     depths, mval_i, mval_prev, depth_margin + 1, tgpf->depth_arr + i) == 0))) {
         interp_depth = true;
       }
       else {
@@ -1414,7 +1415,7 @@ static void gpencil_get_depth_array(tGPDfill *tgpf)
     }
     else {
       if (interp_depth) {
-        interp_sparse_array(tgpf->depth_arr, totpoints, FLT_MAX);
+        interp_sparse_array(tgpf->depth_arr, totpoints, DEPTH_INVALID);
       }
     }
   }
@@ -1436,9 +1437,9 @@ static int gpencil_points_from_stack(tGPDfill *tgpf)
   while (!BLI_stack_is_empty(tgpf->stack)) {
     int v[2];
     BLI_stack_pop(tgpf->stack, &v);
-    copy_v2fl_v2i(&point2D->x, v);
+    copy_v2fl_v2i(point2D->m_xy, v);
     /* shift points to center of pixel */
-    add_v2_fl(&point2D->x, 0.5f);
+    add_v2_fl(point2D->m_xy, 0.5f);
     point2D->pressure = 1.0f;
     point2D->strength = 1.0f;
     point2D->time = 0.0f;
@@ -1569,7 +1570,7 @@ static void gpencil_stroke_from_buffer(tGPDfill *tgpf)
   float smoothfac = 1.0f;
   for (int r = 0; r < 1; r++) {
     for (int i = 0; i < gps->totpoints; i++) {
-      BKE_gpencil_stroke_smooth_point(gps, i, smoothfac - reduce);
+      BKE_gpencil_stroke_smooth_point(gps, i, smoothfac - reduce, false);
     }
     reduce += 0.25f; /* reduce the factor */
   }
@@ -1769,6 +1770,11 @@ static void gpencil_fill_exit(bContext *C, wmOperator *op)
     /* remove drawing handler */
     if (tgpf->draw_handle_3d) {
       ED_region_draw_cb_exit(tgpf->region->type, tgpf->draw_handle_3d);
+    }
+
+    /* Remove depth buffer in cache. */
+    if (tgpf->depths) {
+      ED_view3d_depths_free(tgpf->depths);
     }
 
     /* finally, free memory used by temp data */
@@ -2102,12 +2108,11 @@ static int gpencil_fill_modal(bContext *C, wmOperator *op, const wmEvent *event)
 
       /* first time the event is not enabled to show help lines. */
       if ((tgpf->oldkey != -1) || (!help_lines)) {
-        ARegion *region = BKE_area_find_region_xy(
-            CTX_wm_area(C), RGN_TYPE_ANY, event->x, event->y);
+        ARegion *region = BKE_area_find_region_xy(CTX_wm_area(C), RGN_TYPE_ANY, event->xy);
         if (region) {
           bool in_bounds = false;
           /* Perform bounds check */
-          in_bounds = BLI_rcti_isect_pt(&region->winrct, event->x, event->y);
+          in_bounds = BLI_rcti_isect_pt_v(&region->winrct, event->xy);
 
           if ((in_bounds) && (region->regiontype == RGN_TYPE_WINDOW)) {
             tgpf->mouse[0] = event->mval[0];
@@ -2120,7 +2125,7 @@ static int gpencil_fill_modal(bContext *C, wmOperator *op, const wmEvent *event)
             tgpf->gps_mouse = BKE_gpencil_stroke_new(0, 1, 10.0f);
             tGPspoint point2D;
             bGPDspoint *pt = &tgpf->gps_mouse->points[0];
-            copy_v2fl_v2i(&point2D.x, tgpf->mouse);
+            copy_v2fl_v2i(point2D.m_xy, tgpf->mouse);
             gpencil_stroke_convertcoords_tpoint(
                 tgpf->scene, tgpf->region, tgpf->ob, &point2D, NULL, &pt->x);
 

@@ -44,6 +44,7 @@ typedef enum {
   SNAP_NOT_SELECTED = 1,
   SNAP_NOT_ACTIVE = 2,
   SNAP_ONLY_ACTIVE = 3,
+  SNAP_SELECTABLE = 4,
 } eSnapSelect;
 
 typedef enum {
@@ -83,11 +84,6 @@ struct SnapObjectParams {
 
 typedef struct SnapObjectContext SnapObjectContext;
 SnapObjectContext *ED_transform_snap_object_context_create(struct Scene *scene, int flag);
-SnapObjectContext *ED_transform_snap_object_context_create_view3d(struct Scene *scene,
-                                                                  int flag,
-                                                                  /* extra args for view3d */
-                                                                  const struct ARegion *region,
-                                                                  const struct View3D *v3d);
 void ED_transform_snap_object_context_destroy(SnapObjectContext *sctx);
 
 /* callbacks to filter how snap works */
@@ -100,6 +96,7 @@ void ED_transform_snap_object_context_set_editmesh_callbacks(
 
 bool ED_transform_snap_object_project_ray_ex(struct SnapObjectContext *sctx,
                                              struct Depsgraph *depsgraph,
+                                             const View3D *v3d,
                                              const struct SnapObjectParams *params,
                                              const float ray_start[3],
                                              const float ray_normal[3],
@@ -112,6 +109,7 @@ bool ED_transform_snap_object_project_ray_ex(struct SnapObjectContext *sctx,
                                              float r_obmat[4][4]);
 bool ED_transform_snap_object_project_ray(SnapObjectContext *sctx,
                                           struct Depsgraph *depsgraph,
+                                          const View3D *v3d,
                                           const struct SnapObjectParams *params,
                                           const float ray_origin[3],
                                           const float ray_direction[3],
@@ -119,8 +117,16 @@ bool ED_transform_snap_object_project_ray(SnapObjectContext *sctx,
                                           float r_co[3],
                                           float r_no[3]);
 
+/**
+ * Fill in a list of all hits.
+ *
+ * \param ray_depth: Only depths in this range are considered, -1.0 for maximum.
+ * \param sort: Optionally sort the hits by depth.
+ * \param r_hit_list: List of #SnapObjectHitDepth (caller must free).
+ */
 bool ED_transform_snap_object_project_ray_all(SnapObjectContext *sctx,
                                               struct Depsgraph *depsgraph,
+                                              const View3D *v3d,
                                               const struct SnapObjectParams *params,
                                               const float ray_start[3],
                                               const float ray_normal[3],
@@ -130,7 +136,9 @@ bool ED_transform_snap_object_project_ray_all(SnapObjectContext *sctx,
 
 short ED_transform_snap_object_project_view3d_ex(struct SnapObjectContext *sctx,
                                                  struct Depsgraph *depsgraph,
-                                                 const unsigned short snap_to,
+                                                 const ARegion *region,
+                                                 const View3D *v3d,
+                                                 unsigned short snap_to,
                                                  const struct SnapObjectParams *params,
                                                  const float mval[2],
                                                  const float prev_co[3],
@@ -139,20 +147,41 @@ short ED_transform_snap_object_project_view3d_ex(struct SnapObjectContext *sctx,
                                                  float r_no[3],
                                                  int *r_index,
                                                  struct Object **r_ob,
-                                                 float r_obmat[4][4]);
-bool ED_transform_snap_object_project_view3d(struct SnapObjectContext *sctx,
-                                             struct Depsgraph *depsgraph,
-                                             const unsigned short snap_to,
-                                             const struct SnapObjectParams *params,
-                                             const float mval[2],
-                                             const float prev_co[3],
-                                             float *dist_px,
-                                             /* return args */
-                                             float r_loc[3],
-                                             float r_no[3]);
+                                                 float r_obmat[4][4],
+                                                 float r_face_nor[3]);
+/**
+ * Convenience function for performing snapping.
+ *
+ * Given a 2D region value, snap to vert/edge/face.
+ *
+ * \param sctx: Snap context.
+ * \param mval: Screenspace coordinate.
+ * \param prev_co: Coordinate for perpendicular point calculation (optional).
+ * \param dist_px: Maximum distance to snap (in pixels).
+ * \param r_loc: hit location.
+ * \param r_no: hit normal (optional).
+ * \return Snap success.
+ */
+short ED_transform_snap_object_project_view3d(struct SnapObjectContext *sctx,
+                                              struct Depsgraph *depsgraph,
+                                              const ARegion *region,
+                                              const View3D *v3d,
+                                              unsigned short snap_to,
+                                              const struct SnapObjectParams *params,
+                                              const float mval[2],
+                                              const float prev_co[3],
+                                              float *dist_px,
+                                              /* return args */
+                                              float r_loc[3],
+                                              float r_no[3]);
 
+/**
+ * see: #ED_transform_snap_object_project_ray_all
+ */
 bool ED_transform_snap_object_project_all_view3d_ex(SnapObjectContext *sctx,
                                                     struct Depsgraph *depsgraph,
+                                                    const ARegion *region,
+                                                    const View3D *v3d,
                                                     const struct SnapObjectParams *params,
                                                     const float mval[2],
                                                     float ray_depth,

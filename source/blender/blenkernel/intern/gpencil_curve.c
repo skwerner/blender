@@ -477,17 +477,6 @@ static void gpencil_editstroke_deselect_all(bGPDcurve *gpc)
   gpc->flag &= ~GP_CURVE_SELECT;
 }
 
-/**
- * Convert a curve object to grease pencil stroke.
- *
- * \param bmain: Main thread pointer
- * \param scene: Original scene.
- * \param ob_gp: Grease pencil object to add strokes.
- * \param ob_cu: Curve to convert.
- * \param use_collections: Create layers using collection names.
- * \param scale_thickness: Scale thickness factor.
- * \param sample: Sample distance, zero to disable.
- */
 void BKE_gpencil_convert_curve(Main *bmain,
                                Scene *scene,
                                Object *ob_gp,
@@ -543,7 +532,7 @@ void BKE_gpencil_convert_curve(Main *bmain,
   int actcol = ob_gp->actcol;
 
   for (int slot = 1; slot <= ob_gp->totcol; slot++) {
-    while (slot <= ob_gp->totcol && !BKE_object_material_slot_used(ob_gp->data, slot)) {
+    while (slot <= ob_gp->totcol && !BKE_object_material_slot_used(ob_gp, slot)) {
       ob_gp->actcol = slot;
       BKE_object_material_slot_remove(bmain, ob_gp);
 
@@ -639,9 +628,6 @@ static bGPDcurve *gpencil_stroke_editcurve_generate_edgecases(bGPDstroke *gps,
   return NULL;
 }
 
-/**
- * Creates a bGPDcurve by doing a cubic curve fitting on the grease pencil stroke points.
- */
 bGPDcurve *BKE_gpencil_stroke_editcurve_generate(bGPDstroke *gps,
                                                  const float error_threshold,
                                                  const float corner_angle,
@@ -753,9 +739,6 @@ bGPDcurve *BKE_gpencil_stroke_editcurve_generate(bGPDstroke *gps,
   return editcurve;
 }
 
-/**
- * Updates the editcurve for a stroke. Frees the old curve if one exists and generates a new one.
- */
 void BKE_gpencil_stroke_editcurve_update(bGPdata *gpd, bGPDlayer *gpl, bGPDstroke *gps)
 {
   if (gps == NULL || gps->totpoints < 0) {
@@ -778,9 +761,6 @@ void BKE_gpencil_stroke_editcurve_update(bGPdata *gpd, bGPDlayer *gpl, bGPDstrok
   gps->editcurve = editcurve;
 }
 
-/**
- * Sync the selection from stroke to editcurve
- */
 void BKE_gpencil_editcurve_stroke_sync_selection(bGPdata *UNUSED(gpd),
                                                  bGPDstroke *gps,
                                                  bGPDcurve *gpc)
@@ -807,9 +787,6 @@ void BKE_gpencil_editcurve_stroke_sync_selection(bGPdata *UNUSED(gpd),
   }
 }
 
-/**
- * Sync the selection from editcurve to stroke
- */
 void BKE_gpencil_stroke_editcurve_sync_selection(bGPdata *gpd, bGPDstroke *gps, bGPDcurve *gpc)
 {
   if (gpc->flag & GP_CURVE_SELECT) {
@@ -1055,9 +1032,6 @@ static float *gpencil_stroke_points_from_editcurve_fixed_resolu(bGPDcurve_point 
   return (float(*))r_points;
 }
 
-/**
- * Recalculate stroke points with the editcurve of the stroke.
- */
 void BKE_gpencil_stroke_update_geometry_from_editcurve(bGPDstroke *gps,
                                                        const uint resolution,
                                                        const bool adaptive)
@@ -1142,9 +1116,6 @@ void BKE_gpencil_stroke_update_geometry_from_editcurve(bGPDstroke *gps,
   MEM_freeN(points);
 }
 
-/**
- * Recalculate the handles of the edit curve of a grease pencil stroke
- */
 void BKE_gpencil_editcurve_recalculate_handles(bGPDstroke *gps)
 {
   if (gps == NULL || gps->editcurve == NULL) {
@@ -1167,7 +1138,7 @@ void BKE_gpencil_editcurve_recalculate_handles(bGPDstroke *gps)
     bGPDcurve_point *gpc_pt = &gpc->curve_points[i];
     bGPDcurve_point *gpc_pt_prev = &gpc->curve_points[i - 1];
     bGPDcurve_point *gpc_pt_next = &gpc->curve_points[i + 1];
-    /* update handle if point or neighbour is selected */
+    /* update handle if point or neighbor is selected */
     if (gpc_pt->flag & GP_CURVE_POINT_SELECT || gpc_pt_prev->flag & GP_CURVE_POINT_SELECT ||
         gpc_pt_next->flag & GP_CURVE_POINT_SELECT) {
       BezTriple *bezt = &gpc_pt->bezt;

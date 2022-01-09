@@ -20,24 +20,27 @@
 #include "bvh/bvh2.h"
 
 #include "device/device.h"
-#include "device/device_queue.h"
+#include "device/queue.h"
 
 #include "device/cpu/device.h"
+#include "device/cpu/kernel.h"
 #include "device/cuda/device.h"
 #include "device/dummy/device.h"
+#include "device/hip/device.h"
+#include "device/metal/device.h"
 #include "device/multi/device.h"
 #include "device/optix/device.h"
 
-#include "util/util_foreach.h"
-#include "util/util_half.h"
-#include "util/util_logging.h"
-#include "util/util_math.h"
-#include "util/util_opengl.h"
-#include "util/util_string.h"
-#include "util/util_system.h"
-#include "util/util_time.h"
-#include "util/util_types.h"
-#include "util/util_vector.h"
+#include "util/foreach.h"
+#include "util/half.h"
+#include "util/log.h"
+#include "util/math.h"
+#include "util/string.h"
+#include "util/system.h"
+#include "util/task.h"
+#include "util/time.h"
+#include "util/types.h"
+#include "util/vector.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -47,6 +50,8 @@ thread_mutex Device::device_mutex;
 vector<DeviceInfo> Device::cuda_devices;
 vector<DeviceInfo> Device::optix_devices;
 vector<DeviceInfo> Device::cpu_devices;
+vector<DeviceInfo> Device::hip_devices;
+vector<DeviceInfo> Device::metal_devices;
 uint Device::devices_initialized_mask = 0;
 
 /* Device */
@@ -70,14 +75,12 @@ void Device::build_bvh(BVH *bvh, Progress &progress, bool refit)
 
 Device *Device::create(const DeviceInfo &info, Stats &stats, Profiler &profiler)
 {
-#ifdef WITH_MULTI
   if (!info.multi_devices.empty()) {
     /* Always create a multi device when info contains multiple devices.
      * This is done so that the type can still be e.g. DEVICE_CPU to indicate
      * that it is a homogeneous collection of devices, which simplifies checks. */
     return device_multi_create(info, stats, profiler);
   }
-#endif
 
   Device *device = NULL;
 
@@ -95,6 +98,20 @@ Device *Device::create(const DeviceInfo &info, Stats &stats, Profiler &profiler)
     case DEVICE_OPTIX:
       if (device_optix_init())
         device = device_optix_create(info, stats, profiler);
+      break;
+#endif
+
+#ifdef WITH_HIP
+    case DEVICE_HIP:
+      if (device_hip_init())
+        device = device_hip_create(info, stats, profiler);
+      break;
+#endif
+
+#ifdef WITH_METAL
+    case DEVICE_METAL:
+      if (device_metal_init())
+        device = device_metal_create(info, stats, profiler);
       break;
 #endif
     default:
@@ -118,6 +135,10 @@ DeviceType Device::type_from_string(const char *name)
     return DEVICE_OPTIX;
   else if (strcmp(name, "MULTI") == 0)
     return DEVICE_MULTI;
+  else if (strcmp(name, "HIP") == 0)
+    return DEVICE_HIP;
+  else if (strcmp(name, "METAL") == 0)
+    return DEVICE_METAL;
 
   return DEVICE_NONE;
 }
@@ -132,6 +153,10 @@ string Device::string_from_type(DeviceType type)
     return "OPTIX";
   else if (type == DEVICE_MULTI)
     return "MULTI";
+  else if (type == DEVICE_HIP)
+    return "HIP";
+  else if (type == DEVICE_METAL)
+    return "METAL";
 
   return "";
 }
@@ -145,6 +170,12 @@ vector<DeviceType> Device::available_types()
 #endif
 #ifdef WITH_OPTIX
   types.push_back(DEVICE_OPTIX);
+#endif
+#ifdef WITH_HIP
+  types.push_back(DEVICE_HIP);
+#endif
+#ifdef WITH_METAL
+  types.push_back(DEVICE_METAL);
 #endif
   return types;
 }
@@ -187,6 +218,20 @@ vector<DeviceInfo> Device::available_devices(uint mask)
   }
 #endif
 
+#ifdef WITH_HIP
+  if (mask & DEVICE_MASK_HIP) {
+    if (!(devices_initialized_mask & DEVICE_MASK_HIP)) {
+      if (device_hip_init()) {
+        device_hip_info(hip_devices);
+      }
+      devices_initialized_mask |= DEVICE_MASK_HIP;
+    }
+    foreach (DeviceInfo &info, hip_devices) {
+      devices.push_back(info);
+    }
+  }
+#endif
+
   if (mask & DEVICE_MASK_CPU) {
     if (!(devices_initialized_mask & DEVICE_MASK_CPU)) {
       device_cpu_info(cpu_devices);
@@ -196,6 +241,20 @@ vector<DeviceInfo> Device::available_devices(uint mask)
       devices.push_back(info);
     }
   }
+
+#ifdef WITH_METAL
+  if (mask & DEVICE_MASK_METAL) {
+    if (!(devices_initialized_mask & DEVICE_MASK_METAL)) {
+      if (device_metal_init()) {
+        device_metal_info(metal_devices);
+      }
+      devices_initialized_mask |= DEVICE_MASK_METAL;
+    }
+    foreach (DeviceInfo &info, metal_devices) {
+      devices.push_back(info);
+    }
+  }
+#endif
 
   return devices;
 }
@@ -227,6 +286,24 @@ string Device::device_capabilities(uint mask)
   }
 #endif
 
+#ifdef WITH_HIP
+  if (mask & DEVICE_MASK_HIP) {
+    if (device_hip_init()) {
+      capabilities += "\nHIP device capabilities:\n";
+      capabilities += device_hip_capabilities();
+    }
+  }
+#endif
+
+#ifdef WITH_METAL
+  if (mask & DEVICE_MASK_METAL) {
+    if (device_metal_init()) {
+      capabilities += "\nMetal device capabilities:\n";
+      capabilities += device_metal_capabilities();
+    }
+  }
+#endif
+
   return capabilities;
 }
 
@@ -247,7 +324,6 @@ DeviceInfo Device::get_multi_device(const vector<DeviceInfo> &subdevices,
   info.description = "Multi Device";
   info.num = 0;
 
-  info.has_half_images = true;
   info.has_nanovdb = true;
   info.has_osl = true;
   info.has_profiling = true;
@@ -258,7 +334,7 @@ DeviceInfo Device::get_multi_device(const vector<DeviceInfo> &subdevices,
     /* Ensure CPU device does not slow down GPU. */
     if (device.type == DEVICE_CPU && subdevices.size() > 1) {
       if (background) {
-        int orig_cpu_threads = (threads) ? threads : system_cpu_thread_count();
+        int orig_cpu_threads = (threads) ? threads : TaskScheduler::num_threads();
         int cpu_threads = max(orig_cpu_threads - (subdevices.size() - 1), 0);
 
         VLOG(1) << "CPU render threads reduced from " << orig_cpu_threads << " to " << cpu_threads
@@ -294,7 +370,6 @@ DeviceInfo Device::get_multi_device(const vector<DeviceInfo> &subdevices,
     }
 
     /* Accumulate device info. */
-    info.has_half_images &= device.has_half_images;
     info.has_nanovdb &= device.has_nanovdb;
     info.has_osl &= device.has_osl;
     info.has_profiling &= device.has_profiling;
@@ -315,7 +390,9 @@ void Device::free_memory()
   devices_initialized_mask = 0;
   cuda_devices.free_memory();
   optix_devices.free_memory();
+  hip_devices.free_memory();
   cpu_devices.free_memory();
+  metal_devices.free_memory();
 }
 
 unique_ptr<DeviceQueue> Device::gpu_queue_create()
@@ -324,10 +401,11 @@ unique_ptr<DeviceQueue> Device::gpu_queue_create()
   return nullptr;
 }
 
-const CPUKernels *Device::get_cpu_kernels() const
+const CPUKernels &Device::get_cpu_kernels()
 {
-  LOG(FATAL) << "Device does not support CPU kernels.";
-  return nullptr;
+  /* Initialize CPU kernels once and reuse. */
+  static CPUKernels kernels;
+  return kernels;
 }
 
 void Device::get_cpu_kernel_thread_globals(

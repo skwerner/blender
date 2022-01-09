@@ -20,23 +20,25 @@
 #include "integrator/pass_accessor.h"
 #include "integrator/path_trace_work.h"
 #include "integrator/work_balancer.h"
-#include "render/buffers.h"
-#include "util/util_function.h"
-#include "util/util_thread.h"
-#include "util/util_unique_ptr.h"
-#include "util/util_vector.h"
+#include "session/buffers.h"
+#include "util/function.h"
+#include "util/thread.h"
+#include "util/unique_ptr.h"
+#include "util/vector.h"
 
 CCL_NAMESPACE_BEGIN
 
 class AdaptiveSampling;
 class Device;
 class DeviceScene;
+class DisplayDriver;
 class Film;
 class RenderBuffers;
 class RenderScheduler;
 class RenderWork;
+class PathTraceDisplay;
+class OutputDriver;
 class Progress;
-class GPUDisplay;
 class TileManager;
 
 /* PathTrace class takes care of kernel graph and scheduling on a (multi)device. It takes care of
@@ -70,7 +72,9 @@ class PathTrace {
    * render result. */
   bool ready_to_reset();
 
-  void reset(const BufferParams &full_params, const BufferParams &big_tile_params);
+  void reset(const BufferParams &full_params,
+             const BufferParams &big_tile_params,
+             bool reset_rendering);
 
   void device_free();
 
@@ -83,7 +87,7 @@ class PathTrace {
   void set_progress(Progress *progress);
 
   /* NOTE: This is a blocking call. Meaning, it will not return until given number of samples are
-   * rendered (or until rendering is requested to be cancelled). */
+   * rendered (or until rendering is requested to be canceled). */
   void render(const RenderWork &render_work);
 
   /* TODO(sergey): Decide whether denoiser is really a part of path tracer. Currently it is
@@ -98,19 +102,25 @@ class PathTrace {
    * Use this to configure the adaptive sampler before rendering any samples. */
   void set_adaptive_sampling(const AdaptiveSampling &adaptive_sampling);
 
-  /* Set GPU display which takes care of drawing the render result. */
-  void set_gpu_display(unique_ptr<GPUDisplay> gpu_display);
+  /* Sets output driver for render buffer output. */
+  void set_output_driver(unique_ptr<OutputDriver> driver);
 
-  /* Clear the GPU display by filling it in with all zeroes. */
-  void clear_gpu_display();
+  /* Set display driver for interactive render buffer display. */
+  void set_display_driver(unique_ptr<DisplayDriver> driver);
 
-  /* Perform drawing of the current state of the GPUDisplay. */
+  /* Clear the display buffer by filling it in with all zeroes. */
+  void clear_display();
+
+  /* Perform drawing of the current state of the DisplayDriver. */
   void draw();
+
+  /* Flush outstanding display commands before ending the render loop. */
+  void flush_display();
 
   /* Cancel rendering process as soon as possible, without waiting for full tile to be sampled.
    * Used in cases like reset of render session.
    *
-   * This is a blockign call, which returns as soon as there is no running `render_samples()` call.
+   * This is a blocking call, which returns as soon as there is no running `render_samples()` call.
    */
   void cancel();
 
@@ -120,11 +130,11 @@ class PathTrace {
    * the data will be copied to the device of the given render buffers. */
   void copy_to_render_buffers(RenderBuffers *render_buffers);
 
-  /* Copy happens via CPU side buffer: data will be copied from the device of the given rendetr
+  /* Copy happens via CPU side buffer: data will be copied from the device of the given render
    * buffers and will be copied to all devices of the path trace. */
   void copy_from_render_buffers(RenderBuffers *render_buffers);
 
-  /* Copy render buffers of the big tile from the device to hsot.
+  /* Copy render buffers of the big tile from the device to host.
    * Return true if all copies are successful. */
   bool copy_render_tile_from_device();
 
@@ -157,6 +167,7 @@ class PathTrace {
    * instead. */
   int2 get_render_tile_size() const;
   int2 get_render_tile_offset() const;
+  int2 get_render_size() const;
 
   /* Get buffer parameters of the current tile.
    *
@@ -168,18 +179,6 @@ class PathTrace {
    * times, and so on. */
   string full_report() const;
 
-  /* Callback which communicates an updates state of the render buffer of the current big tile.
-   * Is called during path tracing to communicate work-in-progress state of the final buffer. */
-  function<void(void)> tile_buffer_update_cb;
-
-  /* Callback which communicates final rendered buffer. Is called after pathtracing is done. */
-  function<void(void)> tile_buffer_write_cb;
-
-  /* Callback which initializes rendered buffer. Is called before pathtracing starts.
-   *
-   * This is used for baking. */
-  function<bool(void)> tile_buffer_read_cb;
-
   /* Callback which is called to report current rendering progress.
    *
    * It is supposed to be cheaper than buffer update/write, hence can be called more often.
@@ -189,7 +188,7 @@ class PathTrace {
 
  protected:
   /* Actual implementation of the rendering pipeline.
-   * Calls steps in order, checking for the cancel to be requested inbetween.
+   * Calls steps in order, checking for the cancel to be requested in between.
    *
    * Is separate from `render()` to simplify dealing with the early outputs and keeping
    * `render_cancel_` in the consistent state. */
@@ -252,7 +251,11 @@ class PathTrace {
   RenderScheduler &render_scheduler_;
   TileManager &tile_manager_;
 
-  unique_ptr<GPUDisplay> gpu_display_;
+  /* Display driver for interactive render buffer display. */
+  unique_ptr<PathTraceDisplay> display_;
+
+  /* Output driver to write render buffer to. */
+  unique_ptr<OutputDriver> output_driver_;
 
   /* Per-compute device descriptors of work which is responsible for path tracing on its configured
    * device. */
@@ -283,10 +286,10 @@ class PathTrace {
      * affects both resolution and stride as visible by the integrator kernels. */
     int resolution_divider = 0;
 
-    /* Paramaters of the big tile with the current resolution divider applied. */
+    /* Parameters of the big tile with the current resolution divider applied. */
     BufferParams effective_big_tile_params;
 
-    /* Denosier was run and there are denoised versions of the passes in the render buffers. */
+    /* Denoiser was run and there are denoised versions of the passes in the render buffers. */
     bool has_denoised_result = false;
 
     /* Current tile has been written (to either disk or callback.

@@ -34,6 +34,7 @@ enum {
   EVT_DATA_TIMER = 2,
   EVT_DATA_DRAGDROP = 3,
   EVT_DATA_NDOF_MOTION = 4,
+  EVT_DATA_XR = 5,
 };
 
 /* tablet active, matches GHOST_TTabletMode */
@@ -341,6 +342,9 @@ enum {
 
   /* could become gizmo callback */
   EVT_GIZMO_UPDATE = 0x5025, /* 20517 */
+
+  /* XR events: 0x503x */
+  EVT_XR_ACTION = 0x5030, /* 20528 */
   /* ********** End of Blender internal events. ********** */
 };
 
@@ -401,7 +405,7 @@ enum {
 #define _VA_IS_EVENT_MOD4(v, a, b, c) (_VA_IS_EVENT_MOD3(v, a, b) || ((v)->c))
 #define _VA_IS_EVENT_MOD5(v, a, b, c, d) (_VA_IS_EVENT_MOD4(v, a, b, c) || ((v)->d))
 
-/* reusable IS_EVENT_MOD(event, shift, ctrl, alt, oskey), macro */
+/** Reusable `IS_EVENT_MOD(event, shift, ctrl, alt, oskey)` macro. */
 #define IS_EVENT_MOD(...) VA_NARGS_CALL_OVERLOAD(_VA_IS_EVENT_MOD, __VA_ARGS__)
 
 enum eEventType_Mask {
@@ -432,7 +436,7 @@ enum eEventType_Mask {
   (EVT_TYPE_MASK_KEYBOARD | EVT_TYPE_MASK_MOUSE | EVT_TYPE_MASK_NDOF)
 #define EVT_TYPE_MASK_HOTKEY_EXCLUDE EVT_TYPE_MASK_KEYBOARD_MODIFIER
 
-bool WM_event_type_mask_test(const int event_type, const enum eEventType_Mask mask);
+bool WM_event_type_mask_test(int event_type, enum eEventType_Mask mask);
 
 /* ********** wmEvent.val ********** */
 

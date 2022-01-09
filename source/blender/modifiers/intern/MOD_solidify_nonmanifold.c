@@ -74,6 +74,7 @@ static float angle_signed_on_axis_normalized_v3v3_v3(const float n[3],
 static float clamp_nonzero(const float value, const float epsilon)
 {
   BLI_assert(!(epsilon < 0.0f));
+  /* Return closest value with `abs(value) >= epsilon`. */
   if (value < 0.0f) {
     return min_ff(value, -epsilon);
   }
@@ -171,15 +172,22 @@ Mesh *MOD_solidify_nonmanifold_modifyMesh(ModifierData *md,
 
   float(*poly_nors)[3] = NULL;
 
+  /* #ofs_front and #ofs_back are the offset from the original
+   * surface along the normal, where #oft_front is along the positive
+   * and #oft_back is along the negative normal. */
   const float ofs_front = (smd->offset_fac + 1.0f) * 0.5f * smd->offset;
   const float ofs_back = ofs_front - smd->offset * smd->offset_fac;
-  const float ofs_front_clamped = clamp_nonzero(smd->offset > 0 ? ofs_front : ofs_back, 1e-5f);
-  const float ofs_back_clamped = clamp_nonzero(smd->offset > 0 ? ofs_back : ofs_front, 1e-5f);
+  /* #ofs_front_clamped and #ofs_back_clamped are the same as
+   * #ofs_front and #ofs_back, but never zero. */
+  const float ofs_front_clamped = clamp_nonzero(ofs_front, 1e-5f);
+  const float ofs_back_clamped = clamp_nonzero(ofs_back, 1e-5f);
   const float offset_fac_vg = smd->offset_fac_vg;
   const float offset_fac_vg_inv = 1.0f - smd->offset_fac_vg;
   const float offset = fabsf(smd->offset) * smd->offset_clamp;
   const bool do_angle_clamp = smd->flag & MOD_SOLIDIFY_OFFSET_ANGLE_CLAMP;
-  const bool do_flip = (smd->flag & MOD_SOLIDIFY_FLIP) != 0;
+  /* #do_flip, flips the normals of the result. This is inverted if negative thickness
+   * is used, since simple solidify with negative thickness keeps the faces facing outside. */
+  const bool do_flip = ((smd->flag & MOD_SOLIDIFY_FLIP) != 0) == (smd->offset > 0);
   const bool do_rim = smd->flag & MOD_SOLIDIFY_RIM;
   const bool do_shell = ((smd->flag & MOD_SOLIDIFY_RIM) && (smd->flag & MOD_SOLIDIFY_NOSHELL)) ==
                         0;
@@ -1168,9 +1176,9 @@ Mesh *MOD_solidify_nonmanifold_modifyMesh(ModifierData *md,
                           add_index++;
                         }
                         if (last_split > split) {
-                          const uint size = (split + edges_len) - (uint)last_split;
+                          const uint edges_len_group = (split + edges_len) - (uint)last_split;
                           NewEdgeRef **edges = MEM_malloc_arrayN(
-                              size, sizeof(*edges), "edge_group split in solidify");
+                              edges_len_group, sizeof(*edges), "edge_group split in solidify");
                           memcpy(edges,
                                  g.edges + last_split,
                                  (edges_len - (uint)last_split) * sizeof(*edges));
@@ -1180,7 +1188,7 @@ Mesh *MOD_solidify_nonmanifold_modifyMesh(ModifierData *md,
                           edge_groups[j + add_index] = (EdgeGroup){
                               .valid = true,
                               .edges = edges,
-                              .edges_len = size,
+                              .edges_len = edges_len_group,
                               .open_face_edge = MOD_SOLIDIFY_EMPTY_TAG,
                               .is_orig_closed = g.is_orig_closed,
                               .is_even_split = is_even_split,
@@ -1193,14 +1201,14 @@ Mesh *MOD_solidify_nonmanifold_modifyMesh(ModifierData *md,
                           };
                         }
                         else {
-                          const uint size = split - (uint)last_split;
+                          const uint edges_len_group = split - (uint)last_split;
                           NewEdgeRef **edges = MEM_malloc_arrayN(
-                              size, sizeof(*edges), "edge_group split in solidify");
-                          memcpy(edges, g.edges + last_split, size * sizeof(*edges));
+                              edges_len_group, sizeof(*edges), "edge_group split in solidify");
+                          memcpy(edges, g.edges + last_split, edges_len_group * sizeof(*edges));
                           edge_groups[j + add_index] = (EdgeGroup){
                               .valid = true,
                               .edges = edges,
-                              .edges_len = size,
+                              .edges_len = edges_len_group,
                               .open_face_edge = MOD_SOLIDIFY_EMPTY_TAG,
                               .is_orig_closed = g.is_orig_closed,
                               .is_even_split = is_even_split,

@@ -22,7 +22,8 @@
 #  include "device/cuda/device_impl.h"
 #  include "device/optix/queue.h"
 #  include "device/optix/util.h"
-#  include "kernel/kernel_types.h"
+#  include "kernel/types.h"
+#  include "util/unique_ptr.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -40,20 +41,22 @@ enum {
   PG_HITD, /* Default hit group. */
   PG_HITS, /* __SHADOW_RECORD_ALL__ hit group. */
   PG_HITL, /* __BVH_LOCAL__ hit group (only used for triangles). */
+  PG_HITV, /* __VOLUME__ hit group. */
   PG_HITD_MOTION,
   PG_HITS_MOTION,
+  PG_HITD_POINTCLOUD,
+  PG_HITS_POINTCLOUD,
   PG_CALL_SVM_AO,
   PG_CALL_SVM_BEVEL,
-  PG_CALL_AO_PASS,
   NUM_PROGRAM_GROUPS
 };
 
 static const int MISS_PROGRAM_GROUP_OFFSET = PG_MISS;
 static const int NUM_MIS_PROGRAM_GROUPS = 1;
 static const int HIT_PROGAM_GROUP_OFFSET = PG_HITD;
-static const int NUM_HIT_PROGRAM_GROUPS = 5;
+static const int NUM_HIT_PROGRAM_GROUPS = 8;
 static const int CALLABLE_PROGRAM_GROUPS_BASE = PG_CALL_SVM_AO;
-static const int NUM_CALLABLE_PROGRAM_GROUPS = 3;
+static const int NUM_CALLABLE_PROGRAM_GROUPS = 2;
 
 /* List of OptiX pipelines. */
 enum { PIP_SHADE_RAYTRACE, PIP_INTERSECT, NUM_PIPELINES };
@@ -76,13 +79,12 @@ class OptiXDevice : public CUDADevice {
   device_only_memory<KernelParamsOptiX> launch_params;
   OptixTraversableHandle tlas_handle = 0;
 
-  vector<device_only_memory<char>> delayed_free_bvh_memory;
+  vector<unique_ptr<device_only_memory<char>>> delayed_free_bvh_memory;
   thread_mutex delayed_free_bvh_mutex;
 
   class Denoiser {
    public:
     explicit Denoiser(OptiXDevice *device);
-    ~Denoiser();
 
     OptiXDevice *device;
     OptiXDeviceQueue queue;
@@ -98,11 +100,11 @@ class OptiXDevice : public CUDADevice {
     /* OptiX denoiser state and scratch buffers, stored in a single memory buffer.
      * The memory layout goes as following: [denoiser state][scratch buffer]. */
     device_only_memory<unsigned char> state;
-    size_t scratch_offset = 0;
-    size_t scratch_size = 0;
+    OptixDenoiserSizes sizes = {};
 
     bool use_pass_albedo = false;
     bool use_pass_normal = false;
+    bool use_pass_flow = false;
   };
   Denoiser denoiser_;
 
@@ -146,7 +148,7 @@ class OptiXDevice : public CUDADevice {
   /* Read guiding passes from the render buffers, preprocess them in a way which is expected by
    * OptiX and store in the guiding passes memory within the given context.
    *
-   * Pre=-processing of the guiding passes is to only hapopen once per context lifetime. DO not
+   * Pre=-processing of the guiding passes is to only happen once per context lifetime. DO not
    * preprocess them for every pass which is being denoised. */
   bool denoise_filter_guiding_preprocess(DenoiseContext &context);
 

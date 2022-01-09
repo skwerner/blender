@@ -30,7 +30,7 @@ if(${CMAKE_SOURCE_DIR} STREQUAL ${CMAKE_BINARY_DIR})
       "CMake generation for blender is not allowed within the source directory!"
       "\n Remove \"${CMAKE_SOURCE_DIR}/CMakeCache.txt\" and try again from another folder, e.g.:"
       "\n "
-      "\n rm CMakeCache.txt"
+      "\n rm -rf CMakeCache.txt CMakeFiles"
       "\n cd .."
       "\n mkdir cmake-make"
       "\n cd cmake-make"
@@ -156,6 +156,15 @@ get_blender_version()
 option(WITH_BLENDER "Build blender (disable to build only the blender player)" ON)
 mark_as_advanced(WITH_BLENDER)
 
+if(APPLE)
+  # Currently this causes a build error linking, disable.
+  set(WITH_BLENDER_THUMBNAILER OFF)
+elseif(WIN32)
+  option(WITH_BLENDER_THUMBNAILER "Build \"BlendThumb.dll\" helper for Windows explorer integration" ON)
+else()
+  option(WITH_BLENDER_THUMBNAILER "Build \"blender-thumbnailer\" thumbnail extraction utility" ON)
+endif()
+
 option(WITH_INTERNATIONAL "Enable I18N (International fonts and text)" ON)
 
 option(WITH_PYTHON        "Enable Embedded Python API  (only disable for development)" ON)
@@ -177,6 +186,13 @@ set(CPACK_OVERRIDE_PACKAGENAME "" CACHE STRING "Use instead of the standard pack
 mark_as_advanced(CPACK_OVERRIDE_PACKAGENAME)
 mark_as_advanced(BUILDINFO_OVERRIDE_DATE)
 mark_as_advanced(BUILDINFO_OVERRIDE_TIME)
+
+if(${CMAKE_VERSION} VERSION_GREATER_EQUAL "3.16")
+  option(WITH_UNITY_BUILD   "Enable unity build for modules that support it to improve compile times" ON)
+  mark_as_advanced(WITH_UNITY_BUILD)
+else()
+  set(WITH_UNITY_BUILD OFF)
+endif()
 
 option(WITH_IK_ITASC      "Enable ITASC IK solver (only disable for development & for incompatible C++ compilers)" ON)
 option(WITH_IK_SOLVER     "Enable Legacy IK solver (only disable for development)" ON)
@@ -388,41 +404,69 @@ if(WITH_PYTHON_INSTALL)
     set(PYTHON_REQUESTS_PATH "" CACHE PATH "Path to python site-packages or dist-packages containing 'requests' module")
     mark_as_advanced(PYTHON_REQUESTS_PATH)
   endif()
+
+  option(WITH_PYTHON_INSTALL_ZSTANDARD "Copy zstandard into the blender install folder" ON)
+  set(PYTHON_ZSTANDARD_PATH "" CACHE PATH "Path to python site-packages or dist-packages containing 'zstandard' module")
+  mark_as_advanced(PYTHON_ZSTANDARD_PATH)
 endif()
 
 option(WITH_CPU_SIMD              "Enable SIMD instruction if they're detected on the host machine" ON)
 mark_as_advanced(WITH_CPU_SIMD)
 
 # Cycles
-option(WITH_CYCLES                  "Enable Cycles Render Engine" ON)
-option(WITH_CYCLES_STANDALONE       "Build Cycles standalone application" OFF)
-option(WITH_CYCLES_STANDALONE_GUI   "Build Cycles standalone with GUI" OFF)
-option(WITH_CYCLES_OSL              "Build Cycles with OSL support" ON)
-option(WITH_CYCLES_EMBREE           "Build Cycles with Embree support" ON)
-option(WITH_CYCLES_CUDA_BINARIES    "Build Cycles CUDA binaries" OFF)
-option(WITH_CYCLES_CUBIN_COMPILER   "Build cubins with nvrtc based compiler instead of nvcc" OFF)
-option(WITH_CYCLES_CUDA_BUILD_SERIAL "Build cubins one after another (useful on machines with limited RAM)" OFF)
-mark_as_advanced(WITH_CYCLES_CUDA_BUILD_SERIAL)
-set(CYCLES_TEST_DEVICES CPU CACHE STRING "Run regression tests on the specified device types (CPU CUDA OPTIX)" )
-set(CYCLES_CUDA_BINARIES_ARCH sm_30 sm_35 sm_37 sm_50 sm_52 sm_60 sm_61 sm_70 sm_75 sm_86 compute_75 CACHE STRING "CUDA architectures to build binaries for")
-mark_as_advanced(CYCLES_CUDA_BINARIES_ARCH)
-unset(PLATFORM_DEFAULT)
-option(WITH_CYCLES_LOGGING      "Build Cycles with logging support" ON)
-option(WITH_CYCLES_DEBUG_NAN    "Build Cycles with additional asserts for detecting NaNs and invalid values" OFF)
-option(WITH_CYCLES_NATIVE_ONLY  "Build Cycles with native kernel only (which fits current CPU, use for development only)" OFF)
-option(WITH_CYCLES_KERNEL_ASAN  "Build Cycles kernels with address sanitizer when WITH_COMPILER_ASAN is on, even if it's very slow" OFF)
+option(WITH_CYCLES                   "Enable Cycles Render Engine" ON)
+option(WITH_CYCLES_OSL               "Build Cycles with OpenShadingLanguage support" ON)
+option(WITH_CYCLES_EMBREE            "Build Cycles with Embree support" ON)
+option(WITH_CYCLES_LOGGING           "Build Cycles with logging support" ON)
+option(WITH_CYCLES_DEBUG             "Build Cycles with options useful for debugging (e.g., MIS)" OFF)
+
+option(WITH_CYCLES_STANDALONE        "Build Cycles standalone application" OFF)
+option(WITH_CYCLES_STANDALONE_GUI    "Build Cycles standalone with GUI" OFF)
+
+option(WITH_CYCLES_DEBUG_NAN         "Build Cycles with additional asserts for detecting NaNs and invalid values" OFF)
+option(WITH_CYCLES_NATIVE_ONLY       "Build Cycles with native kernel only (which fits current CPU, use for development only)" OFF)
+option(WITH_CYCLES_KERNEL_ASAN       "Build Cycles kernels with address sanitizer when WITH_COMPILER_ASAN is on, even if it's very slow" OFF)
+set(CYCLES_TEST_DEVICES CPU CACHE STRING "Run regression tests on the specified device types (CPU CUDA OPTIX HIP)" )
 mark_as_advanced(WITH_CYCLES_KERNEL_ASAN)
-mark_as_advanced(WITH_CYCLES_CUBIN_COMPILER)
 mark_as_advanced(WITH_CYCLES_LOGGING)
 mark_as_advanced(WITH_CYCLES_DEBUG_NAN)
 mark_as_advanced(WITH_CYCLES_NATIVE_ONLY)
 
-option(WITH_CYCLES_DEVICE_CUDA              "Enable Cycles CUDA compute support" ON)
-option(WITH_CYCLES_DEVICE_OPTIX             "Enable Cycles OptiX support" ON)
-mark_as_advanced(WITH_CYCLES_DEVICE_CUDA)
+# NVIDIA CUDA & OptiX
+if(NOT APPLE)
+  option(WITH_CYCLES_DEVICE_CUDA       "Enable Cycles NVIDIA CUDA compute support" ON)
+  option(WITH_CYCLES_DEVICE_OPTIX      "Enable Cycles NVIDIA OptiX support" ON)
+  mark_as_advanced(WITH_CYCLES_DEVICE_CUDA)
 
-option(WITH_CUDA_DYNLOAD "Dynamically load CUDA libraries at runtime" ON)
-mark_as_advanced(WITH_CUDA_DYNLOAD)
+  option(WITH_CYCLES_CUDA_BINARIES     "Build Cycles NVIDIA CUDA binaries" OFF)
+  set(CYCLES_CUDA_BINARIES_ARCH sm_30 sm_35 sm_37 sm_50 sm_52 sm_60 sm_61 sm_70 sm_75 sm_86 compute_75 CACHE STRING "CUDA architectures to build binaries for")
+  option(WITH_CYCLES_CUBIN_COMPILER    "Build cubins with nvrtc based compiler instead of nvcc" OFF)
+  option(WITH_CYCLES_CUDA_BUILD_SERIAL "Build cubins one after another (useful on machines with limited RAM)" OFF)
+  option(WITH_CUDA_DYNLOAD             "Dynamically load CUDA libraries at runtime (for developers, makes cuda-gdb work)" ON)
+  mark_as_advanced(CYCLES_CUDA_BINARIES_ARCH)
+  mark_as_advanced(WITH_CYCLES_CUBIN_COMPILER)
+  mark_as_advanced(WITH_CYCLES_CUDA_BUILD_SERIAL)
+  mark_as_advanced(WITH_CUDA_DYNLOAD)
+endif()
+
+# AMD HIP
+if(NOT APPLE)
+  if(WIN32)
+    option(WITH_CYCLES_DEVICE_HIP        "Enable Cycles AMD HIP support" ON)
+  else()
+    option(WITH_CYCLES_DEVICE_HIP        "Enable Cycles AMD HIP support" OFF)
+  endif()
+
+  option(WITH_CYCLES_HIP_BINARIES      "Build Cycles AMD HIP binaries" OFF)
+  set(CYCLES_HIP_BINARIES_ARCH gfx1010 gfx1011 gfx1012 gfx1030 gfx1031 gfx1032 gfx1034 CACHE STRING "AMD HIP architectures to build binaries for")
+  mark_as_advanced(WITH_CYCLES_DEVICE_HIP)
+  mark_as_advanced(CYCLES_HIP_BINARIES_ARCH)
+endif()
+
+# Apple Metal
+if(APPLE)
+  option(WITH_CYCLES_DEVICE_METAL       "Enable Cycles Apple Metal compute support" ON)
+endif()
 
 # Draw Manager
 option(WITH_DRAW_DEBUG "Add extra debug capabilities to Draw Manager" OFF)
@@ -467,11 +511,10 @@ if(WIN32)
 endif()
 
 # This should be turned off when Blender enter beta/rc/release
-if("${BLENDER_VERSION_CYCLE}" STREQUAL "release" OR
-   "${BLENDER_VERSION_CYCLE}" STREQUAL "rc")
-  set(WITH_EXPERIMENTAL_FEATURES OFF)
-else()
+if("${BLENDER_VERSION_CYCLE}" STREQUAL "alpha")
   set(WITH_EXPERIMENTAL_FEATURES ON)
+else()
+  set(WITH_EXPERIMENTAL_FEATURES OFF)
 endif()
 
 # Unit testsing
@@ -620,7 +663,7 @@ if(WIN32)
   option(WITH_WINDOWS_PDB "Generate a pdb file for client side stacktraces" ON)
   mark_as_advanced(WITH_WINDOWS_PDB)
 
-  option(WITH_WINDOWS_STRIPPED_PDB "Use a stripped PDB file" On)
+  option(WITH_WINDOWS_STRIPPED_PDB "Use a stripped PDB file" ON)
   mark_as_advanced(WITH_WINDOWS_STRIPPED_PDB)
 
 endif()
@@ -813,12 +856,17 @@ if(WITH_AUDASPACE)
 endif()
 
 # Auto-enable CUDA dynload if toolkit is not found.
-if(NOT WITH_CUDA_DYNLOAD)
+if(WITH_CYCLES AND WITH_CYCLES_DEVICE_CUDA AND NOT WITH_CUDA_DYNLOAD)
   find_package(CUDA)
   if(NOT CUDA_FOUND)
     message(STATUS "CUDA toolkit not found, using dynamic runtime loading of libraries (WITH_CUDA_DYNLOAD) instead")
     set(WITH_CUDA_DYNLOAD ON)
   endif()
+endif()
+
+if(WITH_CYCLES_DEVICE_HIP)
+  # Currently HIP must be dynamically loaded, this may change in future toolkits
+  set(WITH_HIP_DYNLOAD ON)
 endif()
 
 #-----------------------------------------------------------------------------
@@ -1038,7 +1086,7 @@ if(MSVC)
   add_definitions(-D__LITTLE_ENDIAN__)
 
   # OSX-Note: as we do cross-compiling with specific set architecture,
-  # endianess-detection and auto-setting is counterproductive
+  # endianness-detection and auto-setting is counterproductive
   # so we just set endianness according CMAKE_OSX_ARCHITECTURES
 
 elseif(CMAKE_OSX_ARCHITECTURES MATCHES i386 OR CMAKE_OSX_ARCHITECTURES MATCHES x86_64 OR CMAKE_OSX_ARCHITECTURES MATCHES arm64)
@@ -1716,13 +1764,19 @@ if(WITH_PYTHON)
   elseif(WITH_PYTHON_INSTALL_REQUESTS)
     find_python_package(requests "")
   endif()
+
+  if(WIN32 OR APPLE)
+    # pass, we have this in lib/python/site-packages
+  elseif(WITH_PYTHON_INSTALL_ZSTANDARD)
+    find_python_package(zstandard "")
+  endif()
 endif()
 
 # Select C++17 as the standard for C++ projects.
 set(CMAKE_CXX_STANDARD 17)
 # If C++17 is not available, downgrading to an earlier standard is NOT OK.
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-# Do not enable compiler specific language extentions.
+# Do not enable compiler specific language extensions.
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 # Make MSVC properly report the value of the __cplusplus preprocessor macro
@@ -1849,6 +1903,9 @@ elseif(WITH_CYCLES_STANDALONE)
   endif()
   if(WITH_CUDA_DYNLOAD)
     add_subdirectory(extern/cuew)
+  endif()
+  if(WITH_HIP_DYNLOAD)
+    add_subdirectory(extern/hipew)
   endif()
   if(NOT WITH_SYSTEM_GLEW)
     add_subdirectory(extern/glew)
@@ -1984,6 +2041,7 @@ if(FIRST_RUN)
   endif()
   info_cfg_option(WITH_PYTHON_INSTALL)
   info_cfg_option(WITH_PYTHON_INSTALL_NUMPY)
+  info_cfg_option(WITH_PYTHON_INSTALL_ZSTANDARD)
   info_cfg_option(WITH_PYTHON_MODULE)
   info_cfg_option(WITH_PYTHON_SAFETY)
 

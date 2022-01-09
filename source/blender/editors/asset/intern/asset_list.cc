@@ -32,7 +32,6 @@
 #include "BLI_path_util.h"
 #include "BLI_utility_mixins.hh"
 
-#include "DNA_asset_types.h"
 #include "DNA_space_types.h"
 
 #include "BKE_preferences.h"
@@ -40,15 +39,19 @@
 #include "ED_fileselect.h"
 
 #include "WM_api.h"
-#include "WM_types.h"
 
 /* XXX uses private header of file-space. */
 #include "../space_file/filelist.h"
 
 #include "ED_asset_handle.h"
+#include "ED_asset_indexer.h"
 #include "ED_asset_list.h"
 #include "ED_asset_list.hh"
 #include "asset_library_reference.hh"
+
+/* Enable asset indexing. Currently disabled as ID properties aren't indexed yet and is needed for
+ * object snapping. See {D12990}. */
+//#define SPACE_FILE_ENABLE_ASSET_INDEXING
 
 namespace blender::ed::asset {
 
@@ -157,7 +160,7 @@ void AssetList::setup()
 
   /* Relevant bits from file_refresh(). */
   /* TODO pass options properly. */
-  filelist_setrecursion(files, 1);
+  filelist_setrecursion(files, FILE_SELECT_MAX_RECURSIONS);
   filelist_setsorting(files, FILE_SORT_ALPHA, false);
   filelist_setlibrary(files, &library_ref_);
   filelist_setfilter_options(
@@ -170,6 +173,10 @@ void AssetList::setup()
       true,
       "",
       "");
+
+#ifdef SPACE_FILE_ENABLE_ASSET_INDEXING
+  filelist_setindexer(files, &file_indexer_asset);
+#endif
 
   char path[FILE_MAXDIR] = "";
   if (user_library) {
@@ -187,7 +194,7 @@ void AssetList::fetch(const bContext &C)
 
   if (filelist_needs_force_reset(files)) {
     filelist_readjob_stop(files, CTX_wm_manager(&C));
-    filelist_clear(files);
+    filelist_clear_from_reset_tag(files);
   }
 
   if (filelist_needs_reading(files)) {
@@ -295,9 +302,7 @@ int AssetList::size() const
 void AssetList::tagMainDataDirty() const
 {
   if (filelist_needs_reset_on_main_changes(filelist_)) {
-    /* Full refresh of the file list if local asset data was changed. Refreshing this view
-     * is cheap and users expect this to be updated immediately. */
-    filelist_tag_force_reset(filelist_);
+    filelist_tag_force_reset_mainfiles(filelist_);
   }
 }
 
@@ -313,6 +318,7 @@ StringRef AssetList::filepath() const
 {
   return filelist_dir(filelist_);
 }
+
 /** \} */
 
 /* -------------------------------------------------------------------- */
@@ -390,7 +396,7 @@ std::optional<eFileSelectType> AssetListStorage::asset_library_reference_to_file
 {
   switch (library_reference.type) {
     case ASSET_LIBRARY_CUSTOM:
-      return FILE_LOADLIB;
+      return FILE_ASSET_LIBRARY;
     case ASSET_LIBRARY_LOCAL:
       return FILE_MAIN_ASSET;
   }
@@ -429,10 +435,6 @@ AssetListStorage::AssetListMap &AssetListStorage::global_storage()
 
 using namespace blender::ed::asset;
 
-/**
- * Invoke asset list reading, potentially in a parallel job. Won't wait until the job is done,
- * and may return earlier.
- */
 void ED_assetlist_storage_fetch(const AssetLibraryReference *library_reference, const bContext *C)
 {
   AssetListStorage::fetch_library(*library_reference, *C);
@@ -460,9 +462,9 @@ bool ED_assetlist_storage_has_list_for_library(const AssetLibraryReference *libr
   return AssetListStorage::lookup_list(*library_reference) != nullptr;
 }
 
-void ED_assetlist_iterate(const AssetLibraryReference *library_reference, AssetListIterFn fn)
+void ED_assetlist_iterate(const AssetLibraryReference &library_reference, AssetListIterFn fn)
 {
-  AssetList *list = AssetListStorage::lookup_list(*library_reference);
+  AssetList *list = AssetListStorage::lookup_list(library_reference);
   if (list) {
     list->iterate(fn);
   }
@@ -527,9 +529,6 @@ const char *ED_assetlist_library_path(const AssetLibraryReference *library_refer
   return nullptr;
 }
 
-/**
- * \return True if the region needs a UI redraw.
- */
 bool ED_assetlist_listen(const AssetLibraryReference *library_reference,
                          const wmNotifier *notifier)
 {
@@ -540,10 +539,6 @@ bool ED_assetlist_listen(const AssetLibraryReference *library_reference,
   return false;
 }
 
-/**
- * \return The number of assets stored in the asset list for \a library_reference, or -1 if there
- *         is no list fetched for it.
- */
 int ED_assetlist_size(const AssetLibraryReference *library_reference)
 {
   AssetList *list = AssetListStorage::lookup_list(*library_reference);
@@ -553,31 +548,16 @@ int ED_assetlist_size(const AssetLibraryReference *library_reference)
   return -1;
 }
 
-/**
- * Tag all asset lists in the storage that show main data as needing an update (re-fetch).
- *
- * This only tags the data. If the asset list is visible on screen, the space is still responsible
- * for ensuring the necessary redraw. It can use #ED_assetlist_listen() to check if the asset-list
- * needs a redraw for a given notifier.
- */
 void ED_assetlist_storage_tag_main_data_dirty()
 {
   AssetListStorage::tagMainDataDirty();
 }
 
-/**
- * Remapping of ID pointers within the asset lists. Typically called when an ID is deleted to clear
- * all references to it (\a id_new is null then).
- */
 void ED_assetlist_storage_id_remap(ID *id_old, ID *id_new)
 {
   AssetListStorage::remapID(id_old, id_new);
 }
 
-/**
- * Can't wait for static deallocation to run. There's nested data allocated with our guarded
- * allocator, it will complain about unfreed memory on exit.
- */
 void ED_assetlist_storage_exit()
 {
   AssetListStorage::destruct();

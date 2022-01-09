@@ -25,7 +25,6 @@
 #include <string.h>
 
 #include "BLI_blenlib.h"
-#include "BLI_ghash.h"
 #include "BLI_math.h"
 #include "BLI_string_utils.h"
 #include "BLI_threads.h"
@@ -45,7 +44,6 @@
 #include "BKE_context.h"
 #include "BKE_fcurve.h"
 #include "BKE_global.h"
-#include "BKE_main.h"
 #include "BKE_scene.h"
 #include "BKE_sound.h"
 
@@ -103,40 +101,56 @@
 #define SEQ_HANDLE_SIZE 8.0f
 #define SEQ_SCROLLER_TEXT_OFFSET 8
 #define MUTE_ALPHA 120
-#define OVERLAP_ALPHA 180
 
 static Sequence *special_seq_update = NULL;
 
-void color3ubv_from_seq(Scene *curscene, Sequence *seq, uchar col[3])
+void color3ubv_from_seq(const Scene *curscene,
+                        const Sequence *seq,
+                        const bool show_strip_color_tag,
+                        uchar r_col[3])
 {
+  if (show_strip_color_tag && (uint)seq->color_tag < SEQUENCE_COLOR_TOT &&
+      seq->color_tag != SEQUENCE_COLOR_NONE) {
+    bTheme *btheme = UI_GetTheme();
+    const ThemeStripColor *strip_color = &btheme->strip_color[seq->color_tag];
+    copy_v3_v3_uchar(r_col, strip_color->color);
+    return;
+  }
+
   uchar blendcol[3];
+
+  /* Sometimes the active theme is not the sequencer theme, e.g. when an operator invokes the file
+   * browser. This makes sure we get the right color values for the theme. */
+  struct bThemeState theme_state;
+  UI_Theme_Store(&theme_state);
+  UI_SetTheme(SPACE_SEQ, RGN_TYPE_WINDOW);
 
   switch (seq->type) {
     case SEQ_TYPE_IMAGE:
-      UI_GetThemeColor3ubv(TH_SEQ_IMAGE, col);
+      UI_GetThemeColor3ubv(TH_SEQ_IMAGE, r_col);
       break;
 
     case SEQ_TYPE_META:
-      UI_GetThemeColor3ubv(TH_SEQ_META, col);
+      UI_GetThemeColor3ubv(TH_SEQ_META, r_col);
       break;
 
     case SEQ_TYPE_MOVIE:
-      UI_GetThemeColor3ubv(TH_SEQ_MOVIE, col);
+      UI_GetThemeColor3ubv(TH_SEQ_MOVIE, r_col);
       break;
 
     case SEQ_TYPE_MOVIECLIP:
-      UI_GetThemeColor3ubv(TH_SEQ_MOVIECLIP, col);
+      UI_GetThemeColor3ubv(TH_SEQ_MOVIECLIP, r_col);
       break;
 
     case SEQ_TYPE_MASK:
-      UI_GetThemeColor3ubv(TH_SEQ_MASK, col);
+      UI_GetThemeColor3ubv(TH_SEQ_MASK, r_col);
       break;
 
     case SEQ_TYPE_SCENE:
-      UI_GetThemeColor3ubv(TH_SEQ_SCENE, col);
+      UI_GetThemeColor3ubv(TH_SEQ_SCENE, r_col);
 
       if (seq->scene == curscene) {
-        UI_GetColorPtrShade3ubv(col, col, 20);
+        UI_GetColorPtrShade3ubv(r_col, r_col, 20);
       }
       break;
 
@@ -144,9 +158,9 @@ void color3ubv_from_seq(Scene *curscene, Sequence *seq, uchar col[3])
     case SEQ_TYPE_CROSS:
     case SEQ_TYPE_GAMCROSS:
     case SEQ_TYPE_WIPE:
-      col[0] = 130;
-      col[1] = 130;
-      col[2] = 130;
+      r_col[0] = 130;
+      r_col[1] = 130;
+      r_col[2] = 130;
       break;
 
     /* Effects. */
@@ -163,72 +177,74 @@ void color3ubv_from_seq(Scene *curscene, Sequence *seq, uchar col[3])
     case SEQ_TYPE_ADJUSTMENT:
     case SEQ_TYPE_GAUSSIAN_BLUR:
     case SEQ_TYPE_COLORMIX:
-      UI_GetThemeColor3ubv(TH_SEQ_EFFECT, col);
+      UI_GetThemeColor3ubv(TH_SEQ_EFFECT, r_col);
 
       /* Slightly offset hue to distinguish different effects. */
       if (seq->type == SEQ_TYPE_ADD) {
-        rgb_byte_set_hue_float_offset(col, 0.03);
+        rgb_byte_set_hue_float_offset(r_col, 0.03);
       }
       else if (seq->type == SEQ_TYPE_SUB) {
-        rgb_byte_set_hue_float_offset(col, 0.06);
+        rgb_byte_set_hue_float_offset(r_col, 0.06);
       }
       else if (seq->type == SEQ_TYPE_MUL) {
-        rgb_byte_set_hue_float_offset(col, 0.13);
+        rgb_byte_set_hue_float_offset(r_col, 0.13);
       }
       else if (seq->type == SEQ_TYPE_ALPHAOVER) {
-        rgb_byte_set_hue_float_offset(col, 0.16);
+        rgb_byte_set_hue_float_offset(r_col, 0.16);
       }
       else if (seq->type == SEQ_TYPE_ALPHAUNDER) {
-        rgb_byte_set_hue_float_offset(col, 0.23);
+        rgb_byte_set_hue_float_offset(r_col, 0.23);
       }
       else if (seq->type == SEQ_TYPE_OVERDROP) {
-        rgb_byte_set_hue_float_offset(col, 0.26);
+        rgb_byte_set_hue_float_offset(r_col, 0.26);
       }
       else if (seq->type == SEQ_TYPE_COLORMIX) {
-        rgb_byte_set_hue_float_offset(col, 0.33);
+        rgb_byte_set_hue_float_offset(r_col, 0.33);
       }
       else if (seq->type == SEQ_TYPE_GAUSSIAN_BLUR) {
-        rgb_byte_set_hue_float_offset(col, 0.43);
+        rgb_byte_set_hue_float_offset(r_col, 0.43);
       }
       else if (seq->type == SEQ_TYPE_GLOW) {
-        rgb_byte_set_hue_float_offset(col, 0.46);
+        rgb_byte_set_hue_float_offset(r_col, 0.46);
       }
       else if (seq->type == SEQ_TYPE_ADJUSTMENT) {
-        rgb_byte_set_hue_float_offset(col, 0.55);
+        rgb_byte_set_hue_float_offset(r_col, 0.55);
       }
       else if (seq->type == SEQ_TYPE_SPEED) {
-        rgb_byte_set_hue_float_offset(col, 0.65);
+        rgb_byte_set_hue_float_offset(r_col, 0.65);
       }
       else if (seq->type == SEQ_TYPE_TRANSFORM) {
-        rgb_byte_set_hue_float_offset(col, 0.75);
+        rgb_byte_set_hue_float_offset(r_col, 0.75);
       }
       else if (seq->type == SEQ_TYPE_MULTICAM) {
-        rgb_byte_set_hue_float_offset(col, 0.85);
+        rgb_byte_set_hue_float_offset(r_col, 0.85);
       }
       break;
 
     case SEQ_TYPE_COLOR:
-      UI_GetThemeColor3ubv(TH_SEQ_COLOR, col);
+      UI_GetThemeColor3ubv(TH_SEQ_COLOR, r_col);
       break;
 
     case SEQ_TYPE_SOUND_RAM:
-      UI_GetThemeColor3ubv(TH_SEQ_AUDIO, col);
+      UI_GetThemeColor3ubv(TH_SEQ_AUDIO, r_col);
       blendcol[0] = blendcol[1] = blendcol[2] = 128;
       if (seq->flag & SEQ_MUTE) {
-        UI_GetColorPtrBlendShade3ubv(col, blendcol, col, 0.5, 20);
+        UI_GetColorPtrBlendShade3ubv(r_col, blendcol, r_col, 0.5, 20);
       }
       break;
 
     case SEQ_TYPE_TEXT:
-      UI_GetThemeColor3ubv(TH_SEQ_TEXT, col);
+      UI_GetThemeColor3ubv(TH_SEQ_TEXT, r_col);
       break;
 
     default:
-      col[0] = 10;
-      col[1] = 255;
-      col[2] = 40;
+      r_col[0] = 10;
+      r_col[1] = 255;
+      r_col[2] = 40;
       break;
   }
+
+  UI_Theme_Restore(&theme_state);
 }
 
 typedef struct WaveVizData {
@@ -330,8 +346,8 @@ static void draw_seq_waveform_overlay(View2D *v2d,
                                       float y2,
                                       float frames_per_pixel)
 {
-  if (seq->sound &&
-      ((sseq->flag & SEQ_TIMELINE_ALL_WAVEFORMS) || (seq->flag & SEQ_AUDIO_DRAW_WAVEFORM))) {
+  if (seq->sound && ((sseq->timeline_overlay.flag & SEQ_TIMELINE_ALL_WAVEFORMS) ||
+                     (seq->flag & SEQ_AUDIO_DRAW_WAVEFORM))) {
     /* Make sure that the start drawing position is aligned to the pixels on the screen to avoid
      * flickering when moving around the strip.
      * To do this we figure out the fractional offset in pixel space by checking where the
@@ -558,7 +574,13 @@ static void draw_seq_waveform_overlay(View2D *v2d,
   }
 }
 
-static void drawmeta_contents(Scene *scene, Sequence *seqm, float x1, float y1, float x2, float y2)
+static void drawmeta_contents(Scene *scene,
+                              Sequence *seqm,
+                              float x1,
+                              float y1,
+                              float x2,
+                              float y2,
+                              const bool show_strip_color_tag)
 {
   Sequence *seq;
   uchar col[4];
@@ -614,7 +636,7 @@ static void drawmeta_contents(Scene *scene, Sequence *seqm, float x1, float y1, 
         rgb_float_to_uchar(col, colvars->col);
       }
       else {
-        color3ubv_from_seq(scene, seq, col);
+        color3ubv_from_seq(scene, seq, show_strip_color_tag, col);
       }
 
       if ((seqm->flag & SEQ_MUTE) || (seq->flag & SEQ_MUTE)) {
@@ -646,7 +668,6 @@ static void drawmeta_contents(Scene *scene, Sequence *seqm, float x1, float y1, 
   GPU_blend(GPU_BLEND_NONE);
 }
 
-/* Get handle width in 2d-View space. */
 float sequence_handle_size_get_clamped(Sequence *seq, const float pixelx)
 {
   const float maxhandle = (pixelx * SEQ_HANDLE_SIZE) * U.pixelsize;
@@ -953,7 +974,8 @@ static void draw_seq_text_overlay(View2D *v2d,
   UI_view2d_text_cache_add_rectf(v2d, &rect, overlay_string, overlay_string_len, col);
 }
 
-static void draw_sequence_extensions_overlay(Scene *scene, Sequence *seq, uint pos, float pixely)
+static void draw_sequence_extensions_overlay(
+    Scene *scene, Sequence *seq, uint pos, float pixely, const bool show_strip_color_tag)
 {
   float x1, x2, y1, y2;
   uchar col[4], blend_col[3];
@@ -966,7 +988,7 @@ static void draw_sequence_extensions_overlay(Scene *scene, Sequence *seq, uint p
 
   GPU_blend(GPU_BLEND_ALPHA);
 
-  color3ubv_from_seq(scene, seq, col);
+  color3ubv_from_seq(scene, seq, show_strip_color_tag, col);
   if (seq->flag & SELECT) {
     UI_GetColorPtrShade3ubv(col, col, 50);
   }
@@ -1036,7 +1058,8 @@ static void draw_seq_background(Scene *scene,
                                 float x2,
                                 float y1,
                                 float y2,
-                                bool is_single_image)
+                                bool is_single_image,
+                                bool show_strip_color_tag)
 {
   uchar col[4];
   GPU_blend(GPU_BLEND_ALPHA);
@@ -1049,11 +1072,11 @@ static void draw_seq_background(Scene *scene,
       rgb_float_to_uchar(col, colvars->col);
     }
     else {
-      color3ubv_from_seq(scene, seq1, col);
+      color3ubv_from_seq(scene, seq1, show_strip_color_tag, col);
     }
   }
   else {
-    color3ubv_from_seq(scene, seq, col);
+    color3ubv_from_seq(scene, seq, show_strip_color_tag, col);
   }
 
   /* Draw muted strips semi-transparent. */
@@ -1108,7 +1131,7 @@ static void draw_seq_background(Scene *scene,
       rgb_float_to_uchar(col, colvars->col);
     }
     else {
-      color3ubv_from_seq(scene, seq2, col);
+      color3ubv_from_seq(scene, seq2, show_strip_color_tag, col);
       /* If the transition inputs are of the same type, draw the right side slightly darker. */
       if (seq1->type == seq2->type) {
         UI_GetColorPtrShade3ubv(col, col, -15);
@@ -1285,520 +1308,6 @@ static void draw_seq_fcurve_overlay(
   }
 }
 
-typedef struct ThumbnailDrawJob {
-  SeqRenderData context;
-  GHash *sequences_ghash;
-  Scene *scene;
-  rctf *view_area;
-  float pixelx;
-  float pixely;
-} ThumbnailDrawJob;
-
-typedef struct ThumbDataItem {
-  Sequence *seq_dupli;
-  Scene *scene;
-} ThumbDataItem;
-
-static void thumbnail_hash_data_free(void *val)
-{
-  ThumbDataItem *item = val;
-  SEQ_sequence_free(item->scene, item->seq_dupli, 0);
-  MEM_freeN(val);
-}
-
-static void thumbnail_freejob(void *data)
-{
-  ThumbnailDrawJob *tj = data;
-  BLI_ghash_free(tj->sequences_ghash, NULL, thumbnail_hash_data_free);
-  MEM_freeN(tj->view_area);
-  MEM_freeN(tj);
-}
-
-static void thumbnail_endjob(void *data)
-{
-  ThumbnailDrawJob *tj = data;
-  WM_main_add_notifier(NC_SCENE | ND_SEQUENCER, tj->scene);
-}
-
-static bool check_seq_need_thumbnails(Sequence *seq, rctf *view_area)
-{
-  if (seq->type != SEQ_TYPE_MOVIE && seq->type != SEQ_TYPE_IMAGE) {
-    return false;
-  }
-  if (min_ii(seq->startdisp, seq->start) > view_area->xmax) {
-    return false;
-  }
-  else if (max_ii(seq->enddisp, seq->start + seq->len) < view_area->xmin) {
-    return false;
-  }
-  else if (seq->machine + 1.0f < view_area->ymin) {
-    return false;
-  }
-  else if (seq->machine > view_area->ymax) {
-    return false;
-  }
-
-  return true;
-}
-
-static void seq_get_thumb_image_dimensions(Sequence *seq,
-                                           float pixelx,
-                                           float pixely,
-                                           float *r_thumb_width,
-                                           float *r_thumb_height,
-                                           float *r_image_width,
-                                           float *r_image_height)
-{
-  float image_width = seq->strip->stripdata->orig_width;
-  float image_height = seq->strip->stripdata->orig_height;
-
-  /* Fix the dimensions to be max SEQ_RENDER_THUMB_SIZE (256) for x or y. */
-  float aspect_ratio = (float)image_width / image_height;
-  if (image_width > image_height) {
-    image_width = SEQ_RENDER_THUMB_SIZE;
-    image_height = round_fl_to_int(image_width / aspect_ratio);
-  }
-  else {
-    image_height = SEQ_RENDER_THUMB_SIZE;
-    image_width = round_fl_to_int(image_height * aspect_ratio);
-  }
-
-  /* Calculate thumb dimensions. */
-  float thumb_height = (SEQ_STRIP_OFSTOP - SEQ_STRIP_OFSBOTTOM) - (20 * U.dpi_fac * pixely);
-  aspect_ratio = ((float)image_width) / image_height;
-  float thumb_h_px = thumb_height / pixely;
-  float thumb_width = aspect_ratio * thumb_h_px * pixelx;
-
-  if (r_thumb_height == NULL) {
-    *r_thumb_width = thumb_width;
-    return;
-  }
-
-  *r_thumb_height = thumb_height;
-  *r_image_width = image_width;
-  *r_image_height = image_height;
-  *r_thumb_width = thumb_width;
-}
-
-static float seq_thumbnail_get_start_frame(Sequence *seq, float frame_step, rctf *view_area)
-{
-  if (seq->start > view_area->xmin && seq->start < view_area->xmax) {
-    return seq->start;
-  }
-
-  /* Drawing and caching both check to see if strip is in view area or not before calling this
-   * function so assuming strip/part of strip in view. */
-
-  int no_invisible_thumbs = (view_area->xmin - seq->start) / frame_step;
-  return ((no_invisible_thumbs - 1) * frame_step) + seq->start;
-}
-
-static void thumbnail_start_job(void *data, short *stop, short *do_update, float *progress)
-{
-  ThumbnailDrawJob *tj = data;
-  float start_frame, frame_step;
-
-  GHashIterator gh_iter;
-  BLI_ghashIterator_init(&gh_iter, tj->sequences_ghash);
-  while (!BLI_ghashIterator_done(&gh_iter) & !*stop) {
-    Sequence *seq_orig = BLI_ghashIterator_getKey(&gh_iter);
-    ThumbDataItem *val = BLI_ghash_lookup(tj->sequences_ghash, seq_orig);
-
-    if (check_seq_need_thumbnails(seq_orig, tj->view_area)) {
-      seq_get_thumb_image_dimensions(
-          val->seq_dupli, tj->pixelx, tj->pixely, &frame_step, NULL, NULL, NULL);
-      start_frame = seq_thumbnail_get_start_frame(seq_orig, frame_step, tj->view_area);
-      SEQ_render_thumbnails(
-          &tj->context, val->seq_dupli, seq_orig, start_frame, frame_step, tj->view_area, stop);
-      SEQ_render_thumbnails_base_set(&tj->context, val->seq_dupli, seq_orig, tj->view_area, stop);
-    }
-    BLI_ghashIterator_step(&gh_iter);
-  }
-  UNUSED_VARS(do_update, progress);
-}
-
-static SeqRenderData sequencer_thumbnail_context_init(const bContext *C)
-{
-  struct Main *bmain = CTX_data_main(C);
-  struct Depsgraph *depsgraph = CTX_data_depsgraph_pointer(C);
-  Scene *scene = CTX_data_scene(C);
-  SpaceSeq *sseq = CTX_wm_space_seq(C);
-  SeqRenderData context = {0};
-
-  /* Taking rectx and recty as 0 as dimensions not known here, and context is used to calculate
-   * hash key but not necessary as other variables of SeqRenderData are unique enough. */
-  SEQ_render_new_render_data(bmain, depsgraph, scene, 0, 0, sseq->render_size, false, &context);
-  context.view_id = BKE_scene_multiview_view_id_get(&scene->r, STEREO_LEFT_NAME);
-  context.use_proxies = false;
-
-  return context;
-}
-
-static GHash *sequencer_thumbnail_ghash_init(const bContext *C, View2D *v2d, Editing *ed)
-{
-  Scene *scene = CTX_data_scene(C);
-
-  /* Set the data for thumbnail caching job. */
-  GHash *thumb_data_hash = BLI_ghash_ptr_new("seq_duplicates_and_origs");
-
-  LISTBASE_FOREACH (Sequence *, seq, ed->seqbasep) {
-    ThumbDataItem *val_need_update = BLI_ghash_lookup(thumb_data_hash, seq);
-    if (val_need_update == NULL && check_seq_need_thumbnails(seq, &v2d->cur)) {
-      ThumbDataItem *val = MEM_callocN(sizeof(ThumbDataItem), "Thumbnail Hash Values");
-      val->seq_dupli = SEQ_sequence_dupli_recursive(scene, scene, NULL, seq, 0);
-      val->scene = scene;
-      BLI_ghash_insert(thumb_data_hash, seq, val);
-    }
-    else {
-      if (val_need_update != NULL) {
-        val_need_update->seq_dupli->start = seq->start;
-        val_need_update->seq_dupli->startdisp = seq->startdisp;
-      }
-    }
-  }
-
-  return thumb_data_hash;
-}
-
-static void sequencer_thumbnail_init_job(const bContext *C, View2D *v2d, Editing *ed)
-{
-  wmJob *wm_job;
-  ThumbnailDrawJob *tj = NULL;
-  ScrArea *area = CTX_wm_area(C);
-  wm_job = WM_jobs_get(CTX_wm_manager(C),
-                       CTX_wm_window(C),
-                       CTX_data_scene(C),
-                       "Draw Thumbnails",
-                       0,
-                       WM_JOB_TYPE_SEQ_DRAW_THUMBNAIL);
-
-  /* Get the thumbnail job if it exists. */
-  tj = WM_jobs_customdata_get(wm_job);
-  if (!tj) {
-    tj = MEM_callocN(sizeof(ThumbnailDrawJob), "Thumbnail cache job");
-
-    /* Duplicate value of v2d->cur and v2d->tot to have module separation. */
-    rctf *view_area = MEM_callocN(sizeof(struct rctf), "viewport area");
-    view_area->xmax = v2d->cur.xmax;
-    view_area->xmin = v2d->cur.xmin;
-    view_area->ymax = v2d->cur.ymax;
-    view_area->ymin = v2d->cur.ymin;
-
-    tj->scene = CTX_data_scene(C);
-    tj->view_area = view_area;
-    tj->context = sequencer_thumbnail_context_init(C);
-    tj->sequences_ghash = sequencer_thumbnail_ghash_init(C, v2d, ed);
-    tj->pixelx = BLI_rctf_size_x(&v2d->cur) / BLI_rcti_size_x(&v2d->mask);
-    tj->pixely = BLI_rctf_size_y(&v2d->cur) / BLI_rcti_size_y(&v2d->mask);
-    WM_jobs_customdata_set(wm_job, tj, thumbnail_freejob);
-    WM_jobs_timer(wm_job, 0.1, NC_SCENE | ND_SEQUENCER, NC_SCENE | ND_SEQUENCER);
-    WM_jobs_callbacks(wm_job, thumbnail_start_job, NULL, NULL, thumbnail_endjob);
-  }
-
-  if (!WM_jobs_is_running(wm_job)) {
-    G.is_break = false;
-    WM_jobs_start(CTX_wm_manager(C), wm_job);
-  }
-  else {
-    WM_event_add_notifier(C, NC_SCENE | ND_SEQUENCER, NULL);
-  }
-
-  ED_area_tag_redraw(area);
-}
-
-static bool sequencer_thumbnail_v2d_is_navigating(const bContext *C)
-{
-  ARegion *region = CTX_wm_region(C);
-  View2D *v2d = &region->v2d;
-  return (v2d->flag & V2D_IS_NAVIGATING) != 0;
-}
-
-static void sequencer_thumbnail_start_job_if_necessary(const bContext *C,
-                                                       Editing *ed,
-                                                       View2D *v2d,
-                                                       bool thumbnail_is_missing)
-{
-  SpaceSeq *sseq = CTX_wm_space_seq(C);
-
-  if (sequencer_thumbnail_v2d_is_navigating(C)) {
-    WM_event_add_notifier(C, NC_SCENE | ND_SEQUENCER, NULL);
-    return;
-  }
-
-  /* `thumbnail_is_missing` should be set to true if missing image in strip. False when normal call
-   * to all strips done.  */
-  if (v2d->cur.xmax != sseq->runtime.last_thumbnail_area.xmax ||
-      v2d->cur.ymax != sseq->runtime.last_thumbnail_area.ymax || thumbnail_is_missing) {
-
-    /* Stop the job first as view has changed. Pointless to continue old job. */
-    if (v2d->cur.xmax != sseq->runtime.last_thumbnail_area.xmax ||
-        v2d->cur.ymax != sseq->runtime.last_thumbnail_area.ymax) {
-      WM_jobs_stop(CTX_wm_manager(C), NULL, thumbnail_start_job);
-    }
-
-    sequencer_thumbnail_init_job(C, v2d, ed);
-    sseq->runtime.last_thumbnail_area = v2d->cur;
-  }
-}
-
-void last_displayed_thumbnails_list_free(void *val)
-{
-  BLI_gset_free(val, NULL);
-}
-
-static GSet *last_displayed_thumbnails_list_ensure(const bContext *C, Sequence *seq)
-{
-  SpaceSeq *sseq = CTX_wm_space_seq(C);
-  if (sseq->runtime.last_displayed_thumbnails == NULL) {
-    sseq->runtime.last_displayed_thumbnails = BLI_ghash_ptr_new(__func__);
-  }
-
-  GSet *displayed_thumbnails = BLI_ghash_lookup(sseq->runtime.last_displayed_thumbnails, seq);
-  if (displayed_thumbnails == NULL) {
-    displayed_thumbnails = BLI_gset_int_new(__func__);
-    BLI_ghash_insert(sseq->runtime.last_displayed_thumbnails, seq, displayed_thumbnails);
-  }
-
-  return displayed_thumbnails;
-}
-
-static void last_displayed_thumbnails_list_cleanup(GSet *previously_displayed,
-                                                   float range_start,
-                                                   float range_end)
-{
-  GSetIterator gset_iter;
-  BLI_gsetIterator_init(&gset_iter, previously_displayed);
-  while (!BLI_gsetIterator_done(&gset_iter)) {
-    int frame = (float)POINTER_AS_INT(BLI_gsetIterator_getKey(&gset_iter));
-    BLI_gsetIterator_step(&gset_iter);
-
-    if (frame > range_start && frame < range_end) {
-      BLI_gset_remove(previously_displayed, POINTER_FROM_INT(frame), NULL);
-    }
-  }
-}
-
-static int sequencer_thumbnail_closest_previous_frame_get(int timeline_frame,
-                                                          GSet *previously_displayed)
-{
-  int best_diff = INT_MAX;
-  int best_frame = timeline_frame;
-
-  /* Previously displayed thumbnails. */
-  GSetIterator gset_iter;
-  BLI_gsetIterator_init(&gset_iter, previously_displayed);
-  while (!BLI_gsetIterator_done(&gset_iter)) {
-    int frame = POINTER_AS_INT(BLI_gsetIterator_getKey(&gset_iter));
-    int diff = abs(frame - timeline_frame);
-    if (diff < best_diff) {
-      best_diff = diff;
-      best_frame = frame;
-    }
-    BLI_gsetIterator_step(&gset_iter);
-  }
-  return best_frame;
-}
-
-static int sequencer_thumbnail_closest_guaranteed_frame_get(Sequence *seq, int timeline_frame)
-{
-  if (timeline_frame <= seq->startdisp) {
-    return seq->startdisp;
-  }
-
-  /* Set of "guaranteed" thumbnails. */
-  const int frame_index = timeline_frame - seq->startdisp;
-  const int frame_step = SEQ_render_thumbnails_guaranteed_set_frame_step_get(seq);
-  const int relative_base_frame = round_fl_to_int((frame_index / (float)frame_step)) * frame_step;
-  const int nearest_guaranted_absolute_frame = relative_base_frame + seq->startdisp;
-  return nearest_guaranted_absolute_frame;
-}
-
-static ImBuf *sequencer_thumbnail_closest_from_memory(const SeqRenderData *context,
-                                                      Sequence *seq,
-                                                      int timeline_frame,
-                                                      GSet *previously_displayed,
-                                                      rcti *crop,
-                                                      bool clipped)
-{
-  int frame_previous = sequencer_thumbnail_closest_previous_frame_get(timeline_frame,
-                                                                      previously_displayed);
-  ImBuf *ibuf_previous = SEQ_get_thumbnail(context, seq, frame_previous, crop, clipped);
-
-  int frame_guaranteed = sequencer_thumbnail_closest_guaranteed_frame_get(seq, timeline_frame);
-  ImBuf *ibuf_guaranteed = SEQ_get_thumbnail(context, seq, frame_guaranteed, crop, clipped);
-
-  if (ibuf_previous && ibuf_guaranteed &&
-      abs(frame_previous - timeline_frame) < abs(frame_guaranteed - timeline_frame)) {
-
-    IMB_freeImBuf(ibuf_guaranteed);
-    return ibuf_previous;
-  }
-  else {
-    IMB_freeImBuf(ibuf_previous);
-    return ibuf_guaranteed;
-  }
-
-  if (ibuf_previous == NULL) {
-    return ibuf_guaranteed;
-  }
-
-  if (ibuf_guaranteed == NULL) {
-    return ibuf_previous;
-  }
-}
-
-static void draw_seq_strip_thumbnail(View2D *v2d,
-                                     const bContext *C,
-                                     Scene *scene,
-                                     Sequence *seq,
-                                     float y1,
-                                     float y2,
-                                     float pixelx,
-                                     float pixely)
-{
-  bool clipped = false;
-  float image_height, image_width, thumb_width, thumb_height;
-  rcti crop;
-
-  /* If width of the strip too small ignore drawing thumbnails. */
-  if ((y2 - y1) / pixely <= 40 * U.dpi_fac) {
-    return;
-  }
-
-  SeqRenderData context = sequencer_thumbnail_context_init(C);
-
-  if ((seq->flag & SEQ_FLAG_SKIP_THUMBNAILS) != 0) {
-    return;
-  }
-
-  seq_get_thumb_image_dimensions(
-      seq, pixelx, pixely, &thumb_width, &thumb_height, &image_width, &image_height);
-
-  float thumb_y_end = y1 + thumb_height - pixely;
-
-  float cut_off = 0;
-  float upper_thumb_bound = (seq->endstill) ? (seq->start + seq->len) : seq->enddisp;
-  if (seq->type == SEQ_TYPE_IMAGE) {
-    upper_thumb_bound = seq->enddisp;
-  }
-
-  float thumb_x_start = seq_thumbnail_get_start_frame(seq, thumb_width, &v2d->cur);
-  float thumb_x_end;
-
-  while (thumb_x_start + thumb_width < v2d->cur.xmin) {
-    thumb_x_start += thumb_width;
-  }
-
-  /* Ignore thumbs to the left of strip. */
-  while (thumb_x_start + thumb_width < seq->startdisp) {
-    thumb_x_start += thumb_width;
-  }
-
-  GSet *last_displayed_thumbnails = last_displayed_thumbnails_list_ensure(C, seq);
-  /* Cleanup thumbnail list outside of rendered range, which is cleaned up one by one to prevent
-   * flickering after zooming. */
-  if (!sequencer_thumbnail_v2d_is_navigating(C)) {
-    last_displayed_thumbnails_list_cleanup(last_displayed_thumbnails, -FLT_MAX, thumb_x_start);
-  }
-
-  /* Start drawing. */
-  while (thumb_x_start < upper_thumb_bound) {
-    thumb_x_end = thumb_x_start + thumb_width;
-    clipped = false;
-
-    /* Checks to make sure that thumbs are loaded only when in view and within the confines of the
-     * strip. Some may not be required but better to have conditions for safety as x1 here is
-     * point to start caching from and not drawing. */
-    if (thumb_x_start > v2d->cur.xmax) {
-      break;
-    }
-
-    /* Set the clipping bound to show the left handle moving over thumbs and not shift thumbs. */
-    if (IN_RANGE_INCL(seq->startdisp, thumb_x_start, thumb_x_end)) {
-      cut_off = seq->startdisp - thumb_x_start;
-      clipped = true;
-    }
-
-    /* Clip if full thumbnail cannot be displayed. */
-    if (thumb_x_end > (upper_thumb_bound)) {
-      thumb_x_end = upper_thumb_bound;
-      clipped = true;
-      if (thumb_x_end - thumb_x_start < 1) {
-        break;
-      }
-    }
-
-    float zoom_x = thumb_width / image_width;
-    float zoom_y = thumb_height / image_height;
-
-    float cropx_min = (cut_off / pixelx) / (zoom_y / pixely);
-    float cropx_max = ((thumb_x_end - thumb_x_start) / pixelx) / (zoom_y / pixely);
-    if (cropx_max == (thumb_x_end - thumb_x_start)) {
-      cropx_max = cropx_max + 1;
-    }
-    BLI_rcti_init(&crop, (int)(cropx_min), (int)cropx_max, 0, (int)(image_height)-1);
-
-    int timeline_frame = round_fl_to_int(thumb_x_start);
-
-    /* Get the image. */
-    ImBuf *ibuf = SEQ_get_thumbnail(&context, seq, timeline_frame, &crop, clipped);
-
-    if (!ibuf) {
-      sequencer_thumbnail_start_job_if_necessary(C, scene->ed, v2d, true);
-
-      ibuf = sequencer_thumbnail_closest_from_memory(
-          &context, seq, timeline_frame, last_displayed_thumbnails, &crop, clipped);
-    }
-    /* Store recently rendered frames, so they can be reused when zooming. */
-    else if (!sequencer_thumbnail_v2d_is_navigating(C)) {
-      /* Clear images in frame range occupied bynew thumbnail. */
-      last_displayed_thumbnails_list_cleanup(
-          last_displayed_thumbnails, thumb_x_start, thumb_x_end);
-      /* Insert new thumbnail frame to list. */
-      BLI_gset_add(last_displayed_thumbnails, POINTER_FROM_INT(timeline_frame));
-    }
-
-    /* If there is no image still, abort. */
-    if (!ibuf) {
-      break;
-    }
-
-    /* Transparency on overlap. */
-    if (seq->flag & SEQ_OVERLAP) {
-      GPU_blend(GPU_BLEND_ALPHA);
-      if (ibuf->rect) {
-        unsigned char *buf = (unsigned char *)ibuf->rect;
-        for (int pixel = ibuf->x * ibuf->y; pixel--; buf += 4) {
-          buf[3] = OVERLAP_ALPHA;
-        }
-      }
-      else if (ibuf->rect_float) {
-        float *buf = (float *)ibuf->rect_float;
-        for (int pixel = ibuf->x * ibuf->y; pixel--; buf += ibuf->channels) {
-          buf[3] = (OVERLAP_ALPHA / 255.0f);
-        }
-      }
-    }
-
-    ED_draw_imbuf_ctx_clipping(C,
-                               ibuf,
-                               thumb_x_start + cut_off,
-                               y1,
-                               true,
-                               thumb_x_start + cut_off,
-                               y1,
-                               thumb_x_end,
-                               thumb_y_end,
-                               zoom_x,
-                               zoom_y);
-    IMB_freeImBuf(ibuf);
-    GPU_blend(GPU_BLEND_NONE);
-    cut_off = 0;
-    thumb_x_start += thumb_width;
-  }
-  last_displayed_thumbnails_list_cleanup(last_displayed_thumbnails, thumb_x_start, FLT_MAX);
-}
-
 /* Draw visible strips. Bounds check are already made. */
 static void draw_seq_strip(const bContext *C,
                            SpaceSeq *sseq,
@@ -1816,6 +1325,10 @@ static void draw_seq_strip(const bContext *C,
   /* Check if we are doing "solo preview". */
   bool is_single_image = (char)SEQ_transform_single_image_check(seq);
 
+  /* Use the seq->color_tag to display the tag color. */
+  const bool show_strip_color_tag = (sseq->timeline_overlay.flag &
+                                     SEQ_TIMELINE_SHOW_STRIP_COLOR_TAG);
+
   /* Draw strip body. */
   x1 = (seq->startstill) ? seq->start : seq->startdisp;
   y1 = seq->machine + SEQ_STRIP_OFSBOTTOM;
@@ -1828,9 +1341,9 @@ static void draw_seq_strip(const bContext *C,
 
   float text_margin_y;
   bool y_threshold;
-  if ((sseq->flag & SEQ_TIMELINE_SHOW_STRIP_NAME) ||
-      (sseq->flag & SEQ_TIMELINE_SHOW_STRIP_SOURCE) ||
-      (sseq->flag & SEQ_TIMELINE_SHOW_STRIP_DURATION)) {
+  if ((sseq->timeline_overlay.flag & SEQ_TIMELINE_SHOW_STRIP_NAME) ||
+      (sseq->timeline_overlay.flag & SEQ_TIMELINE_SHOW_STRIP_SOURCE) ||
+      (sseq->timeline_overlay.flag & SEQ_TIMELINE_SHOW_STRIP_DURATION)) {
 
     /* Calculate height needed for drawing text on strip. */
     text_margin_y = y2 - min_ff(0.40f, 20 * U.dpi_fac * pixely);
@@ -1846,7 +1359,7 @@ static void draw_seq_strip(const bContext *C,
   uint pos = GPU_vertformat_attr_add(immVertexFormat(), "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
   immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
 
-  draw_seq_background(scene, seq, pos, x1, x2, y1, y2, is_single_image);
+  draw_seq_background(scene, seq, pos, x1, x2, y1, y2, is_single_image, show_strip_color_tag);
 
   /* Draw a color band inside color strip. */
   if (seq->type == SEQ_TYPE_COLOR && y_threshold) {
@@ -1858,7 +1371,7 @@ static void draw_seq_strip(const bContext *C,
     if (!is_single_image && (seq->startofs || seq->endofs) && pixely > 0) {
       if ((sseq->timeline_overlay.flag & SEQ_TIMELINE_SHOW_STRIP_OFFSETS) ||
           (seq == special_seq_update)) {
-        draw_sequence_extensions_overlay(scene, seq, pos, pixely);
+        draw_sequence_extensions_overlay(scene, seq, pos, pixely, show_strip_color_tag);
       }
     }
   }
@@ -1869,13 +1382,14 @@ static void draw_seq_strip(const bContext *C,
 
   if ((seq->type == SEQ_TYPE_META) ||
       ((seq->type == SEQ_TYPE_SCENE) && (seq->flag & SEQ_SCENE_STRIPS))) {
-    drawmeta_contents(scene, seq, x1, y1, x2, y2);
+    drawmeta_contents(scene, seq, x1, y1, x2, y2, show_strip_color_tag);
   }
 
   if ((sseq->flag & SEQ_SHOW_OVERLAY) &&
       (sseq->timeline_overlay.flag & SEQ_TIMELINE_SHOW_THUMBNAILS) &&
-      (seq->type == SEQ_TYPE_MOVIE || seq->type == SEQ_TYPE_IMAGE)) {
-    draw_seq_strip_thumbnail(v2d, C, scene, seq, y1, y2, pixelx, pixely);
+      (ELEM(seq->type, SEQ_TYPE_MOVIE, SEQ_TYPE_IMAGE))) {
+    draw_seq_strip_thumbnail(
+        v2d, C, scene, seq, y1, y_threshold ? text_margin_y : y2, pixelx, pixely);
   }
 
   if ((sseq->flag & SEQ_SHOW_OVERLAY) &&
@@ -2002,13 +1516,6 @@ void ED_sequencer_special_preview_clear(void)
   sequencer_special_update_set(NULL);
 }
 
-/**
- * Rendering using opengl will change the current viewport/context.
- * This is why we need the \a region, to set back the render area.
- *
- * TODO: do not rely on such hack and just update the \a ibuf outside of
- * the UI drawing code.
- */
 ImBuf *sequencer_ibuf_get(struct Main *bmain,
                           ARegion *region,
                           struct Depsgraph *depsgraph,
@@ -2348,15 +1855,15 @@ static void sequencer_preview_get_rect(rctf *preview,
   sequencer_display_size(scene, viewrect);
   BLI_rctf_init(preview, -1.0f, 1.0f, -1.0f, 1.0f);
 
-  if (draw_overlay && sseq->overlay_type == SEQ_DRAW_OVERLAY_RECT) {
+  if (draw_overlay && (sseq->overlay_frame_type == SEQ_OVERLAY_FRAME_TYPE_RECT)) {
     preview->xmax = v2d->tot.xmin +
-                    (fabsf(BLI_rctf_size_x(&v2d->tot)) * scene->ed->over_border.xmax);
+                    (fabsf(BLI_rctf_size_x(&v2d->tot)) * scene->ed->overlay_frame_rect.xmax);
     preview->xmin = v2d->tot.xmin +
-                    (fabsf(BLI_rctf_size_x(&v2d->tot)) * scene->ed->over_border.xmin);
+                    (fabsf(BLI_rctf_size_x(&v2d->tot)) * scene->ed->overlay_frame_rect.xmin);
     preview->ymax = v2d->tot.ymin +
-                    (fabsf(BLI_rctf_size_y(&v2d->tot)) * scene->ed->over_border.ymax);
+                    (fabsf(BLI_rctf_size_y(&v2d->tot)) * scene->ed->overlay_frame_rect.ymax);
     preview->ymin = v2d->tot.ymin +
-                    (fabsf(BLI_rctf_size_y(&v2d->tot)) * scene->ed->over_border.ymin);
+                    (fabsf(BLI_rctf_size_y(&v2d->tot)) * scene->ed->overlay_frame_rect.ymin);
   }
   else if (draw_backdrop) {
     float aspect = BLI_rcti_size_x(&region->winrct) / (float)BLI_rcti_size_y(&region->winrct);
@@ -2444,8 +1951,8 @@ static void sequencer_draw_display_buffer(const bContext *C,
   rctf canvas;
   sequencer_preview_get_rect(&preview, scene, region, sseq, draw_overlay, draw_backdrop);
 
-  if (draw_overlay && sseq->overlay_type == SEQ_DRAW_OVERLAY_RECT) {
-    canvas = scene->ed->over_border;
+  if (draw_overlay && (sseq->overlay_frame_type == SEQ_OVERLAY_FRAME_TYPE_RECT)) {
+    canvas = scene->ed->overlay_frame_rect;
   }
   else {
     BLI_rctf_init(&canvas, 0.0f, 1.0f, 0.0f, 1.0f);
@@ -2579,9 +2086,13 @@ static int sequencer_draw_get_transform_preview_frame(Scene *scene)
   return preview_frame;
 }
 
-static void seq_draw_image_origin_and_outline(const bContext *C, Sequence *seq)
+static void seq_draw_image_origin_and_outline(const bContext *C, Sequence *seq, bool is_active_seq)
 {
   SpaceSeq *sseq = CTX_wm_space_seq(C);
+  const ARegion *region = CTX_wm_region(C);
+  if (region->regiontype == RGN_TYPE_PREVIEW && !sequencer_view_preview_only_poll(C)) {
+    return;
+  }
   if ((seq->flag & SELECT) == 0) {
     return;
   }
@@ -2622,7 +2133,12 @@ static void seq_draw_image_origin_and_outline(const bContext *C, Sequence *seq)
   immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
 
   float col[3];
-  UI_GetThemeColor3fv(TH_SEQ_SELECTED, col);
+  if (is_active_seq) {
+    UI_GetThemeColor3fv(TH_SEQ_ACTIVE, col);
+  }
+  else {
+    UI_GetThemeColor3fv(TH_SEQ_SELECTED, col);
+  }
   immUniformColor3fv(col);
   immUniform1f("lineWidth", U.pixelsize);
   immBegin(GPU_PRIM_LINE_LOOP, 4);
@@ -2688,7 +2204,8 @@ void sequencer_draw_preview(const bContext *C,
   UI_view2d_view_ortho(v2d);
 
   /* Draw background. */
-  if (!draw_backdrop && (!draw_overlay || sseq->overlay_type == SEQ_DRAW_OVERLAY_REFERENCE)) {
+  if (!draw_backdrop &&
+      (!draw_overlay || (sseq->overlay_frame_type == SEQ_OVERLAY_FRAME_TYPE_REFERENCE))) {
     sequencer_preview_clear();
 
     if (sseq->flag & SEQ_USE_ALPHA) {
@@ -2713,12 +2230,15 @@ void sequencer_draw_preview(const bContext *C,
     sequencer_draw_borders_overlay(sseq, v2d, scene);
   }
 
-  SeqCollection *collection = SEQ_query_rendered_strips(&scene->ed->seqbase, timeline_frame, 0);
-  Sequence *seq;
-  SEQ_ITERATOR_FOREACH (seq, collection) {
-    seq_draw_image_origin_and_outline(C, seq);
+  if (!draw_backdrop && scene->ed != NULL) {
+    SeqCollection *collection = SEQ_query_rendered_strips(scene->ed->seqbasep, timeline_frame, 0);
+    Sequence *seq;
+    Sequence *active_seq = SEQ_select_active_get(scene);
+    SEQ_ITERATOR_FOREACH (seq, collection) {
+      seq_draw_image_origin_and_outline(C, seq, seq == active_seq);
+    }
+    SEQ_collection_free(collection);
   }
-  SEQ_collection_free(collection);
 
   if (draw_gpencil && show_imbuf && (sseq->flag & SEQ_SHOW_OVERLAY)) {
     sequencer_draw_gpencil_overlay(C);
@@ -2727,6 +2247,11 @@ void sequencer_draw_preview(const bContext *C,
 #if 0
   sequencer_draw_maskedit(C, scene, region, sseq);
 #endif
+
+  /* Draw registered callbacks. */
+  GPU_framebuffer_bind(framebuffer_overlay);
+  ED_region_draw_cb_draw(C, region, REGION_DRAW_POST_VIEW);
+  GPU_framebuffer_bind_no_srgb(framebuffer_overlay);
 
   /* Scope is freed in sequencer_check_scopes when `ibuf` changes and redraw is needed. */
   if (ibuf) {
@@ -2746,11 +2271,11 @@ static void draw_seq_backdrop(View2D *v2d)
   immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
 
   /* View backdrop. */
-  immUniformThemeColorShade(TH_BACK, -25);
+  immUniformThemeColor(TH_BACK);
   immRectf(pos, v2d->cur.xmin, v2d->cur.ymin, v2d->cur.xmax, v2d->cur.ymax);
 
   /* Darker overlay over the view backdrop. */
-  immUniformThemeColorShade(TH_BACK, -20);
+  immUniformThemeColorShade(TH_BACK, -10);
   immRectf(pos, v2d->cur.xmin, -1.0, v2d->cur.xmax, 1.0);
 
   /* Alternating horizontal stripes. */
@@ -2767,19 +2292,6 @@ static void draw_seq_backdrop(View2D *v2d)
   }
 
   GPU_blend(GPU_BLEND_NONE);
-
-  /* Lines separating the horizontal bands. */
-  i = max_ii(1, ((int)v2d->cur.ymin) - 1);
-  int line_len = (int)v2d->cur.ymax - i + 1;
-  immUniformThemeColorShade(TH_GRID, 10);
-  immBegin(GPU_PRIM_LINES, line_len * 2);
-  while (line_len--) {
-    immVertex2f(pos, v2d->cur.xmax, i);
-    immVertex2f(pos, v2d->cur.xmin, i);
-    i++;
-  }
-  immEnd();
-
   immUnbindProgram();
 }
 
@@ -2885,7 +2397,7 @@ static void seq_draw_sfra_efra(const Scene *scene, View2D *v2d)
   immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
 
   /* Draw overlay outside of frame range. */
-  immUniformThemeColorShadeAlpha(TH_BACK, -25, -100);
+  immUniformThemeColorShadeAlpha(TH_BACK, -10, -100);
 
   if (frame_sta < frame_end) {
     immRectf(pos, v2d->cur.xmin, v2d->cur.ymin, (float)frame_sta, v2d->cur.ymax);
@@ -3158,9 +2670,9 @@ static void draw_cache_view(const bContext *C)
 /* Draw sequencer timeline. */
 static void draw_overlap_frame_indicator(const struct Scene *scene, const View2D *v2d)
 {
-  int overlap_frame = (scene->ed->over_flag & SEQ_EDIT_OVERLAY_ABS) ?
-                          scene->ed->over_cfra :
-                          scene->r.cfra + scene->ed->over_ofs;
+  int overlap_frame = (scene->ed->overlay_frame_flag & SEQ_EDIT_OVERLAY_FRAME_ABS) ?
+                          scene->ed->overlay_frame_abs :
+                          scene->r.cfra + scene->ed->overlay_frame_ofs;
 
   uint pos = GPU_vertformat_attr_add(immVertexFormat(), "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
   immBindBuiltinProgram(GPU_SHADER_2D_LINE_DASHED_UNIFORM_COLOR);
@@ -3206,8 +2718,6 @@ void draw_timeline_seq(const bContext *C, ARegion *region)
   }
 
   UI_view2d_view_ortho(v2d);
-  /* Get timeline bound-box, needed for the scroll-bars. */
-  SEQ_timeline_boundbox(scene, SEQ_active_seqbase_get(ed), &v2d->tot);
   draw_seq_backdrop(v2d);
   if ((sseq->flag & SEQ_SHOW_OVERLAY) && (sseq->timeline_overlay.flag & SEQ_TIMELINE_SHOW_GRID)) {
     U.v2d_min_gridsize *= 3;
@@ -3254,6 +2764,10 @@ void draw_timeline_seq(const bContext *C, ARegion *region)
   UI_view2d_view_ortho(v2d);
   ANIM_draw_previewrange(C, v2d, 1);
 
+  if ((sseq->gizmo_flag & SEQ_GIZMO_HIDE) == 0) {
+    WM_gizmomap_draw(region->gizmo_map, C, WM_GIZMOMAP_DRAWSTEP_2D);
+  }
+
   /* Draw registered callbacks. */
   GPU_framebuffer_bind(framebuffer_overlay);
   ED_region_draw_cb_draw(C, region, REGION_DRAW_POST_VIEW);
@@ -3280,12 +2794,15 @@ void draw_timeline_seq_display(const bContext *C, ARegion *region)
   if (scene->ed != NULL) {
     UI_view2d_view_ortho(v2d);
     draw_cache_view(C);
-    if (scene->ed->over_flag & SEQ_EDIT_OVERLAY_SHOW) {
+    if (scene->ed->overlay_frame_flag & SEQ_EDIT_OVERLAY_FRAME_SHOW) {
       draw_overlap_frame_indicator(scene, v2d);
     }
     UI_view2d_view_restore(C);
   }
 
-  ED_time_scrub_draw_current_frame(region, scene, !(sseq->flag & SEQ_DRAWFRAMES), true);
+  ED_time_scrub_draw_current_frame(region, scene, !(sseq->flag & SEQ_DRAWFRAMES));
+
+  const ListBase *seqbase = SEQ_active_seqbase_get(SEQ_editing_get(scene));
+  SEQ_timeline_boundbox(scene, seqbase, &v2d->tot);
   UI_view2d_scrollers_draw(v2d, NULL);
 }

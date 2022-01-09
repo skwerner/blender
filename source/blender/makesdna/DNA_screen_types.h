@@ -154,6 +154,9 @@ typedef struct Panel_Runtime {
   /* Pointer to the panel's block. Useful when changes to panel #uiBlocks
    * need some context from traversal of the panel "tree". */
   struct uiBlock *block;
+
+  /* Non-owning pointer. The context is stored in the block. */
+  struct bContextStore *context;
 } Panel_Runtime;
 
 /** The part from uiBlock that needs saved in file. */
@@ -241,7 +244,7 @@ typedef struct PanelCategoryDyn {
   rcti rect;
 } PanelCategoryDyn;
 
-/* region stack of active tabs */
+/** Region stack of active tabs. */
 typedef struct PanelCategoryStack {
   struct PanelCategoryStack *next, *prev;
   char idname[64];
@@ -458,6 +461,9 @@ typedef struct ARegion_Runtime {
 
   /* The offset needed to not overlap with window scrollbars. Only used by HUD regions for now. */
   int offset_x, offset_y;
+
+  /* Maps uiBlock->name to uiBlock for faster lookups. */
+  struct GHash *block_name_map;
 } ARegion_Runtime;
 
 typedef struct ARegion {
@@ -648,9 +654,11 @@ enum {
 
 #define UILST_FLT_SORT_MASK (((unsigned int)(UILST_FLT_SORT_REVERSE | UILST_FLT_SORT_LOCK)) - 1)
 
-/* regiontype, first two are the default set */
-/* Do NOT change order, append on end. Types are hardcoded needed */
-typedef enum eRegionType {
+/**
+ * regiontype, first two are the default set.
+ * \warning Do NOT change order, append on end. Types are hard-coded needed.
+ */
+typedef enum eRegion_Type {
   RGN_TYPE_WINDOW = 0,
   RGN_TYPE_HEADER = 1,
   RGN_TYPE_CHANNELS = 2,
@@ -666,9 +674,12 @@ typedef enum eRegionType {
   RGN_TYPE_EXECUTE = 10,
   RGN_TYPE_FOOTER = 11,
   RGN_TYPE_TOOL_HEADER = 12,
+  /* Region type used exclusively by internal code and add-ons to register draw callbacks to the XR
+   * context (surface, mirror view). Does not represent any real region. */
+  RGN_TYPE_XR = 13,
 
-#define RGN_TYPE_LEN (RGN_TYPE_TOOL_HEADER + 1)
-} eRegionType;
+#define RGN_TYPE_LEN (RGN_TYPE_XR + 1)
+} eRegion_Type;
 
 /* use for function args */
 #define RGN_TYPE_ANY -1

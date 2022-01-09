@@ -17,20 +17,20 @@
 #include "device/cpu/kernel_thread_globals.h"
 
 // clang-format off
-#include "kernel/osl/osl_shader.h"
-#include "kernel/osl/osl_globals.h"
+#include "kernel/osl/shader.h"
+#include "kernel/osl/globals.h"
 #include "kernel/kernel_oiio_globals.h"
 // clang-format on
 
-#include "util/util_profiling.h"
+#include "util/profiling.h"
 
 CCL_NAMESPACE_BEGIN
 
-CPUKernelThreadGlobals::CPUKernelThreadGlobals(const KernelGlobals &kernel_globals,
+CPUKernelThreadGlobals::CPUKernelThreadGlobals(const KernelGlobalsCPU &kernel_globals,
                                                void *osl_globals_memory,
                                                void *oiio_globals_memory,
                                                Profiler &cpu_profiler)
-    : KernelGlobals(kernel_globals), cpu_profiler_(cpu_profiler)
+    : KernelGlobalsCPU(kernel_globals), cpu_profiler_(cpu_profiler)
 {
   reset_runtime_memory();
 
@@ -46,7 +46,7 @@ CPUKernelThreadGlobals::CPUKernelThreadGlobals(const KernelGlobals &kernel_globa
 }
 
 CPUKernelThreadGlobals::CPUKernelThreadGlobals(CPUKernelThreadGlobals &&other) noexcept
-    : KernelGlobals(std::move(other)), cpu_profiler_(other.cpu_profiler_)
+    : KernelGlobalsCPU(std::move(other)), cpu_profiler_(other.cpu_profiler_)
 {
   other.reset_runtime_memory();
 }
@@ -68,7 +68,7 @@ CPUKernelThreadGlobals &CPUKernelThreadGlobals::operator=(CPUKernelThreadGlobals
     return *this;
   }
 
-  *static_cast<KernelGlobals *>(this) = *static_cast<KernelGlobals *>(&other);
+  *static_cast<KernelGlobalsCPU *>(this) = *static_cast<KernelGlobalsCPU *>(&other);
 
   other.reset_runtime_memory();
 

@@ -1101,25 +1101,31 @@ context_type_map = {
     "scene": ("Scene", False),
     "sculpt_object": ("Object", False),
     "selectable_objects": ("Object", True),
+    "selected_asset_files": ("FileSelectEntry", True),
     "selected_bones": ("EditBone", True),
+    "selected_editable_actions": ("Action", True),
     "selected_editable_bones": ("EditBone", True),
     "selected_editable_fcurves": ("FCurve", True),
     "selected_editable_keyframes": ("Keyframe", True),
     "selected_editable_objects": ("Object", True),
     "selected_editable_sequences": ("Sequence", True),
+    "selected_ids": ("ID", True),
     "selected_files": ("FileSelectEntry", True),
+    "selected_ids": ("ID", True),
     "selected_nla_strips": ("NlaStrip", True),
+    "selected_movieclip_tracks": ("MovieTrackingTrack", True),
     "selected_nodes": ("Node", True),
     "selected_objects": ("Object", True),
     "selected_pose_bones": ("PoseBone", True),
     "selected_pose_bones_from_active_object": ("PoseBone", True),
     "selected_sequences": ("Sequence", True),
+    "selected_visible_actions": ("Action", True),
     "selected_visible_fcurves": ("FCurve", True),
     "sequences": ("Sequence", True),
     "soft_body": ("SoftBodyModifier", False),
     "speaker": ("Speaker", False),
     "texture": ("Texture", False),
-    "texture_slot": ("MaterialTextureSlot", False),
+    "texture_slot": ("TextureSlot", False),
     "texture_user": ("ID", False),
     "texture_user_property": ("Property", False),
     "ui_list": ("UIList", False),
@@ -1220,7 +1226,10 @@ def pycontext2sphinx(basepath):
         while char_array[i] is not None:
             member = ctypes.string_at(char_array[i]).decode(encoding="ascii")
             fw(".. data:: %s\n\n" % member)
-            member_type, is_seq = context_type_map[member]
+            try:
+                member_type, is_seq = context_type_map[member]
+            except KeyError:
+                raise SystemExit("Error: context key %r not found in context_type_map; update %s" % (member, __file__)) from None
             fw("   :type: %s :class:`bpy.types.%s`\n\n" % ("sequence of " if is_seq else "", member_type))
             unique.add(member)
             i += 1
@@ -2247,7 +2256,7 @@ def main():
     # First monkey patch to load in fake members.
     setup_monkey_patch()
 
-    # Perform changes to Blender it's self.
+    # Perform changes to Blender itself.
     setup_data = setup_blender()
 
     # eventually, create the dirs

@@ -1060,21 +1060,21 @@ static void draw_fcurve(bAnimContext *ac, SpaceGraph *sipo, ARegion *region, bAn
     const uint shdr_pos = GPU_vertformat_attr_add(
         immVertexFormat(), "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
 
-    immBindBuiltinProgram(GPU_SHADER_2D_LINE_DASHED_UNIFORM_COLOR);
-
     float viewport_size[4];
     GPU_viewport_size_get_f(viewport_size);
-    immUniform2f("viewport_size", viewport_size[2] / UI_DPI_FAC, viewport_size[3] / UI_DPI_FAC);
-
-    immUniform1i("colors_len", 0); /* Simple dashes. */
 
     if (BKE_fcurve_is_protected(fcu)) {
-      /* protected curves (non editable) are drawn with dotted lines */
+      /* Protected curves (non editable) are drawn with dotted lines. */
+      immBindBuiltinProgram(GPU_SHADER_2D_LINE_DASHED_UNIFORM_COLOR);
+      immUniform2f("viewport_size", viewport_size[2] / UI_DPI_FAC, viewport_size[3] / UI_DPI_FAC);
+      immUniform1i("colors_len", 0); /* Simple dashes. */
       immUniform1f("dash_width", 4.0f);
       immUniform1f("dash_factor", 0.5f);
     }
     else {
-      immUniform1f("dash_factor", 2.0f); /* solid line */
+      immBindBuiltinProgram(GPU_SHADER_3D_POLYLINE_UNIFORM_COLOR);
+      immUniform2fv("viewportSize", &viewport_size[2]);
+      immUniform1f("lineWidth", GPU_line_width_get());
     }
 
     if (((fcu->grp) && (fcu->grp->flag & AGRP_MUTED)) || (fcu->flag & FCURVE_MUTED)) {
@@ -1314,9 +1314,6 @@ static void graph_draw_driver_debug(bAnimContext *ac, ID *id, FCurve *fcu)
 
 /* Public Curve-Drawing API  ---------------- */
 
-/* Draw the 'ghost' F-Curves (i.e. snapshots of the curve)
- * NOTE: unit mapping has already been applied to the values, so do not try and apply again
- */
 void graph_draw_ghost_curves(bAnimContext *ac, SpaceGraph *sipo, ARegion *region)
 {
   FCurve *fcu;
@@ -1364,9 +1361,6 @@ void graph_draw_ghost_curves(bAnimContext *ac, SpaceGraph *sipo, ARegion *region
   GPU_blend(GPU_BLEND_NONE);
 }
 
-/* This is called twice from space_graph.c -> graph_main_region_draw()
- * Unselected then selected F-Curves are drawn so that they do not occlude each other.
- */
 void graph_draw_curves(bAnimContext *ac, SpaceGraph *sipo, ARegion *region, short sel)
 {
   ListBase anim_data = {NULL, NULL};
@@ -1408,7 +1402,6 @@ void graph_draw_curves(bAnimContext *ac, SpaceGraph *sipo, ARegion *region, shor
 /** \name Channel List
  * \{ */
 
-/* left hand part */
 void graph_draw_channel_names(bContext *C, bAnimContext *ac, ARegion *region)
 {
   ListBase anim_data = {NULL, NULL};

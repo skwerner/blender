@@ -180,7 +180,7 @@ void ED_object_assign_active_image(Main *bmain, Object *ob, int mat_nr, Image *i
 
   if (node && is_image_texture_node(node)) {
     node->id = &ima->id;
-    ED_node_tag_update_nodetree(bmain, ma->nodetree, node);
+    ED_node_tree_propagate_change(NULL, bmain, ma->nodetree);
   }
 }
 
@@ -253,7 +253,6 @@ bool ED_uvedit_minmax(const Scene *scene, Object *obedit, float r_min[2], float 
   return ED_uvedit_minmax_multi(scene, &obedit, 1, r_min, r_max);
 }
 
-/* Be careful when using this, it bypasses all synchronization options */
 void ED_uvedit_select_all(BMesh *bm)
 {
   BMFace *efa;
@@ -1765,11 +1764,9 @@ static int uv_set_2d_cursor_invoke(bContext *C, wmOperator *op, const wmEvent *e
   float location[2];
 
   if (region->regiontype == RGN_TYPE_WINDOW) {
-    if (event->mval[1] <= 16) {
-      SpaceImage *sima = CTX_wm_space_image(C);
-      if (sima && ED_space_image_show_cache(sima)) {
-        return OPERATOR_PASS_THROUGH;
-      }
+    SpaceImage *sima = CTX_wm_space_image(C);
+    if (sima && ED_space_image_show_cache_and_mval_over(sima, region, event->mval)) {
+      return OPERATOR_PASS_THROUGH;
     }
   }
 

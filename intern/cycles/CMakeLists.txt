@@ -226,6 +226,9 @@ add_definitions(
   -DCCL_NAMESPACE_END=}
 )
 
+if(WITH_CYCLES_DEBUG)
+  add_definitions(-DWITH_CYCLES_DEBUG)
+endif()
 if(WITH_CYCLES_STANDALONE_GUI)
   add_definitions(-DWITH_CYCLES_STANDALONE_GUI)
 endif()
@@ -295,12 +298,6 @@ if(WITH_OPENIMAGEDENOISE)
   )
 endif()
 
-if(WITH_CYCLES_STANDALONE)
-  set(WITH_CYCLES_DEVICE_CUDA TRUE)
-endif()
-# TODO(sergey): Consider removing it, only causes confusion in interface.
-set(WITH_CYCLES_DEVICE_MULTI TRUE)
-
 # Logging capabilities using GLog library.
 if(WITH_CYCLES_LOGGING)
   add_definitions(-DWITH_CYCLES_LOGGING)
@@ -340,7 +337,7 @@ else()
 endif()
 
 # Warnings
-if(CMAKE_COMPILER_IS_GNUCXX)
+if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_C_COMPILER_ID MATCHES "Clang")
   ADD_CHECK_CXX_COMPILER_FLAG(CMAKE_CXX_FLAGS _has_cxxflag_float_conversion "-Werror=float-conversion")
   ADD_CHECK_CXX_COMPILER_FLAG(CMAKE_CXX_FLAGS _has_cxxflag_double_promotion "-Werror=double-promotion")
   ADD_CHECK_CXX_COMPILER_FLAG(CMAKE_CXX_FLAGS _has_no_error_unused_macros "-Wno-error=unused-macros")
@@ -399,7 +396,8 @@ add_subdirectory(doc)
 add_subdirectory(graph)
 add_subdirectory(integrator)
 add_subdirectory(kernel)
-add_subdirectory(render)
+add_subdirectory(scene)
+add_subdirectory(session)
 add_subdirectory(subd)
 add_subdirectory(util)
 

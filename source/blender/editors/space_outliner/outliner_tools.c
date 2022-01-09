@@ -197,9 +197,22 @@ static void get_element_operation_type(
 static TreeElement *get_target_element(SpaceOutliner *space_outliner)
 {
   TreeElement *te = outliner_find_element_with_flag(&space_outliner->tree, TSE_ACTIVE);
-  BLI_assert(te);
 
   return te;
+}
+
+static bool outliner_operation_tree_element_poll(bContext *C)
+{
+  if (!ED_operator_outliner_active(C)) {
+    return false;
+  }
+  SpaceOutliner *space_outliner = CTX_wm_space_outliner(C);
+  TreeElement *te = get_target_element(space_outliner);
+  if (te == NULL) {
+    return false;
+  }
+
+  return true;
 }
 
 static void unlink_action_fn(bContext *C,
@@ -742,7 +755,7 @@ static void id_local_fn(bContext *C,
     }
   }
   else if (ID_IS_OVERRIDE_LIBRARY_REAL(tselem->id)) {
-    BKE_lib_override_library_free(&tselem->id->override_library, true);
+    BKE_lib_override_library_make_local(tselem->id);
   }
 }
 
@@ -804,7 +817,7 @@ static void id_override_library_create_fn(bContext *C,
   ID *id_reference = NULL;
   bool is_override_instancing_object = false;
   if (tsep != NULL && tsep->type == TSE_SOME_ID && tsep->id != NULL &&
-      GS(tsep->id->name) == ID_OB) {
+      GS(tsep->id->name) == ID_OB && !ID_IS_OVERRIDE_LIBRARY(tsep->id)) {
     Object *ob = (Object *)tsep->id;
     if (ob->type == OB_EMPTY && &ob->instance_collection->id == id_root) {
       BLI_assert(GS(id_root->name) == ID_GR);
@@ -946,7 +959,6 @@ static void id_override_library_resync_fn(bContext *C,
                                     id_root,
                                     NULL,
                                     do_hierarchy_enforce,
-                                    true,
                                     &(struct BlendFileReadReport){.reports = reports});
 
     WM_event_add_notifier(C, NC_WINDOW, NULL);
@@ -1082,10 +1094,6 @@ static void singleuser_world_fn(bContext *C,
   }
 }
 
-/**
- * \param recurse_selected: Set to false for operations which are already
- * recursively operating on their children.
- */
 void outliner_do_object_operation_ex(bContext *C,
                                      ReportList *reports,
                                      Scene *scene_act,
@@ -1426,7 +1434,7 @@ static void outliner_do_data_operation(
   }
 }
 
-static Base *outline_batch_delete_hierarchy(
+static Base *outliner_batch_delete_hierarchy(
     ReportList *reports, Main *bmain, ViewLayer *view_layer, Scene *scene, Base *base)
 {
   Base *child_base, *base_next;
@@ -1444,7 +1452,7 @@ static Base *outline_batch_delete_hierarchy(
       /* pass */
     }
     if (parent) {
-      base_next = outline_batch_delete_hierarchy(reports, bmain, view_layer, scene, child_base);
+      base_next = outliner_batch_delete_hierarchy(reports, bmain, view_layer, scene, child_base);
     }
   }
 
@@ -1497,7 +1505,7 @@ static void object_batch_delete_hierarchy_fn(bContext *C,
       ED_object_editmode_exit(C, EM_FREEDATA);
     }
 
-    outline_batch_delete_hierarchy(reports, CTX_data_main(C), view_layer, scene, base);
+    outliner_batch_delete_hierarchy(reports, CTX_data_main(C), view_layer, scene, base);
   }
 }
 
@@ -1868,6 +1876,10 @@ static bool outliner_id_operation_item_poll(bContext *C,
                                             PropertyRNA *UNUSED(prop),
                                             const int enum_value)
 {
+  if (!outliner_operation_tree_element_poll(C)) {
+    return false;
+  }
+
   SpaceOutliner *space_outliner = CTX_wm_space_outliner(C);
   TreeElement *te = get_target_element(space_outliner);
   TreeStoreElem *tselem = TREESTORE(te);
@@ -2254,7 +2266,7 @@ void OUTLINER_OT_id_operation(wmOperatorType *ot)
   /* callbacks */
   ot->invoke = WM_menu_invoke;
   ot->exec = outliner_id_operation_exec;
-  ot->poll = ED_operator_outliner_active;
+  ot->poll = outliner_operation_tree_element_poll;
 
   ot->flag = 0;
 
@@ -2361,7 +2373,7 @@ void OUTLINER_OT_lib_operation(wmOperatorType *ot)
   /* callbacks */
   ot->invoke = WM_menu_invoke;
   ot->exec = outliner_lib_operation_exec;
-  ot->poll = ED_operator_outliner_active;
+  ot->poll = outliner_operation_tree_element_poll;
 
   ot->prop = RNA_def_enum(
       ot->srna, "type", outliner_lib_op_type_items, 0, "Library Operation", "");
@@ -2420,13 +2432,7 @@ static int outliner_action_set_exec(bContext *C, wmOperator *op)
   Main *bmain = CTX_data_main(C);
   SpaceOutliner *space_outliner = CTX_wm_space_outliner(C);
   int scenelevel = 0, objectlevel = 0, idlevel = 0, datalevel = 0;
-
   bAction *act;
-
-  /* check for invalid states */
-  if (space_outliner == NULL) {
-    return OPERATOR_CANCELLED;
-  }
 
   TreeElement *te = get_target_element(space_outliner);
   get_element_operation_type(te, &scenelevel, &objectlevel, &idlevel, &datalevel);
@@ -2482,7 +2488,7 @@ void OUTLINER_OT_action_set(wmOperatorType *ot)
   /* api callbacks */
   ot->invoke = WM_enum_search_invoke;
   ot->exec = outliner_action_set_exec;
-  ot->poll = ED_operator_outliner_active;
+  ot->poll = outliner_operation_tree_element_poll;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
@@ -2531,12 +2537,6 @@ static int outliner_animdata_operation_exec(bContext *C, wmOperator *op)
   wmWindowManager *wm = CTX_wm_manager(C);
   SpaceOutliner *space_outliner = CTX_wm_space_outliner(C);
   int scenelevel = 0, objectlevel = 0, idlevel = 0, datalevel = 0;
-
-  /* check for invalid states */
-  if (space_outliner == NULL) {
-    return OPERATOR_CANCELLED;
-  }
-
   TreeElement *te = get_target_element(space_outliner);
   get_element_operation_type(te, &scenelevel, &objectlevel, &idlevel, &datalevel);
 
@@ -2722,12 +2722,6 @@ static int outliner_data_operation_exec(bContext *C, wmOperator *op)
 {
   SpaceOutliner *space_outliner = CTX_wm_space_outliner(C);
   int scenelevel = 0, objectlevel = 0, idlevel = 0, datalevel = 0;
-
-  /* check for invalid states */
-  if (space_outliner == NULL) {
-    return OPERATOR_CANCELLED;
-  }
-
   TreeElement *te = get_target_element(space_outliner);
   get_element_operation_type(te, &scenelevel, &objectlevel, &idlevel, &datalevel);
 
@@ -2806,6 +2800,13 @@ static const EnumPropertyItem *outliner_data_op_sets_enum_item_fn(bContext *C,
     return DummyRNA_DEFAULT_items;
   }
 
+  TreeElement *te = get_target_element(space_outliner);
+  if (te == NULL) {
+    return DummyRNA_NULL_items;
+  }
+
+  TreeStoreElem *tselem = TREESTORE(te);
+
   static const EnumPropertyItem optype_sel_and_hide[] = {
       {OL_DOP_SELECT, "SELECT", 0, "Select", ""},
       {OL_DOP_DESELECT, "DESELECT", 0, "Deselect", ""},
@@ -2815,9 +2816,6 @@ static const EnumPropertyItem *outliner_data_op_sets_enum_item_fn(bContext *C,
 
   static const EnumPropertyItem optype_sel_linked[] = {
       {OL_DOP_SELECT_LINKED, "SELECT_LINKED", 0, "Select Linked", ""}, {0, NULL, 0, NULL, NULL}};
-
-  TreeElement *te = get_target_element(space_outliner);
-  TreeStoreElem *tselem = TREESTORE(te);
 
   if (tselem->type == TSE_RNA_STRUCT) {
     return optype_sel_linked;
@@ -2835,7 +2833,7 @@ void OUTLINER_OT_data_operation(wmOperatorType *ot)
   /* callbacks */
   ot->invoke = WM_menu_invoke;
   ot->exec = outliner_data_operation_exec;
-  ot->poll = ED_operator_outliner_active;
+  ot->poll = outliner_operation_tree_element_poll;
 
   ot->flag = 0;
 
@@ -2981,7 +2979,6 @@ static int outliner_operation(bContext *C, wmOperator *op, const wmEvent *event)
   return do_outliner_operation_event(C, op->reports, region, space_outliner, hovered_te);
 }
 
-/* Menu only! Calls other operators */
 void OUTLINER_OT_operation(wmOperatorType *ot)
 {
   ot->name = "Context Menu";

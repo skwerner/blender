@@ -161,12 +161,14 @@ static void rna_ImageUser_update(Main *bmain, Scene *scene, PointerRNA *ptr)
   ImageUser *iuser = ptr->data;
   ID *id = ptr->owner_id;
 
-  BKE_image_user_frame_calc(NULL, iuser, scene->r.cfra);
+  if (scene != NULL) {
+    BKE_image_user_frame_calc(NULL, iuser, scene->r.cfra);
+  }
 
   if (id) {
     if (GS(id->name) == ID_NT) {
       /* Special update for nodetrees to find parent datablock. */
-      ED_node_tag_update_nodetree(bmain, (bNodeTree *)id, NULL);
+      ED_node_tree_propagate_change(NULL, bmain, NULL);
     }
     else {
       /* Update material or texture for render preview. */

@@ -1052,7 +1052,6 @@ static void cloth_sim_initialize_default_node_state(SculptSession *ss,
   MEM_SAFE_FREE(nodes);
 }
 
-/* Public functions. */
 SculptClothSimulation *SCULPT_cloth_brush_simulation_create(SculptSession *ss,
                                                             const float cloth_mass,
                                                             const float cloth_damping,
@@ -1195,7 +1194,6 @@ static void sculpt_cloth_ensure_constraints_in_simulation_area(Sculpt *sd,
       sd, ob, nodes, totnode, ss->cache->cloth_sim, sim_location, limit);
 }
 
-/* Main Brush Function. */
 void SCULPT_do_cloth_brush(Sculpt *sd, Object *ob, PBVHNode **nodes, int totnode)
 {
   SculptSession *ss = ob->sculpt;
@@ -1271,7 +1269,6 @@ void SCULPT_cloth_simulation_free(struct SculptClothSimulation *cloth_sim)
   MEM_SAFE_FREE(cloth_sim);
 }
 
-/* Cursor drawing function. */
 void SCULPT_cloth_simulation_limits_draw(const uint gpuattr,
                                          const Brush *brush,
                                          const float location[3],
@@ -1528,7 +1525,7 @@ static int sculpt_cloth_filter_modal(bContext *C, wmOperator *op, const wmEvent 
     return OPERATOR_RUNNING_MODAL;
   }
 
-  const float len = event->prevclickx - event->x;
+  const float len = event->prev_click_xy[0] - event->xy[0];
   filter_strength = filter_strength * -len * 0.001f * UI_DPI_FAC;
 
   SCULPT_vertex_random_access_ensure(ss);

@@ -68,10 +68,6 @@ bool transform_mode_use_local_origins(const TransInfo *t)
   return ELEM(t->mode, TFM_ROTATION, TFM_RESIZE, TFM_TRACKBALL);
 }
 
-/**
- * Transforming around ourselves is no use, fallback to individual origins,
- * useful for curve/armatures.
- */
 void transform_around_single_fallback_ex(TransInfo *t, int data_len_all)
 {
   if (data_len_all != 1) {
@@ -228,7 +224,7 @@ static void set_prop_dist(TransInfo *t, const bool with_dist)
    * Used to find #TransData from the index returned by #BLI_kdtree_find_nearest. */
   TransData **td_table = MEM_mallocN(sizeof(*td_table) * td_table_len, __func__);
 
-  /* Create and fill kd-tree of selected's positions - in global or proj_vec space. */
+  /* Create and fill KD-tree of selected's positions - in global or proj_vec space. */
   KDTree_3d *td_tree = BLI_kdtree_3d_new(td_table_len);
 
   int td_table_index = 0;
@@ -369,7 +365,6 @@ static bool pchan_autoik_adjust(bPoseChannel *pchan, short chainlen)
   return changed;
 }
 
-/* change the chain-length of auto-ik */
 void transform_autoik_update(TransInfo *t, short mode)
 {
   Main *bmain = CTX_data_main(t->context);
@@ -482,7 +477,6 @@ void calc_distanceCurveVerts(TransData *head, TransData *tail, bool cyclic)
   BLI_LINKSTACK_FREE(queue);
 }
 
-/* Utility function for getting the handle data from bezier's */
 TransDataCurveHandleFlags *initTransDataCurveHandles(TransData *td, struct BezTriple *bezt)
 {
   TransDataCurveHandleFlags *hdata;
@@ -611,9 +605,6 @@ void clipUVData(TransInfo *t)
 /** \name Animation Editors (General)
  * \{ */
 
-/**
- * Used for `TFM_TIME_EXTEND`.
- */
 char transform_convert_frame_side_dir_get(TransInfo *t, float cframe)
 {
   char r_dir;
@@ -636,7 +627,6 @@ char transform_convert_frame_side_dir_get(TransInfo *t, float cframe)
   return r_dir;
 }
 
-/* This function tests if a point is on the "mouse" side of the cursor/frame-marking */
 bool FrameOnMouseSide(char side, float frame, float cframe)
 {
   /* both sides, so it doesn't matter */
@@ -667,14 +657,6 @@ typedef struct tRetainedKeyframe {
   size_t del_count; /* number of keyframes of this sort that have been deleted so far */
 } tRetainedKeyframe;
 
-/**
- * Called during special_aftertrans_update to make sure selected keyframes replace
- * any other keyframes which may reside on that frame (that is not selected).
- *
- * \param sel_flag: The flag (bezt.f1/2/3) value to use to determine selection. Usually `SELECT`,
- *                  but may want to use a different one at times (if caller does not operate on
- *                  selection).
- */
 void posttrans_fcurve_clean(FCurve *fcu, const int sel_flag, const bool use_handle)
 {
   /* NOTE: We assume that all keys are sorted */
@@ -798,12 +780,6 @@ void posttrans_fcurve_clean(FCurve *fcu, const int sel_flag, const bool use_hand
 /** \name Transform Utilities
  * \{ */
 
-/* Little helper function for ObjectToTransData used to give certain
- * constraints (ChildOf, FollowPath, and others that may be added)
- * inverse corrections for transform, so that they aren't in CrazySpace.
- * These particular constraints benefit from this, but others don't, hence
- * this semi-hack ;-)    - Aligorith
- */
 bool constraints_list_needinv(TransInfo *t, ListBase *list)
 {
   bConstraint *con;
@@ -894,14 +870,12 @@ bool constraints_list_needinv(TransInfo *t, ListBase *list)
 /** \name Transform (After-Transform Update)
  * \{ */
 
-/* inserting keys, pointcache, redraw events... */
-/**
- * \note Sequencer freeing has its own function now because of a conflict
- * with transform's order of freeing (campbell).
- * Order changed, the sequencer stuff should go back in here
- */
 void special_aftertrans_update(bContext *C, TransInfo *t)
 {
+  /* NOTE: Sequencer freeing has its own function now because of a conflict
+   * with transform's order of freeing (campbell).
+   * Order changed, the sequencer stuff should go back in here. */
+
   /* early out when nothing happened */
   if (t->data_len_all == 0 || t->mode == TFM_DUMMY) {
     return;
@@ -940,11 +914,15 @@ void special_aftertrans_update(bContext *C, TransInfo *t)
     case TC_SEQ_DATA:
       special_aftertrans_update__sequencer(C, t);
       break;
+    case TC_SEQ_IMAGE_DATA:
+      special_aftertrans_update__sequencer_image(C, t);
+      break;
     case TC_TRACKING_DATA:
       special_aftertrans_update__movieclip(C, t);
       break;
     case TC_ARMATURE_VERTS:
     case TC_CURSOR_IMAGE:
+    case TC_CURSOR_SEQUENCER:
     case TC_CURSOR_VIEW3D:
     case TC_CURVE_VERTS:
     case TC_GPENCIL:
@@ -955,7 +933,6 @@ void special_aftertrans_update(bContext *C, TransInfo *t)
     case TC_OBJECT_TEXSPACE:
     case TC_PAINT_CURVE_VERTS:
     case TC_PARTICLE_VERTS:
-    case TC_SEQ_IMAGE_DATA:
     case TC_NONE:
     default:
       break;
@@ -964,6 +941,9 @@ void special_aftertrans_update(bContext *C, TransInfo *t)
 
 int special_transform_moving(TransInfo *t)
 {
+  if (t->options & CTX_CURSOR) {
+    return G_TRANSFORM_CURSOR;
+  }
   if (t->spacetype == SPACE_SEQ) {
     return G_TRANSFORM_SEQ;
   }
@@ -1037,6 +1017,7 @@ static void init_proportional_edit(TransInfo *t)
     case TC_POSE: /* Disable PET, its not usable in pose mode yet T32444. */
     case TC_ARMATURE_VERTS:
     case TC_CURSOR_IMAGE:
+    case TC_CURSOR_SEQUENCER:
     case TC_CURSOR_VIEW3D:
     case TC_NLA_DATA:
     case TC_OBJECT_TEXSPACE:
@@ -1112,6 +1093,7 @@ static void init_TransDataContainers(TransInfo *t,
     case TC_ACTION_DATA:
     case TC_GRAPH_EDIT_DATA:
     case TC_CURSOR_IMAGE:
+    case TC_CURSOR_SEQUENCER:
     case TC_CURSOR_VIEW3D:
     case TC_MASKING_DATA:
     case TC_NLA_DATA:
@@ -1223,6 +1205,7 @@ static eTFlag flags_from_data_type(eTConvertType data_type)
     case TC_MESH_UV:
       return T_EDIT | T_POINTS | T_2D_EDIT;
     case TC_CURSOR_IMAGE:
+    case TC_CURSOR_SEQUENCER:
       return T_2D_EDIT;
     case TC_PARTICLE_VERTS:
       return T_POINTS;
@@ -1248,6 +1231,9 @@ static eTConvertType convert_type_get(const TransInfo *t, Object **r_obj_armatur
   if (t->options & CTX_CURSOR) {
     if (t->spacetype == SPACE_IMAGE) {
       convert_type = TC_CURSOR_IMAGE;
+    }
+    else if (t->spacetype == SPACE_SEQ) {
+      convert_type = TC_CURSOR_SEQUENCER;
     }
     else {
       convert_type = TC_CURSOR_VIEW3D;
@@ -1395,6 +1381,9 @@ void createTransData(bContext *C, TransInfo *t)
       break;
     case TC_CURSOR_IMAGE:
       createTransCursor_image(t);
+      break;
+    case TC_CURSOR_SEQUENCER:
+      createTransCursor_sequencer(t);
       break;
     case TC_CURSOR_VIEW3D:
       createTransCursor_view3d(t);
@@ -1596,7 +1585,6 @@ void transform_convert_clip_mirror_modifier_apply(TransDataContainer *tc)
   }
 }
 
-/* for the realtime animation recording feature, handle overlapping data */
 void animrecord_check_state(TransInfo *t, struct Object *ob)
 {
   Scene *scene = t->scene;
@@ -1695,7 +1683,6 @@ void transform_convert_flush_handle2D(TransData *td, TransData2D *td2d, const fl
   }
 }
 
-/* called for updating while transform acts, once per redraw */
 void recalcData(TransInfo *t)
 {
   switch (t->data_type) {
@@ -1714,8 +1701,11 @@ void recalcData(TransInfo *t)
     case TC_CURSOR_IMAGE:
       recalcData_cursor_image(t);
       break;
+    case TC_CURSOR_SEQUENCER:
+      recalcData_cursor_sequencer(t);
+      break;
     case TC_CURSOR_VIEW3D:
-      recalcData_cursor(t);
+      recalcData_cursor_view3d(t);
       break;
     case TC_GRAPH_EDIT_DATA:
       recalcData_graphedit(t);

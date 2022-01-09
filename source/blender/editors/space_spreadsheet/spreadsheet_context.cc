@@ -50,8 +50,7 @@ namespace blender::ed::spreadsheet {
 
 static SpreadsheetContextObject *spreadsheet_context_object_new()
 {
-  SpreadsheetContextObject *context = (SpreadsheetContextObject *)MEM_callocN(
-      sizeof(SpreadsheetContextObject), __func__);
+  SpreadsheetContextObject *context = MEM_cnew<SpreadsheetContextObject>(__func__);
   context->base.type = SPREADSHEET_CONTEXT_OBJECT;
   return context;
 }
@@ -77,8 +76,7 @@ static void spreadsheet_context_object_free(SpreadsheetContextObject *context)
 
 static SpreadsheetContextModifier *spreadsheet_context_modifier_new()
 {
-  SpreadsheetContextModifier *context = (SpreadsheetContextModifier *)MEM_callocN(
-      sizeof(SpreadsheetContextModifier), __func__);
+  SpreadsheetContextModifier *context = MEM_cnew<SpreadsheetContextModifier>(__func__);
   context->base.type = SPREADSHEET_CONTEXT_MODIFIER;
   return context;
 }
@@ -111,8 +109,7 @@ static void spreadsheet_context_modifier_free(SpreadsheetContextModifier *contex
 
 static SpreadsheetContextNode *spreadsheet_context_node_new()
 {
-  SpreadsheetContextNode *context = (SpreadsheetContextNode *)MEM_callocN(
-      sizeof(SpreadsheetContextNode), __func__);
+  SpreadsheetContextNode *context = MEM_cnew<SpreadsheetContextNode>(__func__);
   context->base.type = SPREADSHEET_CONTEXT_NODE;
   return context;
 }
@@ -373,6 +370,21 @@ void ED_spreadsheet_context_path_set_evaluated_object(SpaceSpreadsheet *sspreads
   BLI_addtail(&sspreadsheet->context_path, context);
 }
 
+static bScreen *find_screen_to_search_for_context(wmWindow *window,
+                                                  SpaceSpreadsheet *current_space)
+{
+  bScreen *screen = BKE_workspace_active_screen_get(window->workspace_hook);
+  if (ELEM(screen->state, SCREENMAXIMIZED, SCREENFULL)) {
+    /* If the spreadsheet is maximized, try to find the context in the unmaximized screen. */
+    ScrArea *main_area = (ScrArea *)screen->areabase.first;
+    SpaceLink *sl = (SpaceLink *)main_area->spacedata.first;
+    if (sl == (SpaceLink *)current_space) {
+      return main_area->full;
+    }
+  }
+  return screen;
+}
+
 void ED_spreadsheet_context_path_guess(const bContext *C, SpaceSpreadsheet *sspreadsheet)
 {
   ED_spreadsheet_context_path_clear(sspreadsheet);
@@ -385,9 +397,12 @@ void ED_spreadsheet_context_path_guess(const bContext *C, SpaceSpreadsheet *sspr
 
   if (sspreadsheet->object_eval_state == SPREADSHEET_OBJECT_EVAL_STATE_VIEWER_NODE) {
     LISTBASE_FOREACH (wmWindow *, window, &wm->windows) {
-      bScreen *screen = BKE_workspace_active_screen_get(window->workspace_hook);
+      bScreen *screen = find_screen_to_search_for_context(window, sspreadsheet);
       LISTBASE_FOREACH (ScrArea *, area, &screen->areabase) {
         SpaceLink *sl = (SpaceLink *)area->spacedata.first;
+        if (sl == nullptr) {
+          continue;
+        }
         if (sl->spacetype == SPACE_NODE) {
           SpaceNode *snode = (SpaceNode *)sl;
           if (snode->edittree != nullptr) {
@@ -466,9 +481,12 @@ bool ED_spreadsheet_context_path_is_active(const bContext *C, SpaceSpreadsheet *
   }
 
   LISTBASE_FOREACH (wmWindow *, window, &wm->windows) {
-    bScreen *screen = BKE_workspace_active_screen_get(window->workspace_hook);
+    bScreen *screen = find_screen_to_search_for_context(window, sspreadsheet);
     LISTBASE_FOREACH (ScrArea *, area, &screen->areabase) {
       SpaceLink *sl = (SpaceLink *)area->spacedata.first;
+      if (sl == nullptr) {
+        continue;
+      }
       if (sl->spacetype != SPACE_NODE) {
         continue;
       }

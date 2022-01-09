@@ -126,7 +126,6 @@ void render_result_free(RenderResult *rr)
   MEM_freeN(rr);
 }
 
-/** Version that's compatible with full-sample buffers. */
 void render_result_free_list(ListBase *lb, RenderResult *rr)
 {
   RenderResult *rrnext;
@@ -144,7 +143,6 @@ void render_result_free_list(ListBase *lb, RenderResult *rr)
 
 /********************************* multiview *************************************/
 
-/* create a new views Listbase in rr without duplicating the memory pointers */
 void render_result_views_shallowcopy(RenderResult *dst, RenderResult *src)
 {
   RenderView *rview;
@@ -166,7 +164,6 @@ void render_result_views_shallowcopy(RenderResult *dst, RenderResult *src)
   }
 }
 
-/* free the views created temporarily */
 void render_result_views_shallowdelete(RenderResult *rr)
 {
   if (rr == NULL) {
@@ -213,12 +210,37 @@ static void set_pass_full_name(
 
 /********************************** New **************************************/
 
+static void render_layer_allocate_pass(RenderResult *rr, RenderPass *rp)
+{
+  if (rp->rect != NULL) {
+    return;
+  }
+
+  const size_t rectsize = ((size_t)rr->rectx) * rr->recty * rp->channels;
+  rp->rect = MEM_callocN(sizeof(float) * rectsize, rp->name);
+
+  if (STREQ(rp->name, RE_PASSNAME_VECTOR)) {
+    /* initialize to max speed */
+    float *rect = rp->rect;
+    for (int x = rectsize - 1; x >= 0; x--) {
+      rect[x] = PASS_VECTOR_MAX;
+    }
+  }
+  else if (STREQ(rp->name, RE_PASSNAME_Z)) {
+    float *rect = rp->rect;
+    for (int x = rectsize - 1; x >= 0; x--) {
+      rect[x] = 10e10;
+    }
+  }
+}
+
 RenderPass *render_layer_add_pass(RenderResult *rr,
                                   RenderLayer *rl,
                                   int channels,
                                   const char *name,
                                   const char *viewname,
-                                  const char *chan_id)
+                                  const char *chan_id,
+                                  const bool allocate)
 {
   const int view_id = BLI_findstringindex(&rr->views, viewname, offsetof(RenderView, name));
   RenderPass *rpass = MEM_callocN(sizeof(RenderPass), name);
@@ -250,16 +272,17 @@ RenderPass *render_layer_add_pass(RenderResult *rr,
 
   BLI_addtail(&rl->passes, rpass);
 
-  /* The result contains non-allocated pass now, so tag it as such. */
-  rr->passes_allocated = false;
+  if (allocate) {
+    render_layer_allocate_pass(rr, rpass);
+  }
+  else {
+    /* The result contains non-allocated pass now, so tag it as such. */
+    rr->passes_allocated = false;
+  }
 
   return rpass;
 }
 
-/* called by main render as well for parts */
-/* will read info from Render *re to define layers */
-/* called in threads */
-/* re->winx,winy is coordinate space of entire image, partrct the part within */
 RenderResult *render_result_new(Render *re,
                                 rcti *partrct,
                                 const char *layername,
@@ -323,14 +346,14 @@ RenderResult *render_result_new(Render *re,
 
 #define RENDER_LAYER_ADD_PASS_SAFE(rr, rl, channels, name, viewname, chan_id) \
   do { \
-    if (render_layer_add_pass(rr, rl, channels, name, viewname, chan_id) == NULL) { \
+    if (render_layer_add_pass(rr, rl, channels, name, viewname, chan_id, false) == NULL) { \
       render_result_free(rr); \
       return NULL; \
     } \
   } while (false)
 
       /* A renderlayer should always have a Combined pass. */
-      render_layer_add_pass(rr, rl, 4, "Combined", view, "RGBA");
+      render_layer_add_pass(rr, rl, 4, "Combined", view, "RGBA", false);
 
       if (view_layer->passflag & SCE_PASS_Z) {
         RENDER_LAYER_ADD_PASS_SAFE(rr, rl, 1, RE_PASSNAME_Z, view, "Z");
@@ -427,7 +450,7 @@ RenderResult *render_result_new(Render *re,
       }
 
       /* a renderlayer should always have a Combined pass */
-      render_layer_add_pass(rr, rl, 4, RE_PASSNAME_COMBINED, view, "RGBA");
+      render_layer_add_pass(rr, rl, 4, RE_PASSNAME_COMBINED, view, "RGBA", false);
     }
 
     /* NOTE: this has to be in sync with `scene.c`. */
@@ -447,32 +470,19 @@ RenderResult *render_result_new(Render *re,
 
 void render_result_passes_allocated_ensure(RenderResult *rr)
 {
+  if (rr == NULL) {
+    /* Happens when the result was not yet allocated for the current scene or slot configuration.
+     */
+    return;
+  }
+
   LISTBASE_FOREACH (RenderLayer *, rl, &rr->layers) {
     LISTBASE_FOREACH (RenderPass *, rp, &rl->passes) {
       if (rl->exrhandle != NULL && !STREQ(rp->name, RE_PASSNAME_COMBINED)) {
         continue;
       }
 
-      if (rp->rect != NULL) {
-        continue;
-      }
-
-      const size_t rectsize = ((size_t)rr->rectx) * rr->recty * rp->channels;
-      rp->rect = MEM_callocN(sizeof(float) * rectsize, rp->name);
-
-      if (STREQ(rp->name, RE_PASSNAME_VECTOR)) {
-        /* initialize to max speed */
-        float *rect = rp->rect;
-        for (int x = rectsize - 1; x >= 0; x--) {
-          rect[x] = PASS_VECTOR_MAX;
-        }
-      }
-      else if (STREQ(rp->name, RE_PASSNAME_Z)) {
-        float *rect = rp->rect;
-        for (int x = rectsize - 1; x >= 0; x--) {
-          rect[x] = 10e10;
-        }
-      }
+      render_layer_allocate_pass(rr, rp);
     }
   }
 
@@ -501,7 +511,7 @@ void render_result_clone_passes(Render *re, RenderResult *rr, const char *viewna
           &rl->passes, main_rp->fullname, offsetof(RenderPass, fullname));
       if (!rp) {
         render_layer_add_pass(
-            rr, rl, main_rp->channels, main_rp->name, main_rp->view, main_rp->chan_id);
+            rr, rl, main_rp->channels, main_rp->name, main_rp->view, main_rp->chan_id, false);
       }
     }
   }
@@ -512,7 +522,8 @@ void RE_create_render_pass(RenderResult *rr,
                            int channels,
                            const char *chan_id,
                            const char *layername,
-                           const char *viewname)
+                           const char *viewname,
+                           const bool allocate)
 {
   RenderLayer *rl;
   RenderPass *rp;
@@ -542,7 +553,7 @@ void RE_create_render_pass(RenderResult *rr,
       }
 
       if (!rp) {
-        render_layer_add_pass(rr, rl, channels, name, view, chan_id);
+        render_layer_add_pass(rr, rl, channels, name, view, chan_id, allocate);
       }
     }
   }
@@ -721,10 +732,6 @@ static int order_render_passes(const void *a, const void *b)
   return (rpa->view_id < rpb->view_id);
 }
 
-/**
- * From imbuf, if a handle was returned and
- * it's not a single-layer multi-view we convert this to render result.
- */
 RenderResult *render_result_new_from_exr(
     void *exrhandle, const char *colorspace, bool predivide, int rectx, int recty)
 {
@@ -825,9 +832,6 @@ static void do_merge_tile(
   }
 }
 
-/* used when rendering to a full buffer, or when reading the exr part-layer-pass file */
-/* no test happens here if it fits... we also assume layers are in sync */
-/* is used within threads */
 void render_result_merge(RenderResult *rr, RenderResult *rrpart)
 {
   RenderLayer *rl, *rlp;
@@ -857,8 +861,6 @@ void render_result_merge(RenderResult *rr, RenderResult *rrpart)
   }
 }
 
-/* Called from the UI and render pipeline, to save multilayer and multiview
- * images, optionally isolating a specific, view, layer or RGBA/Z pass. */
 bool RE_WriteRenderResult(ReportList *reports,
                           RenderResult *rr,
                           const char *filename,
@@ -1028,7 +1030,6 @@ void render_result_single_layer_begin(Render *re)
   re->result = NULL;
 }
 
-/* if scemode is R_SINGLE_LAYER, at end of rendering, merge the both render results */
 void render_result_single_layer_end(Render *re)
 {
   ViewLayer *view_layer;
@@ -1073,7 +1074,6 @@ void render_result_single_layer_end(Render *re)
   re->pushedresult = NULL;
 }
 
-/* called for reading temp files, and for external engines */
 int render_result_exr_file_read_path(RenderResult *rr,
                                      RenderLayer *rl_single,
                                      const char *filepath)
@@ -1083,7 +1083,7 @@ int render_result_exr_file_read_path(RenderResult *rr,
   void *exrhandle = IMB_exr_get_handle();
   int rectx, recty;
 
-  if (IMB_exr_begin_read(exrhandle, filepath, &rectx, &recty) == 0) {
+  if (!IMB_exr_begin_read(exrhandle, filepath, &rectx, &recty, false)) {
     printf("failed being read %s\n", filepath);
     IMB_exr_close(exrhandle);
     return 0;
@@ -1172,23 +1172,34 @@ void render_result_exr_file_cache_write(Render *re)
   RE_WriteRenderResult(NULL, rr, str, NULL, NULL, -1);
 }
 
-/* For cache, makes exact copy of render result */
 bool render_result_exr_file_cache_read(Render *re)
 {
-  char str[FILE_MAXFILE + MAX_ID_NAME + MAX_ID_NAME + 100] = "";
+  /* File path to cache. */
+  char filepath[FILE_MAXFILE + MAX_ID_NAME + MAX_ID_NAME + 100] = "";
   char *root = U.render_cachedir;
+  render_result_exr_file_cache_path(re->scene, root, filepath);
 
-  RE_FreeRenderResult(re->result);
-  re->result = render_result_new(re, &re->disprect, RR_ALL_LAYERS, RR_ALL_VIEWS);
+  printf("read exr cache file: %s\n", filepath);
 
-  /* First try cache. */
-  render_result_exr_file_cache_path(re->scene, root, str);
+  /* Try opening the file. */
+  void *exrhandle = IMB_exr_get_handle();
+  int rectx, recty;
 
-  printf("read exr cache file: %s\n", str);
-  if (!render_result_exr_file_read_path(re->result, NULL, str)) {
-    printf("cannot read: %s\n", str);
+  if (!IMB_exr_begin_read(exrhandle, filepath, &rectx, &recty, true)) {
+    printf("cannot read: %s\n", filepath);
+    IMB_exr_close(exrhandle);
     return false;
   }
+
+  /* Read file contents into render result. */
+  const char *colorspace = IMB_colormanagement_role_colorspace_name_get(COLOR_ROLE_SCENE_LINEAR);
+  RE_FreeRenderResult(re->result);
+
+  IMB_exr_read_channels(exrhandle);
+  re->result = render_result_new_from_exr(exrhandle, colorspace, false, rectx, recty);
+
+  IMB_exr_close(exrhandle);
+
   return true;
 }
 
@@ -1227,7 +1238,7 @@ ImBuf *render_result_rect_to_ibuf(RenderResult *rr, const RenderData *rd, const 
     }
   }
 
-  /* color -> grayscale */
+  /* Color -> gray-scale. */
   /* editing directly would alter the render view */
   if (rd->im_format.planes == R_IMF_PLANES_BW) {
     ImBuf *ibuf_bw = IMB_dupImBuf(ibuf);

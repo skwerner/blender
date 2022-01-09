@@ -181,6 +181,11 @@ static void ObjectToTransData(TransInfo *t, TransData *td, Object *ob)
 
   /* axismtx has the real orientation */
   transform_orientations_create_from_axis(td->axismtx, UNPACK3(ob->obmat));
+  if (t->orient_type_mask & (1 << V3D_ORIENT_GIMBAL)) {
+    if (!gimbal_axis_object(ob, td->ext->axismtx_gimbal)) {
+      copy_m3_m3(td->ext->axismtx_gimbal, td->axismtx);
+    }
+  }
 
   td->con = ob->constraints.first;
 
@@ -388,7 +393,7 @@ static void set_trans_object_base_flags(TransInfo *t)
       if (parsel != NULL) {
         /* Rotation around local centers are allowed to propagate. */
         if ((t->around == V3D_AROUND_LOCAL_ORIGINS) &&
-            (t->mode == TFM_ROTATION || t->mode == TFM_TRACKBALL)) {
+            (ELEM(t->mode, TFM_ROTATION, TFM_TRACKBALL))) {
           base->flag_legacy |= BA_TRANSFORM_CHILD;
         }
         else {
@@ -432,8 +437,7 @@ static int count_proportional_objects(TransInfo *t)
   /* Clear all flags we need. It will be used to detect dependencies. */
   trans_object_base_deps_flag_prepare(view_layer);
   /* Rotations around local centers are allowed to propagate, so we take all objects. */
-  if (!((t->around == V3D_AROUND_LOCAL_ORIGINS) &&
-        (t->mode == TFM_ROTATION || t->mode == TFM_TRACKBALL))) {
+  if (!((t->around == V3D_AROUND_LOCAL_ORIGINS) && (ELEM(t->mode, TFM_ROTATION, TFM_TRACKBALL)))) {
     /* Mark all parents. */
     LISTBASE_FOREACH (Base *, base, &view_layer->object_bases) {
       if (BASE_SELECTED_EDITABLE(v3d, base) && BASE_SELECTABLE(v3d, base)) {
@@ -870,7 +874,6 @@ static bool motionpath_need_update_object(Scene *scene, Object *ob)
 /** \name Recalc Data object
  * \{ */
 
-/* helper for recalcData() - for object transforms, typically in the 3D view */
 void recalcData_objects(TransInfo *t)
 {
   bool motionpath_update = false;
@@ -910,7 +913,8 @@ void recalcData_objects(TransInfo *t)
 
   if (motionpath_update) {
     /* Update motion paths once for all transformed objects. */
-    ED_objects_recalculate_paths(t->context, t->scene, OBJECT_PATH_CALC_RANGE_CURRENT_FRAME);
+    ED_objects_recalculate_paths_selected(
+        t->context, t->scene, OBJECT_PATH_CALC_RANGE_CURRENT_FRAME);
   }
 
   if (t->options & CTX_OBMODE_XFORM_SKIP_CHILDREN) {
@@ -958,25 +962,25 @@ void special_aftertrans_update__object(bContext *C, TransInfo *t)
     }
     BLI_freelistN(&pidlist);
 
-    /* pointcache refresh */
+    /* Point-cache refresh. */
     if (BKE_ptcache_object_reset(t->scene, ob, PTCACHE_RESET_OUTDATED)) {
       DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
     }
 
-    /* Needed for proper updating of "quick cached" dynamics. */
-    /* Creates troubles for moving animated objects without */
-    /* autokey though, probably needed is an anim sys override? */
-    /* Please remove if some other solution is found. -jahka */
+    /* Needed for proper updating of "quick cached" dynamics.
+     * Creates troubles for moving animated objects without
+     * auto-key though, probably needed is an animation-system override?
+     * NOTE(@jahka): Please remove if some other solution is found. */
     DEG_id_tag_update(&ob->id, ID_RECALC_TRANSFORM);
 
-    /* Set autokey if necessary */
+    /* Set auto-key if necessary. */
     if (!canceled) {
       autokeyframe_object(C, t->scene, t->view_layer, ob, t->mode);
     }
 
     motionpath_update |= motionpath_need_update_object(t->scene, ob);
 
-    /* restore rigid body transform */
+    /* Restore rigid body transform. */
     if (ob->rigidbody_object && canceled) {
       float ctime = BKE_scene_ctime_get(t->scene);
       if (BKE_rigidbody_check_sim_running(t->scene->rigidbody_world, ctime)) {
@@ -994,7 +998,7 @@ void special_aftertrans_update__object(bContext *C, TransInfo *t)
     /* Update motion paths once for all transformed objects. */
     const eObjectPathCalcRange range = canceled ? OBJECT_PATH_CALC_RANGE_CURRENT_FRAME :
                                                   OBJECT_PATH_CALC_RANGE_CHANGED;
-    ED_objects_recalculate_paths(C, t->scene, range);
+    ED_objects_recalculate_paths_selected(C, t->scene, range);
   }
 
   clear_trans_object_base_flags(t);

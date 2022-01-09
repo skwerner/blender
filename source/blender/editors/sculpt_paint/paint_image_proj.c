@@ -1659,7 +1659,9 @@ static float project_paint_uvpixel_mask(const ProjPaintState *ps,
 
     if (other_tpage && (ibuf_other = BKE_image_acquire_ibuf(other_tpage, NULL, NULL))) {
       const MLoopTri *lt_other = &ps->mlooptri_eval[tri_index];
-      const float *lt_other_tri_uv[3] = {PS_LOOPTRI_AS_UV_3(ps->poly_to_loop_uv, lt_other)};
+      const float *lt_other_tri_uv[3] = {ps->mloopuv_stencil_eval[lt_other->tri[0]].uv,
+                                         ps->mloopuv_stencil_eval[lt_other->tri[1]].uv,
+                                         ps->mloopuv_stencil_eval[lt_other->tri[2]].uv};
 
       /* #BKE_image_acquire_ibuf - TODO: this may be slow. */
       uchar rgba_ub[4];
@@ -3123,7 +3125,8 @@ static void project_paint_face_init(const ProjPaintState *ps,
                   uv, v1coSS, v2coSS, v3coSS, uv1co, uv2co, uv3co, pixelScreenCo, w);
             }
 
-            /* a pity we need to get the worldspace pixel location here */
+            /* A pity we need to get the world-space pixel location here
+             * because it is a relatively expensive operation. */
             if (do_clip || do_3d_mapping) {
               interp_v3_v3v3v3(wco,
                                ps->mvert_eval[lt_vtri[0]].co,
@@ -3206,7 +3209,10 @@ static void project_paint_face_init(const ProjPaintState *ps,
     else {
       /* we have a seam - deal with it! */
 
-      /* inset face coords.  NOTE!!! ScreenSace for ortho, Worldspace in perspective view */
+      /* Inset face coords.
+       * - screen-space in orthographic view.
+       * - world-space in perspective view.
+       */
       float insetCos[3][3];
 
       /* Vertex screen-space coords. */
@@ -3371,8 +3377,8 @@ static void project_paint_face_init(const ProjPaintState *ps,
                     if ((ps->do_occlude == false) ||
                         !project_bucket_point_occluded(
                             ps, bucketFaceNodes, tri_index, pixel_on_edge)) {
-                      /* a pity we need to get the worldspace
-                       * pixel location here */
+                      /* A pity we need to get the world-space pixel location here
+                       * because it is a relatively expensive operation. */
                       if (do_clip || do_3d_mapping) {
                         interp_v3_v3v3v3(wco, vCo[0], vCo[1], vCo[2], w);
 
@@ -4128,8 +4134,9 @@ static bool project_paint_clone_face_skip(ProjPaintState *ps,
 
     if (ps->do_material_slots) {
       if (lc->slot_clone != lc->slot_last_clone) {
-        if (!slot->uvname || !(lc->mloopuv_clone_base = CustomData_get_layer_named(
-                                   &ps->me_eval->ldata, CD_MLOOPUV, lc->slot_clone->uvname))) {
+        if (!lc->slot_clone->uvname ||
+            !(lc->mloopuv_clone_base = CustomData_get_layer_named(
+                  &ps->me_eval->ldata, CD_MLOOPUV, lc->slot_clone->uvname))) {
           lc->mloopuv_clone_base = CustomData_get_layer(&ps->me_eval->ldata, CD_MLOOPUV);
         }
         lc->slot_last_clone = lc->slot_clone;
@@ -4642,13 +4649,7 @@ static void project_paint_end(ProjPaintState *ps)
 /* 1 = an undo, -1 is a redo. */
 static void partial_redraw_single_init(ImagePaintPartialRedraw *pr)
 {
-  pr->x1 = INT_MAX;
-  pr->y1 = INT_MAX;
-
-  pr->x2 = -1;
-  pr->y2 = -1;
-
-  pr->enabled = 1;
+  BLI_rcti_init_minmax(&pr->dirty_region);
 }
 
 static void partial_redraw_array_init(ImagePaintPartialRedraw *pr)
@@ -4664,16 +4665,11 @@ static bool partial_redraw_array_merge(ImagePaintPartialRedraw *pr,
                                        ImagePaintPartialRedraw *pr_other,
                                        int tot)
 {
-  bool touch = 0;
+  bool touch = false;
   while (tot--) {
-    pr->x1 = min_ii(pr->x1, pr_other->x1);
-    pr->y1 = min_ii(pr->y1, pr_other->y1);
-
-    pr->x2 = max_ii(pr->x2, pr_other->x2);
-    pr->y2 = max_ii(pr->y2, pr_other->y2);
-
-    if (pr->x2 != -1) {
-      touch = 1;
+    BLI_rcti_do_minmax_rcti(&pr->dirty_region, &pr_other->dirty_region);
+    if (!BLI_rcti_is_empty(&pr->dirty_region)) {
+      touch = true;
     }
 
     pr++;
@@ -4696,7 +4692,7 @@ static bool project_image_refresh_tagged(ProjPaintState *ps)
       /* look over each bound cell */
       for (i = 0; i < PROJ_BOUNDBOX_SQUARED; i++) {
         pr = &(projIma->partRedrawRect[i]);
-        if (pr->x2 != -1) { /* TODO: use 'enabled' ? */
+        if (BLI_rcti_is_valid(&pr->dirty_region)) {
           set_imapaintpartial(pr);
           imapaint_image_update(NULL, projIma->ima, projIma->ibuf, &projIma->iuser, true);
           redraw = 1;
@@ -5110,11 +5106,10 @@ static void do_projectpaint_mask_f(ProjPaintState *ps, ProjPixel *projPixel, flo
 static void image_paint_partial_redraw_expand(ImagePaintPartialRedraw *cell,
                                               const ProjPixel *projPixel)
 {
-  cell->x1 = min_ii(cell->x1, (int)projPixel->x_px);
-  cell->y1 = min_ii(cell->y1, (int)projPixel->y_px);
-
-  cell->x2 = max_ii(cell->x2, (int)projPixel->x_px + 1);
-  cell->y2 = max_ii(cell->y2, (int)projPixel->y_px + 1);
+  rcti rect_to_add;
+  BLI_rcti_init(
+      &rect_to_add, projPixel->x_px, projPixel->x_px + 1, projPixel->y_px, projPixel->y_px + 1);
+  BLI_rcti_do_minmax_rcti(&cell->dirty_region, &rect_to_add);
 }
 
 static void copy_original_alpha_channel(ProjPixel *pixel, bool is_floatbuf)
@@ -5260,7 +5255,7 @@ static void do_projectpaint_thread(TaskPool *__restrict UNUSED(pool), void *ph_v
             color_f[3] *= ((float)projPixel->mask) * (1.0f / 65535.0f) * brush_alpha;
 
             if (is_floatbuf) {
-              /* convert to premultipied */
+              /* Convert to premutliplied. */
               mul_v3_fl(color_f, color_f[3]);
               IMB_blend_color_float(
                   projPixel->pixel.f_pt, projPixel->origColor.f_pt, color_f, ps->blend);
@@ -6329,8 +6324,6 @@ void ED_paint_data_warning(struct ReportList *reports, bool uvs, bool mat, bool 
               !stencil ? " Stencil," : "");
 }
 
-/* Make sure that active object has a material,
- * and assign UVs and image layers if they do not exist */
 bool ED_paint_proj_mesh_data_check(
     Scene *scene, Object *ob, bool *uvs, bool *mat, bool *tex, bool *stencil)
 {
@@ -6574,7 +6567,7 @@ static bool proj_paint_add_slot(bContext *C, wmOperator *op)
 
     nodeSetActive(ntree, imanode);
 
-    /* Connect to first available principled bsdf node. */
+    /* Connect to first available principled BSDF node. */
     bNode *in_node = ntreeFindType(ntree, SH_NODE_BSDF_PRINCIPLED);
     bNode *out_node = imanode;
 
@@ -6630,7 +6623,7 @@ static bool proj_paint_add_slot(bContext *C, wmOperator *op)
       }
     }
 
-    ntreeUpdateTree(CTX_data_main(C), ntree);
+    ED_node_tree_propagate_change(C, bmain, ntree);
     /* In case we added more than one node, position them too. */
     nodePositionPropagate(out_node);
 

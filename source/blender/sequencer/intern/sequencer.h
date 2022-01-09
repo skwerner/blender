@@ -30,10 +30,14 @@ extern "C" {
 struct Scene;
 struct Sequence;
 
+/**
+ * Cache must be freed before calling this function
+ * since it leaves the seqbase in an invalid state.
+ */
 void seq_free_sequence_recurse(struct Scene *scene,
                                struct Sequence *seq,
-                               const bool do_id_user,
-                               const bool do_clean_animdata);
+                               bool do_id_user,
+                               bool do_clean_animdata);
 
 #ifdef __cplusplus
 }

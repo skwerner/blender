@@ -16,19 +16,19 @@
 
 #pragma once
 
-#include "kernel/integrator/integrator_state.h"
+#include "kernel/integrator/state.h"
 
 #include "device/cpu/kernel_thread_globals.h"
-#include "device/device_queue.h"
+#include "device/queue.h"
 
 #include "integrator/path_trace_work.h"
 
-#include "util/util_vector.h"
+#include "util/vector.h"
 
 CCL_NAMESPACE_BEGIN
 
 struct KernelWorkTile;
-struct KernelGlobals;
+struct KernelGlobalsCPU;
 
 class CPUKernels;
 
@@ -48,12 +48,13 @@ class PathTraceWorkCPU : public PathTraceWork {
 
   virtual void render_samples(RenderStatistics &statistics,
                               int start_sample,
-                              int samples_num) override;
+                              int samples_num,
+                              int sample_offset) override;
 
-  virtual void copy_to_gpu_display(GPUDisplay *gpu_display,
-                                   PassMode pass_mode,
-                                   int num_samples) override;
-  virtual void destroy_gpu_resources(GPUDisplay *gpu_display) override;
+  virtual void copy_to_display(PathTraceDisplay *display,
+                               PassMode pass_mode,
+                               int num_samples) override;
+  virtual void destroy_gpu_resources(PathTraceDisplay *display) override;
 
   virtual bool copy_render_buffers_from_device() override;
   virtual bool copy_render_buffers_to_device() override;
@@ -64,7 +65,7 @@ class PathTraceWorkCPU : public PathTraceWork {
 
  protected:
   /* Core path tracing routine. Renders given work time on the given queue. */
-  void render_samples_full_pipeline(KernelGlobals *kernel_globals,
+  void render_samples_full_pipeline(KernelGlobalsCPU *kernel_globals,
                                     const KernelWorkTile &work_tile,
                                     const int samples_num);
 

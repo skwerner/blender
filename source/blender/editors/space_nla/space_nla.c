@@ -289,7 +289,7 @@ static void nla_main_region_draw_overlay(const bContext *C, ARegion *region)
   View2D *v2d = &region->v2d;
 
   /* scrubbing region */
-  ED_time_scrub_draw_current_frame(region, scene, snla->flag & SNLA_DRAWTIME, true);
+  ED_time_scrub_draw_current_frame(region, scene, snla->flag & SNLA_DRAWTIME);
 
   /* scrollers */
   UI_view2d_scrollers_draw(v2d, NULL);
@@ -591,7 +591,6 @@ static void nla_id_remap(ScrArea *UNUSED(area), SpaceLink *slink, ID *old_id, ID
   }
 }
 
-/* only called once, from space/spacetypes.c */
 void ED_spacetype_nla(void)
 {
   SpaceType *st = MEM_callocN(sizeof(SpaceType), "spacetype nla");

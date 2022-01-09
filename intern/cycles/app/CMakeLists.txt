@@ -25,7 +25,8 @@ set(INC_SYS
 set(LIBRARIES
   cycles_device
   cycles_kernel
-  cycles_render
+  cycles_scene
+  cycles_session
   cycles_bvh
   cycles_subd
   cycles_graph
@@ -64,6 +65,8 @@ if(WITH_CYCLES_STANDALONE)
     cycles_standalone.cpp
     cycles_xml.cpp
     cycles_xml.h
+    oiio_output_driver.cpp
+    oiio_output_driver.h
   )
   add_executable(cycles ${SRC} ${INC} ${INC_SYS})
   unset(SRC)
@@ -73,7 +76,7 @@ if(WITH_CYCLES_STANDALONE)
 
   if(APPLE)
     if(WITH_OPENCOLORIO)
-      set_property(TARGET cycles APPEND_STRING PROPERTY LINK_FLAGS " -framework IOKit")
+      set_property(TARGET cycles APPEND_STRING PROPERTY LINK_FLAGS " -framework IOKit -framework Carbon")
     endif()
     if(WITH_OPENIMAGEDENOISE AND "${CMAKE_OSX_ARCHITECTURES}" STREQUAL "arm64")
       # OpenImageDenoise uses BNNS from the Accelerate framework.

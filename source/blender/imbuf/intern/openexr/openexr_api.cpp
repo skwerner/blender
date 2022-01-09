@@ -327,10 +327,6 @@ static half float_to_half_safe(const float value)
 
 extern "C" {
 
-/**
- * Test presence of OpenEXR file.
- * \param mem: pointer to loaded OpenEXR bitstream
- */
 bool imb_is_a_openexr(const unsigned char *mem, const size_t size)
 {
   /* No define is exposed for this size. */
@@ -555,7 +551,7 @@ static bool imb_save_openexr_float(ImBuf *ibuf, const char *name, const int flag
     int xstride = sizeof(float) * channels;
     int ystride = -xstride * width;
 
-    /* last scanline, stride negative */
+    /* Last scan-line, stride negative. */
     float *rect[4] = {nullptr, nullptr, nullptr, nullptr};
     rect[0] = ibuf->rect_float + channels * (height - 1) * width;
     rect[1] = (channels >= 2) ? rect[0] + 1 : rect[0];
@@ -654,7 +650,7 @@ struct ExrChannel {
 
   char name[EXR_TOT_MAXNAME + 1]; /* full name with everything */
   struct MultiViewChannelName *m; /* struct to store all multipart channel info */
-  int xstride, ystride;           /* step to next pixel, to next scanline */
+  int xstride, ystride;           /* step to next pixel, to next scan-line. */
   float *rect;                    /* first pointer to write in */
   char chan_id;                   /* quick lookup of channel char */
   int view_id;                    /* quick lookup of channel view */
@@ -681,11 +677,13 @@ struct ExrLayer {
   ListBase passes;
 };
 
+static bool imb_exr_multilayer_parse_channels_from_file(ExrHandle *data);
+
 /* ********************** */
 
 void *IMB_exr_get_handle(void)
 {
-  ExrHandle *data = (ExrHandle *)MEM_callocN(sizeof(ExrHandle), "exr handle");
+  ExrHandle *data = MEM_cnew<ExrHandle>("exr handle");
   data->multiView = new StringVector();
 
   BLI_addtail(&exrhandles, data);
@@ -779,9 +777,6 @@ static void imb_exr_insert_view_name(char *name_full, const char *passname, cons
   }
 }
 
-/* adds flattened ExrChannels */
-/* xstride, ystride and rect can be done in set_channel too, for tile writing */
-/* passname does not include view */
 void IMB_exr_add_channel(void *handle,
                          const char *layname,
                          const char *passname,
@@ -794,7 +789,7 @@ void IMB_exr_add_channel(void *handle,
   ExrHandle *data = (ExrHandle *)handle;
   ExrChannel *echan;
 
-  echan = (ExrChannel *)MEM_callocN(sizeof(ExrChannel), "exr channel");
+  echan = MEM_cnew<ExrChannel>("exr channel");
   echan->m = new MultiViewChannelName();
 
   if (layname && layname[0] != '\0') {
@@ -838,13 +833,12 @@ void IMB_exr_add_channel(void *handle,
   BLI_addtail(&data->channels, echan);
 }
 
-/* used for output files (from RenderResult) (single and multilayer, single and multiview) */
-int IMB_exr_begin_write(void *handle,
-                        const char *filename,
-                        int width,
-                        int height,
-                        int compress,
-                        const StampData *stamp)
+bool IMB_exr_begin_write(void *handle,
+                         const char *filename,
+                         int width,
+                         int height,
+                         int compress,
+                         const StampData *stamp)
 {
   ExrHandle *data = (ExrHandle *)handle;
   Header header(width, height);
@@ -894,8 +888,6 @@ int IMB_exr_begin_write(void *handle,
   return (data->ofile != nullptr);
 }
 
-/* only used for writing temp. render results (not image files)
- * (FSA and Save Buffers) */
 void IMB_exrtile_begin_write(
     void *handle, const char *filename, int mipmap, int width, int height, int tilex, int tiley)
 {
@@ -961,56 +953,66 @@ void IMB_exrtile_begin_write(
   }
 }
 
-/* read from file */
-int IMB_exr_begin_read(void *handle, const char *filename, int *width, int *height)
+bool IMB_exr_begin_read(
+    void *handle, const char *filename, int *width, int *height, const bool parse_channels)
 {
   ExrHandle *data = (ExrHandle *)handle;
   ExrChannel *echan;
 
   /* 32 is arbitrary, but zero length files crashes exr. */
-  if (BLI_exists(filename) && BLI_file_size(filename) > 32) {
-    /* avoid crash/abort when we don't have permission to write here */
-    try {
-      data->ifile_stream = new IFileStream(filename);
-      data->ifile = new MultiPartInputFile(*(data->ifile_stream));
-    }
-    catch (const std::exception &) {
-      delete data->ifile;
-      delete data->ifile_stream;
+  if (!(BLI_exists(filename) && BLI_file_size(filename) > 32)) {
+    return false;
+  }
 
-      data->ifile = nullptr;
-      data->ifile_stream = nullptr;
-    }
+  /* avoid crash/abort when we don't have permission to write here */
+  try {
+    data->ifile_stream = new IFileStream(filename);
+    data->ifile = new MultiPartInputFile(*(data->ifile_stream));
+  }
+  catch (const std::exception &) {
+    delete data->ifile;
+    delete data->ifile_stream;
 
-    if (data->ifile) {
-      Box2i dw = data->ifile->header(0).dataWindow();
-      data->width = *width = dw.max.x - dw.min.x + 1;
-      data->height = *height = dw.max.y - dw.min.y + 1;
+    data->ifile = nullptr;
+    data->ifile_stream = nullptr;
+  }
 
-      imb_exr_get_views(*data->ifile, *data->multiView);
+  if (!data->ifile) {
+    return false;
+  }
 
-      std::vector<MultiViewChannelName> channels;
-      GetChannelsInMultiPartFile(*data->ifile, channels);
+  Box2i dw = data->ifile->header(0).dataWindow();
+  data->width = *width = dw.max.x - dw.min.x + 1;
+  data->height = *height = dw.max.y - dw.min.y + 1;
 
-      for (const MultiViewChannelName &channel : channels) {
-        IMB_exr_add_channel(
-            data, nullptr, channel.name.c_str(), channel.view.c_str(), 0, 0, nullptr, false);
-
-        echan = (ExrChannel *)data->channels.last;
-        echan->m->name = channel.name;
-        echan->m->view = channel.view;
-        echan->m->part_number = channel.part_number;
-        echan->m->internal_name = channel.internal_name;
-      }
-
-      return 1;
+  if (parse_channels) {
+    /* Parse channels into view/layer/pass. */
+    if (!imb_exr_multilayer_parse_channels_from_file(data)) {
+      return false;
     }
   }
-  return 0;
+  else {
+    /* Read view and channels without parsing. */
+    imb_exr_get_views(*data->ifile, *data->multiView);
+
+    std::vector<MultiViewChannelName> channels;
+    GetChannelsInMultiPartFile(*data->ifile, channels);
+
+    for (const MultiViewChannelName &channel : channels) {
+      IMB_exr_add_channel(
+          data, nullptr, channel.name.c_str(), channel.view.c_str(), 0, 0, nullptr, false);
+
+      echan = (ExrChannel *)data->channels.last;
+      echan->m->name = channel.name;
+      echan->m->view = channel.view;
+      echan->m->part_number = channel.part_number;
+      echan->m->internal_name = channel.internal_name;
+    }
+  }
+
+  return true;
 }
 
-/* still clumsy name handling, layers/channels can be ordered as list in list later */
-/* passname here is the raw channel name without the layer */
 void IMB_exr_set_channel(
     void *handle, const char *layname, const char *passname, int xstride, int ystride, float *rect)
 {
@@ -1112,7 +1114,7 @@ void IMB_exr_write_channels(void *handle)
     }
 
     for (echan = (ExrChannel *)data->channels.first; echan; echan = echan->next) {
-      /* Writing starts from last scanline, stride negative. */
+      /* Writing starts from last scan-line, stride negative. */
       if (echan->use_half_float) {
         float *rect = echan->rect;
         half *cur = current_rect_half;
@@ -1152,8 +1154,6 @@ void IMB_exr_write_channels(void *handle)
   }
 }
 
-/* temporary function, used for FSA and Save Buffers */
-/* called once per tile * view */
 void IMB_exrtile_write_channels(
     void *handle, int partx, int party, int level, const char *viewname, bool empty)
 {
@@ -1254,7 +1254,7 @@ void IMB_exr_read_channels(void *handle)
         if (!flip) {
           /* Inverse correct first pixel for data-window coordinates. */
           rect -= echan->xstride * (dw.min.x - dw.min.y * data->width);
-          /* move to last scanline to flip to Blender convention */
+          /* Move to last scan-line to flip to Blender convention. */
           rect += echan->xstride * (data->height - 1) * data->width;
           ystride = -ystride;
         }
@@ -1496,7 +1496,7 @@ static ExrLayer *imb_exr_get_layer(ListBase *lb, char *layname)
   ExrLayer *lay = (ExrLayer *)BLI_findstring(lb, layname, offsetof(ExrLayer, name));
 
   if (lay == nullptr) {
-    lay = (ExrLayer *)MEM_callocN(sizeof(ExrLayer), "exr layer");
+    lay = MEM_cnew<ExrLayer>("exr layer");
     BLI_addtail(lb, lay);
     BLI_strncpy(lay->name, layname, EXR_LAY_MAXNAME);
   }
@@ -1509,7 +1509,7 @@ static ExrPass *imb_exr_get_pass(ListBase *lb, char *passname)
   ExrPass *pass = (ExrPass *)BLI_findstring(lb, passname, offsetof(ExrPass, name));
 
   if (pass == nullptr) {
-    pass = (ExrPass *)MEM_callocN(sizeof(ExrPass), "exr pass");
+    pass = MEM_cnew<ExrPass>("exr pass");
 
     if (STREQ(passname, "Combined")) {
       BLI_addhead(lb, pass);
@@ -1524,25 +1524,8 @@ static ExrPass *imb_exr_get_pass(ListBase *lb, char *passname)
   return pass;
 }
 
-/* creates channels, makes a hierarchy and assigns memory to channels */
-static ExrHandle *imb_exr_begin_read_mem(IStream &file_stream,
-                                         MultiPartInputFile &file,
-                                         int width,
-                                         int height)
+static bool imb_exr_multilayer_parse_channels_from_file(ExrHandle *data)
 {
-  ExrLayer *lay;
-  ExrPass *pass;
-  ExrChannel *echan;
-  ExrHandle *data = (ExrHandle *)IMB_exr_get_handle();
-  int a;
-  char layname[EXR_TOT_MAXNAME], passname[EXR_TOT_MAXNAME];
-
-  data->ifile_stream = &file_stream;
-  data->ifile = &file;
-
-  data->width = width;
-  data->height = height;
-
   std::vector<MultiViewChannelName> channels;
   GetChannelsInMultiPartFile(*data->ifile, channels);
 
@@ -1552,7 +1535,7 @@ static ExrHandle *imb_exr_begin_read_mem(IStream &file_stream,
     IMB_exr_add_channel(
         data, nullptr, channel.name.c_str(), channel.view.c_str(), 0, 0, nullptr, false);
 
-    echan = (ExrChannel *)data->channels.last;
+    ExrChannel *echan = (ExrChannel *)data->channels.last;
     echan->m->name = channel.name;
     echan->m->view = channel.view;
     echan->m->part_number = channel.part_number;
@@ -1561,7 +1544,9 @@ static ExrHandle *imb_exr_begin_read_mem(IStream &file_stream,
 
   /* now try to sort out how to assign memory to the channels */
   /* first build hierarchical layer list */
-  for (echan = (ExrChannel *)data->channels.first; echan; echan = echan->next) {
+  ExrChannel *echan = (ExrChannel *)data->channels.first;
+  for (; echan; echan = echan->next) {
+    char layname[EXR_TOT_MAXNAME], passname[EXR_TOT_MAXNAME];
     if (imb_exr_split_channel_name(echan, layname, passname)) {
 
       const char *view = echan->m->view.c_str();
@@ -1591,21 +1576,20 @@ static ExrHandle *imb_exr_begin_read_mem(IStream &file_stream,
   }
   if (echan) {
     printf("error, too many channels in one pass: %s\n", echan->m->name.c_str());
-    IMB_exr_close(data);
-    return nullptr;
+    return false;
   }
 
   /* with some heuristics, try to merge the channels in buffers */
-  for (lay = (ExrLayer *)data->layers.first; lay; lay = lay->next) {
-    for (pass = (ExrPass *)lay->passes.first; pass; pass = pass->next) {
+  for (ExrLayer *lay = (ExrLayer *)data->layers.first; lay; lay = lay->next) {
+    for (ExrPass *pass = (ExrPass *)lay->passes.first; pass; pass = pass->next) {
       if (pass->totchan) {
-        pass->rect = (float *)MEM_callocN(width * height * pass->totchan * sizeof(float),
-                                          "pass rect");
+        pass->rect = (float *)MEM_callocN(
+            data->width * data->height * pass->totchan * sizeof(float), "pass rect");
         if (pass->totchan == 1) {
-          echan = pass->chan[0];
+          ExrChannel *echan = pass->chan[0];
           echan->rect = pass->rect;
           echan->xstride = 1;
-          echan->ystride = width;
+          echan->ystride = data->width;
           pass->chan_id[0] = echan->chan_id;
         }
         else {
@@ -1634,26 +1618,48 @@ static ExrHandle *imb_exr_begin_read_mem(IStream &file_stream,
               lookup[(unsigned int)'V'] = 1;
               lookup[(unsigned int)'A'] = 2;
             }
-            for (a = 0; a < pass->totchan; a++) {
+            for (int a = 0; a < pass->totchan; a++) {
               echan = pass->chan[a];
               echan->rect = pass->rect + lookup[(unsigned int)echan->chan_id];
               echan->xstride = pass->totchan;
-              echan->ystride = width * pass->totchan;
+              echan->ystride = data->width * pass->totchan;
               pass->chan_id[(unsigned int)lookup[(unsigned int)echan->chan_id]] = echan->chan_id;
             }
           }
           else { /* unknown */
-            for (a = 0; a < pass->totchan; a++) {
-              echan = pass->chan[a];
+            for (int a = 0; a < pass->totchan; a++) {
+              ExrChannel *echan = pass->chan[a];
               echan->rect = pass->rect + a;
               echan->xstride = pass->totchan;
-              echan->ystride = width * pass->totchan;
+              echan->ystride = data->width * pass->totchan;
               pass->chan_id[a] = echan->chan_id;
             }
           }
         }
       }
     }
+  }
+
+  return true;
+}
+
+/* creates channels, makes a hierarchy and assigns memory to channels */
+static ExrHandle *imb_exr_begin_read_mem(IStream &file_stream,
+                                         MultiPartInputFile &file,
+                                         int width,
+                                         int height)
+{
+  ExrHandle *data = (ExrHandle *)IMB_exr_get_handle();
+
+  data->ifile_stream = &file_stream;
+  data->ifile = &file;
+
+  data->width = width;
+  data->height = height;
+
+  if (!imb_exr_multilayer_parse_channels_from_file(data)) {
+    IMB_exr_close(data);
+    return nullptr;
   }
 
   return data;
@@ -1916,8 +1922,8 @@ struct ImBuf *imb_load_openexr(const unsigned char *mem,
     file = new MultiPartInputFile(*membuf);
 
     Box2i dw = file->header(0).dataWindow();
-    const int width = dw.max.x - dw.min.x + 1;
-    const int height = dw.max.y - dw.min.y + 1;
+    const size_t width = dw.max.x - dw.min.x + 1;
+    const size_t height = dw.max.y - dw.min.y + 1;
 
     // printf("OpenEXR-load: image data window %d %d %d %d\n",
     //     dw.min.x, dw.min.y, dw.max.x, dw.max.y);
@@ -1980,15 +1986,15 @@ struct ImBuf *imb_load_openexr(const unsigned char *mem,
           const bool has_luma = exr_has_luma(*file);
           FrameBuffer frameBuffer;
           float *first;
-          int xstride = sizeof(float[4]);
-          int ystride = -xstride * width;
+          size_t xstride = sizeof(float[4]);
+          size_t ystride = -xstride * width;
 
           imb_addrectfloatImBuf(ibuf);
 
           /* Inverse correct first pixel for data-window
            * coordinates (- dw.min.y because of y flip). */
           first = ibuf->rect_float - 4 * (dw.min.x - dw.min.y * width);
-          /* but, since we read y-flipped (negative y stride) we move to last scanline */
+          /* But, since we read y-flipped (negative y stride) we move to last scan-line. */
           first += 4 * (height - 1) * width;
 
           if (num_rgb_channels > 0) {

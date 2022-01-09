@@ -74,8 +74,23 @@ static bool change_frame_poll(bContext *C)
    * this shouldn't show up in 3D editor (or others without 2D timeline view) via search
    */
   if (area) {
-    if (ELEM(area->spacetype, SPACE_ACTION, SPACE_NLA, SPACE_SEQ, SPACE_CLIP, SPACE_GRAPH)) {
+    if (ELEM(area->spacetype, SPACE_ACTION, SPACE_NLA, SPACE_CLIP)) {
       return true;
+    }
+    if (area->spacetype == SPACE_SEQ) {
+      /* Check the region type so tools (which are shared between preview/strip view)
+       * don't conflict with actions which can have the same key bound (2D cursor for example). */
+      const ARegion *region = CTX_wm_region(C);
+      if (region && region->regiontype == RGN_TYPE_WINDOW) {
+        return true;
+      }
+    }
+    if (area->spacetype == SPACE_GRAPH) {
+      const SpaceGraph *sipo = area->spacedata.first;
+      /* Driver Editor's X axis is not time. */
+      if (sipo->mode != SIPO_MODE_DRIVERS) {
+        return true;
+      }
     }
   }
 
@@ -134,7 +149,7 @@ static void change_frame_apply(bContext *C, wmOperator *op)
   bool do_snap = RNA_boolean_get(op->ptr, "snap");
 
   if (do_snap) {
-    if (CTX_wm_space_seq(C)) {
+    if (CTX_wm_space_seq(C) && SEQ_editing_get(scene) != NULL) {
       frame = seq_frame_apply_snap(C, scene, frame);
     }
     else {

@@ -452,14 +452,6 @@ static bool bm_face_split_edgenet_find_loop(BMVert *v_init,
   return false;
 }
 
-/**
- * Splits a face into many smaller faces defined by an edge-net.
- * handle customdata and degenerate cases.
- *
- * - Isolated holes or unsupported face configurations, will be ignored.
- * - Customdata calculations aren't efficient
- *   (need to calculate weights for each vert).
- */
 bool BM_face_split_edgenet(BMesh *bm,
                            BMFace *f,
                            BMEdge **edge_net,
@@ -1135,11 +1127,13 @@ static BMVert *bm_face_split_edgenet_partial_connect(BMesh *bm, BMVert *v_delimi
     BMVert *v_other = BM_edge_other_vert(e_face_init ? e_face_init : v_delimit->e, v_delimit);
 
     BLI_SMALLSTACK_PUSH(search, v_other);
-    BM_elem_flag_disable(v_other, VERT_NOT_IN_STACK);
+    if (BM_elem_flag_test(v_other, VERT_NOT_IN_STACK)) {
+      BM_elem_flag_disable(v_other, VERT_NOT_IN_STACK);
+      BLI_linklist_prepend_alloca(&vert_stack, v_other);
+    }
 
     while ((v_other = BLI_SMALLSTACK_POP(search))) {
       BLI_assert(BM_elem_flag_test(v_other, VERT_NOT_IN_STACK) == false);
-      BLI_linklist_prepend_alloca(&vert_stack, v_other);
       BMEdge *e_iter = v_other->e;
       do {
         BMVert *v_step = BM_edge_other_vert(e_iter, v_other);
@@ -1147,6 +1141,7 @@ static BMVert *bm_face_split_edgenet_partial_connect(BMesh *bm, BMVert *v_delimi
           if (BM_elem_flag_test(v_step, VERT_NOT_IN_STACK)) {
             BM_elem_flag_disable(v_step, VERT_NOT_IN_STACK);
             BLI_SMALLSTACK_PUSH(search, v_step);
+            BLI_linklist_prepend_alloca(&vert_stack, v_step);
           }
         }
       } while ((e_iter = BM_DISK_EDGE_NEXT(e_iter, v_other)) != v_other->e);
@@ -1220,14 +1215,6 @@ static bool bm_vert_partial_connect_check_overlap(const int *remap,
 
 #endif /* USE_PARTIAL_CONNECT */
 
-/**
- * For when the edge-net has holes in it-this connects them.
- *
- * \param use_partial_connect: Support for handling islands connected by only a single edge,
- * \note that this is quite slow so avoid using where possible.
- * \param mem_arena: Avoids many small allocs & should be cleared after each use.
- * take care since \a edge_net_new is stored in \a r_edge_net_new.
- */
 bool BM_face_split_edgenet_connect_islands(BMesh *bm,
                                            BMFace *f,
                                            BMEdge **edge_net_init,

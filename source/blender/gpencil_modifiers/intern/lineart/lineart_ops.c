@@ -118,12 +118,12 @@ static bool bake_strokes(Object *ob,
   }
   LineartCache *local_lc = *lc;
   if (!(*lc)) {
-    MOD_lineart_compute_feature_lines(dg, lmd, lc);
+    MOD_lineart_compute_feature_lines(dg, lmd, lc, (!(ob->dtx & OB_DRAW_IN_FRONT)));
     MOD_lineart_destroy_render_data(lmd);
   }
   else {
     if (is_first || (!(lmd->flags & LRT_GPENCIL_USE_CACHE))) {
-      MOD_lineart_compute_feature_lines(dg, lmd, &local_lc);
+      MOD_lineart_compute_feature_lines(dg, lmd, &local_lc, (!(ob->dtx & OB_DRAW_IN_FRONT)));
       MOD_lineart_destroy_render_data(lmd);
     }
     MOD_lineart_chain_clear_picked_flag(local_lc);
@@ -444,7 +444,6 @@ static int lineart_gpencil_clear_strokes_all_exec(bContext *C, wmOperator *op)
   return OPERATOR_FINISHED;
 }
 
-/* Bake all line art modifiers on the current object. */
 void OBJECT_OT_lineart_bake_strokes(wmOperatorType *ot)
 {
   ot->name = "Bake Line Art";
@@ -456,7 +455,6 @@ void OBJECT_OT_lineart_bake_strokes(wmOperatorType *ot)
   ot->modal = lineart_gpencil_bake_strokes_commom_modal;
 }
 
-/* Bake all lineart objects in the scene. */
 void OBJECT_OT_lineart_bake_strokes_all(wmOperatorType *ot)
 {
   ot->name = "Bake Line Art (All)";
@@ -468,7 +466,6 @@ void OBJECT_OT_lineart_bake_strokes_all(wmOperatorType *ot)
   ot->modal = lineart_gpencil_bake_strokes_commom_modal;
 }
 
-/* clear all line art modifiers on the current object. */
 void OBJECT_OT_lineart_clear(wmOperatorType *ot)
 {
   ot->name = "Clear Baked Line Art";
@@ -478,7 +475,6 @@ void OBJECT_OT_lineart_clear(wmOperatorType *ot)
   ot->exec = lineart_gpencil_clear_strokes_exec;
 }
 
-/* clear all lineart objects in the scene. */
 void OBJECT_OT_lineart_clear_all(wmOperatorType *ot)
 {
   ot->name = "Clear Baked Line Art (All)";

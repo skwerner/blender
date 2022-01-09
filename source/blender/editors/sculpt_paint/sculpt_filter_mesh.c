@@ -64,7 +64,6 @@
 #include <math.h>
 #include <stdlib.h>
 
-/* Filter orientation utils. */
 void SCULPT_filter_to_orientation_space(float r_v[3], struct FilterCache *filter_cache)
 {
   switch (filter_cache->orientation) {
@@ -511,7 +510,7 @@ static void mesh_filter_init_limit_surface_co(SculptSession *ss)
   FilterCache *filter_cache = ss->filter_cache;
 
   filter_cache->limit_surface_co = MEM_malloc_arrayN(
-      sizeof(float[3]), totvert, "limit surface co");
+      totvert, sizeof(float[3]), "limit surface co");
   for (int i = 0; i < totvert; i++) {
     SCULPT_vertex_limit_surface_get(ss, i, filter_cache->limit_surface_co[i]);
   }
@@ -528,7 +527,7 @@ static void mesh_filter_sharpen_init(SculptSession *ss,
   filter_cache->sharpen_smooth_ratio = smooth_ratio;
   filter_cache->sharpen_intensify_detail_strength = intensify_detail_strength;
   filter_cache->sharpen_curvature_smooth_iterations = curvature_smooth_iterations;
-  filter_cache->sharpen_factor = MEM_malloc_arrayN(sizeof(float), totvert, "sharpen factor");
+  filter_cache->sharpen_factor = MEM_malloc_arrayN(totvert, sizeof(float), "sharpen factor");
   filter_cache->detail_directions = MEM_malloc_arrayN(
       totvert, sizeof(float[3]), "sharpen detail direction");
 
@@ -624,7 +623,7 @@ static int sculpt_mesh_filter_modal(bContext *C, wmOperator *op, const wmEvent *
     return OPERATOR_RUNNING_MODAL;
   }
 
-  const float len = event->prevclickx - event->x;
+  const float len = event->prev_click_xy[0] - event->xy[0];
   filter_strength = filter_strength * -len * 0.001f * UI_DPI_FAC;
 
   SCULPT_vertex_random_access_ensure(ss);

@@ -16,6 +16,8 @@
 
 #pragma once
 
+#include "util/color.h"
+
 #ifdef WITH_NANOVDB
 #  define NANOVDB_USE_INTRINSICS
 #  include <nanovdb/NanoVDB.h>
@@ -80,12 +82,12 @@ template<typename T> struct TextureInterpolator {
 
   static ccl_always_inline float4 read(half4 r)
   {
-    return half4_to_float4(r);
+    return half4_to_float4_image(r);
   }
 
   static ccl_always_inline float4 read(half r)
   {
-    float f = half_to_float(r);
+    float f = half_to_float_image(r);
     return make_float4(f, f, f, 1.0f);
   }
 
@@ -591,7 +593,7 @@ template<typename T> struct NanoVDBInterpolator {
 
 #undef SET_CUBIC_SPLINE_WEIGHTS
 
-ccl_device float4 kernel_tex_image_interp(const KernelGlobals *kg, int id, float x, float y, differential ds, differential dt, uint path_flag)
+ccl_device float4 kernel_tex_image_interp(KernelGlobals kg, int id, float x, float y, differential ds, differential dt, uint path_flag)
 {
   const TextureInfo &info = kernel_tex_fetch(__texture_info, id);
   float4 r = make_float4(TEX_IMAGE_MISSING_R, TEX_IMAGE_MISSING_G, TEX_IMAGE_MISSING_B, TEX_IMAGE_MISSING_A);
@@ -713,7 +715,7 @@ ccl_device float4 kernel_tex_image_interp(const KernelGlobals *kg, int id, float
   return info.compress_as_srgb ? color_srgb_to_linear_v4(r) : r;
 }
 
-ccl_device float4 kernel_tex_image_interp_3d(const KernelGlobals *kg,
+ccl_device float4 kernel_tex_image_interp_3d(KernelGlobals kg,
                                              int id,
                                              float3 P,
                                              InterpolationType interp)

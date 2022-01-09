@@ -25,14 +25,26 @@
 
 #include "node_geometry_util.hh"
 
-namespace blender::nodes {
+namespace blender::nodes::node_geo_mesh_primitive_uv_sphere_cc {
 
-static void geo_node_mesh_primitive_uv_shpere_declare(NodeDeclarationBuilder &b)
+static void node_declare(NodeDeclarationBuilder &b)
 {
-  b.add_input<decl::Int>("Segments").default_value(32).min(3).max(1024);
-  b.add_input<decl::Int>("Rings").default_value(16).min(2).max(1024);
-  b.add_input<decl::Float>("Radius").default_value(1.0f).min(0.0f).subtype(PROP_DISTANCE);
-  b.add_output<decl::Geometry>("Geometry");
+  b.add_input<decl::Int>(N_("Segments"))
+      .default_value(32)
+      .min(3)
+      .max(1024)
+      .description(N_("Horizontal resolution of the sphere"));
+  b.add_input<decl::Int>(N_("Rings"))
+      .default_value(16)
+      .min(2)
+      .max(1024)
+      .description(N_("The number of horizontal rings"));
+  b.add_input<decl::Float>(N_("Radius"))
+      .default_value(1.0f)
+      .min(0.0f)
+      .subtype(PROP_DISTANCE)
+      .description(N_("Distance from the generated points to the origin"));
+  b.add_output<decl::Geometry>(N_("Mesh"));
 }
 
 static int sphere_vert_total(const int segments, const int rings)
@@ -275,12 +287,10 @@ static Mesh *create_uv_sphere_mesh(const float radius, const int segments, const
 
   calculate_sphere_uvs(mesh, segments, rings);
 
-  BLI_assert(BKE_mesh_is_valid(mesh));
-
   return mesh;
 }
 
-static void geo_node_mesh_primitive_uv_sphere_exec(GeoNodeExecParams params)
+static void node_geo_exec(GeoNodeExecParams params)
 {
   const int segments_num = params.extract_input<int>("Segments");
   const int rings_num = params.extract_input<int>("Rings");
@@ -291,25 +301,26 @@ static void geo_node_mesh_primitive_uv_sphere_exec(GeoNodeExecParams params)
     if (rings_num < 3) {
       params.error_message_add(NodeWarningType::Info, TIP_("Rings must be at least 3"));
     }
-    params.set_output("Geometry", GeometrySet());
+    params.set_default_remaining_outputs();
     return;
   }
 
   const float radius = params.extract_input<float>("Radius");
 
   Mesh *mesh = create_uv_sphere_mesh(radius, segments_num, rings_num);
-  params.set_output("Geometry", GeometrySet::create_with_mesh(mesh));
+  params.set_output("Mesh", GeometrySet::create_with_mesh(mesh));
 }
 
-}  // namespace blender::nodes
+}  // namespace blender::nodes::node_geo_mesh_primitive_uv_sphere_cc
 
 void register_node_type_geo_mesh_primitive_uv_sphere()
 {
+  namespace file_ns = blender::nodes::node_geo_mesh_primitive_uv_sphere_cc;
+
   static bNodeType ntype;
 
-  geo_node_type_base(
-      &ntype, GEO_NODE_MESH_PRIMITIVE_UV_SPHERE, "UV Sphere", NODE_CLASS_GEOMETRY, 0);
-  ntype.declare = blender::nodes::geo_node_mesh_primitive_uv_shpere_declare;
-  ntype.geometry_node_execute = blender::nodes::geo_node_mesh_primitive_uv_sphere_exec;
+  geo_node_type_base(&ntype, GEO_NODE_MESH_PRIMITIVE_UV_SPHERE, "UV Sphere", NODE_CLASS_GEOMETRY);
+  ntype.declare = file_ns::node_declare;
+  ntype.geometry_node_execute = file_ns::node_geo_exec;
   nodeRegisterType(&ntype);
 }

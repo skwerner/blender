@@ -100,6 +100,7 @@ LANGUAGES = (
     (45, "Abkhaz (Аԥсуа бызшәа)", "ab"),
     (46, "Thai (ภาษาไทย)", "th_TH"),
     (47, "Slovak (Slovenčina)", "sk_SK"),
+    (48, "Georgian (ქართული)", "ka"),
 )
 
 # Default context, in py (keep in sync with `BLT_translation.h`)!
@@ -195,7 +196,7 @@ DOMAIN = "blender"
 
 # Our own "gettext" stuff.
 # File type (ext) to parse.
-PYGETTEXT_ALLOWED_EXTS = {".c", ".cpp", ".cxx", ".hpp", ".hxx", ".h"}
+PYGETTEXT_ALLOWED_EXTS = {".c", ".cc", ".cpp", ".cxx", ".hh", ".hpp", ".hxx", ".h"}
 
 # Max number of contexts into a BLT_I18N_MSGID_MULTI_CTXT macro...
 PYGETTEXT_MAX_MULTI_CTXT = 16
@@ -264,7 +265,7 @@ PYGETTEXT_KEYWORDS = (() +
           for it in ("BMO_error_raise",)) +
 
     tuple(("{}\\((?:[^\"',]+,)\\s*" + _msg_re + r"\s*(?:\)|,)").format(it)
-          for it in ("modifier_setError",)) +
+          for it in ("BKE_modifier_set_error",)) +
 
     tuple((r"{}\(\s*" + _msg_re + r"\s*,\s*(?:" +
            r"\s*,\s*)?(?:".join(_ctxt_re_gen(i) for i in range(PYGETTEXT_MAX_MULTI_CTXT)) + r")?\s*\)").format(it)
@@ -400,6 +401,8 @@ WARN_MSGID_NOT_CAPITALIZED_ALLOWED = {
     "verts only",
     "view",
     "virtual parents",
+    "and NVIDIA driver version 470 or newer",
+    "and AMD driver version ??? or newer",
 }
 WARN_MSGID_NOT_CAPITALIZED_ALLOWED |= set(lng[2] for lng in LANGUAGES)
 

@@ -62,14 +62,34 @@ GPUShader *GPU_shader_create_ex(const char *vertcode,
                                 const char *computecode,
                                 const char *libcode,
                                 const char *defines,
-                                const eGPUShaderTFBType tf_type,
+                                eGPUShaderTFBType tf_type,
                                 const char **tf_names,
-                                const int tf_count,
+                                int tf_count,
                                 const char *shname);
 
 struct GPU_ShaderCreateFromArray_Params {
   const char **vert, **geom, **frag, **defs;
 };
+/**
+ * Use via #GPU_shader_create_from_arrays macro (avoids passing in param).
+ *
+ * Similar to #DRW_shader_create_with_lib with the ability to include libs for each type of shader.
+ *
+ * It has the advantage that each item can be conditionally included
+ * without having to build the string inline, then free it.
+ *
+ * \param params: NULL terminated arrays of strings.
+ *
+ * Example:
+ * \code{.c}
+ * sh = GPU_shader_create_from_arrays({
+ *     .vert = (const char *[]){shader_lib_glsl, shader_vert_glsl, NULL},
+ *     .geom = (const char *[]){shader_geom_glsl, NULL},
+ *     .frag = (const char *[]){shader_frag_glsl, NULL},
+ *     .defs = (const char *[]){"#define DEFINE\n", test ? "#define OTHER_DEFINE\n" : "", NULL},
+ * });
+ * \endcode
+ */
 struct GPUShader *GPU_shader_create_from_arrays_impl(
     const struct GPU_ShaderCreateFromArray_Params *params, const char *func, int line);
 
@@ -88,10 +108,13 @@ void GPU_shader_unbind(void);
 
 const char *GPU_shader_get_name(GPUShader *shader);
 
-/* Returns true if transform feedback was successfully enabled. */
+/**
+ * Returns true if transform feedback was successfully enabled.
+ */
 bool GPU_shader_transform_feedback_enable(GPUShader *shader, struct GPUVertBuf *vertbuf);
 void GPU_shader_transform_feedback_disable(GPUShader *shader);
 
+/** DEPRECATED: Kept only because of BGL API. */
 int GPU_shader_get_program(GPUShader *shader);
 
 typedef enum {
@@ -134,6 +157,7 @@ void GPU_shader_set_srgb_uniform(GPUShader *shader);
 int GPU_shader_get_uniform(GPUShader *shader, const char *name);
 int GPU_shader_get_builtin_uniform(GPUShader *shader, int builtin);
 int GPU_shader_get_builtin_block(GPUShader *shader, int builtin);
+/** DEPRECATED: Kept only because of Python GPU API. */
 int GPU_shader_get_uniform_block(GPUShader *shader, const char *name);
 int GPU_shader_get_ssbo(GPUShader *shader, const char *name);
 
@@ -169,7 +193,7 @@ void GPU_shader_set_framebuffer_srgb_target(int use_srgb_to_linear);
 typedef enum eGPUBuiltinShader {
   /* specialized drawing */
   GPU_SHADER_TEXT,
-  GPU_SHADER_KEYFRAME_DIAMOND,
+  GPU_SHADER_KEYFRAME_SHAPE,
   GPU_SHADER_SIMPLE_LIGHTING,
   /* for simple 2D drawing */
   /**
@@ -259,6 +283,15 @@ typedef enum eGPUBuiltinShader {
   GPU_SHADER_2D_IMAGE_OVERLAYS_MERGE,
   GPU_SHADER_2D_IMAGE_OVERLAYS_STEREO_MERGE,
   GPU_SHADER_2D_IMAGE_SHUFFLE_COLOR,
+  /**
+   * Draw texture with alpha. Take a 3D position and a 2D texture coordinate for each vertex.
+   *
+   * \param alpha: uniform float
+   * \param image: uniform sampler2D
+   * \param texCoord: in vec2
+   * \param pos: in vec3
+   */
+  GPU_SHADER_3D_IMAGE_MODULATE_ALPHA,
   /* points */
   /**
    * Draw round points with a hardcoded size.
@@ -422,6 +455,19 @@ void GPU_shader_free_builtin_shaders(void);
 
 /* Determined by the maximum uniform buffer size divided by chunk size. */
 #define GPU_MAX_UNIFORM_ATTR 8
+
+typedef enum eGPUKeyframeShapes {
+  GPU_KEYFRAME_SHAPE_DIAMOND = (1 << 0),
+  GPU_KEYFRAME_SHAPE_CIRCLE = (1 << 1),
+  GPU_KEYFRAME_SHAPE_CLIPPED_VERTICAL = (1 << 2),
+  GPU_KEYFRAME_SHAPE_CLIPPED_HORIZONTAL = (1 << 3),
+  GPU_KEYFRAME_SHAPE_INNER_DOT = (1 << 4),
+  GPU_KEYFRAME_SHAPE_ARROW_END_MAX = (1 << 8),
+  GPU_KEYFRAME_SHAPE_ARROW_END_MIN = (1 << 9),
+  GPU_KEYFRAME_SHAPE_ARROW_END_MIXED = (1 << 10),
+} eGPUKeyframeShapes;
+#define GPU_KEYFRAME_SHAPE_SQUARE \
+  (GPU_KEYFRAME_SHAPE_CLIPPED_VERTICAL | GPU_KEYFRAME_SHAPE_CLIPPED_HORIZONTAL)
 
 #ifdef __cplusplus
 }

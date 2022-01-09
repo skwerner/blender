@@ -280,7 +280,7 @@ class AddPresetRender(AddPresetBase, Operator):
     """Add or remove a Render Preset"""
     bl_idname = "render.preset_add"
     bl_label = "Add Render Preset"
-    preset_menu = "RENDER_PT_presets"
+    preset_menu = "RENDER_PT_format_presets"
 
     preset_defines = [
         "scene = bpy.context.scene"
@@ -649,7 +649,7 @@ class AddPresetGpencilBrush(AddPresetBase, Operator):
         "settings.uv_random",
         "settings.pen_jitter",
         "settings.use_jitter_pressure",
-        "settings.trim",
+        "settings.use_trim",
     ]
 
     preset_subdir = "gpencil_brush"

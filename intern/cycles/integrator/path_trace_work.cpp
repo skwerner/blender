@@ -16,15 +16,15 @@
 
 #include "device/device.h"
 
+#include "integrator/path_trace_display.h"
 #include "integrator/path_trace_work.h"
 #include "integrator/path_trace_work_cpu.h"
 #include "integrator/path_trace_work_gpu.h"
-#include "render/buffers.h"
-#include "render/film.h"
-#include "render/gpu_display.h"
-#include "render/scene.h"
+#include "scene/film.h"
+#include "scene/scene.h"
+#include "session/buffers.h"
 
-#include "kernel/kernel_types.h"
+#include "kernel/types.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -134,7 +134,8 @@ void PathTraceWork::copy_from_denoised_render_buffers(const RenderBuffers *rende
 bool PathTraceWork::get_render_tile_pixels(const PassAccessor &pass_accessor,
                                            const PassAccessor::Destination &destination)
 {
-  const int offset_y = effective_buffer_params_.full_y - effective_big_tile_params_.full_y;
+  const int offset_y = (effective_buffer_params_.full_y + effective_buffer_params_.window_y) -
+                       (effective_big_tile_params_.full_y + effective_big_tile_params_.window_y);
   const int width = effective_buffer_params_.width;
 
   PassAccessor::Destination slice_destination = destination;
@@ -182,17 +183,21 @@ PassAccessor::PassAccessInfo PathTraceWork::get_display_pass_access_info(PassMod
   pass_access_info.use_approximate_shadow_catcher_background =
       kfilm.use_approximate_shadow_catcher && !kbackground.transparent;
 
+  pass_access_info.show_active_pixels = film_->get_show_active_pixels();
+
   return pass_access_info;
 }
 
-PassAccessor::Destination PathTraceWork::get_gpu_display_destination_template(
-    const GPUDisplay *gpu_display) const
+PassAccessor::Destination PathTraceWork::get_display_destination_template(
+    const PathTraceDisplay *display) const
 {
   PassAccessor::Destination destination(film_->get_display_pass());
 
-  const int2 display_texture_size = gpu_display->get_texture_size();
-  const int texture_x = effective_buffer_params_.full_x - effective_full_params_.full_x;
-  const int texture_y = effective_buffer_params_.full_y - effective_full_params_.full_y;
+  const int2 display_texture_size = display->get_texture_size();
+  const int texture_x = effective_buffer_params_.full_x - effective_big_tile_params_.full_x +
+                        effective_buffer_params_.window_x - effective_big_tile_params_.window_x;
+  const int texture_y = effective_buffer_params_.full_y - effective_big_tile_params_.full_y +
+                        effective_buffer_params_.window_y - effective_big_tile_params_.window_y;
 
   destination.offset = texture_y * display_texture_size.x + texture_x;
   destination.stride = display_texture_size.x;

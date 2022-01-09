@@ -180,6 +180,15 @@ static PyObject *id_free_weakref_cb(PyObject *weakinfo_pair, PyObject *weakref);
 static PyMethodDef id_free_weakref_cb_def = {
     "id_free_weakref_cb", (PyCFunction)id_free_weakref_cb, METH_O, NULL};
 
+/**
+ * Only used when there are values left on exit (causing memory leaks).
+ */
+static void id_weakref_pool_free_value_fn(void *p)
+{
+  GHash *weakinfo_hash = p;
+  BLI_ghash_free(weakinfo_hash, NULL, NULL);
+}
+
 /* Adds a reference to the list, remember to decref. */
 static GHash *id_weakref_pool_get(ID *id)
 {
@@ -1453,10 +1462,6 @@ PyObject *pyrna_prop_to_py(PointerRNA *ptr, PropertyRNA *prop)
   return ret;
 }
 
-/**
- * This function is used by operators and converting dicts into collections.
- * It takes keyword args and fills them with property values.
- */
 int pyrna_pydict_to_props(PointerRNA *ptr,
                           PyObject *kw,
                           const bool all_args,
@@ -5486,7 +5491,7 @@ static PyObject *pyprop_array_foreach_getset(BPy_PropertyArrayRNA *self,
   }
   else {
     const char f = buf.format ? buf.format[0] : 0;
-    if ((prop_type == PROP_INT && (buf.itemsize != sizeof(int) || (f != 'l' && f != 'i'))) ||
+    if ((prop_type == PROP_INT && (buf.itemsize != sizeof(int) || (!ELEM(f, 'l', 'i')))) ||
         (prop_type == PROP_FLOAT && (buf.itemsize != sizeof(float) || f != 'f'))) {
       PyBuffer_Release(&buf);
       PyErr_Format(PyExc_TypeError, "incorrect sequence item type: %s", buf.format);
@@ -7238,7 +7243,7 @@ static PyObject *pyrna_srna_ExternalType(StructRNA *srna)
   /* Sanity check, could skip this unless in debug mode. */
   if (newclass) {
     PyObject *base_compare = pyrna_srna_PyBase(srna);
-    /* Can't do this because it gets superclasses values! */
+    /* Can't do this because it gets super-classes values! */
     // PyObject *slots = PyObject_GetAttrString(newclass, "__slots__");
     /* Can do this, but faster not to. */
     // PyObject *bases = PyObject_GetAttrString(newclass, "__bases__");
@@ -7536,7 +7541,6 @@ PyObject *pyrna_prop_CreatePyObject(PointerRNA *ptr, PropertyRNA *prop)
   return (PyObject *)pyrna;
 }
 
-/* Utility func to be used by external modules, sneaky! */
 PyObject *pyrna_id_CreatePyObject(ID *id)
 {
   if (id) {
@@ -7633,7 +7637,7 @@ void BPY_rna_exit(void)
       printf("ID: %s\n", id->name);
     }
   }
-  BLI_ghash_free(id_weakref_pool, NULL, NULL);
+  BLI_ghash_free(id_weakref_pool, NULL, id_weakref_pool_free_value_fn);
   id_weakref_pool = NULL;
 #endif
 }
@@ -7684,7 +7688,7 @@ PyObject *BPY_rna_doc(void)
 
 /**
  * This could be a static variable as we only have one `bpy.types` module,
- * it just keeps the data isolated to store in the module it's self.
+ * it just keeps the data isolated to store in the module itself.
  *
  * This data doesn't change one initialized.
  */
@@ -7768,9 +7772,6 @@ static struct PyModuleDef bpy_types_module_def = {
     NULL,                                 /* m_free */
 };
 
-/**
- * Accessed from Python as 'bpy.types'
- */
 PyObject *BPY_rna_types(void)
 {
   PyObject *submodule = PyModule_Create(&bpy_types_module_def);
@@ -7855,11 +7856,6 @@ StructRNA *pyrna_struct_as_srna(PyObject *self, const bool parent, const char *e
 }
 
 /* Orphan functions, not sure where they should go. */
-/**
- * Get the SRNA for methods attached to types.
- *
- * Caller needs to raise error.
- */
 StructRNA *srna_from_self(PyObject *self, const char *error_prefix)
 {
 
@@ -8777,7 +8773,7 @@ void pyrna_free_types(void)
  * - Should still be fixed - Campbell
  */
 PyDoc_STRVAR(pyrna_register_class_doc,
-             ".. method:: register_class(cls)\n"
+             ".. function:: register_class(cls)\n"
              "\n"
              "   Register a subclass of a Blender type class.\n"
              "\n"
@@ -8962,7 +8958,7 @@ static int pyrna_srna_contains_pointer_prop_srna(StructRNA *srna_props,
 }
 
 PyDoc_STRVAR(pyrna_unregister_class_doc,
-             ".. method:: unregister_class(cls)\n"
+             ".. function:: unregister_class(cls)\n"
              "\n"
              "   Unload the Python class from blender.\n"
              "\n"
@@ -9085,9 +9081,6 @@ static PyObject *pyrna_unregister_class(PyObject *UNUSED(self), PyObject *py_cla
   Py_RETURN_NONE;
 }
 
-/**
- * Extend RNA types with C/API methods, properties.
- */
 void pyrna_struct_type_extend_capi(struct StructRNA *srna,
                                    struct PyMethodDef *method,
                                    struct PyGetSetDef *getset)

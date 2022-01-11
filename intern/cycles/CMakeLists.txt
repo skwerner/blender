@@ -249,6 +249,10 @@ if(WITH_CYCLES_OSL)
   )
 endif()
 
+if(WITH_CYCLES_OIIO)
+  add_definitions(-DWITH_OIIO)
+endif()
+
 if(WITH_CYCLES_DEVICE_OPTIX)
   find_package(OptiX 7.3.0)
 

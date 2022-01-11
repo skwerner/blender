@@ -51,6 +51,7 @@ set(SRC
   nodes/node_composite_color_spill.cc
   nodes/node_composite_colorbalance.cc
   nodes/node_composite_colorcorrection.cc
+  nodes/node_composite_convert_color_space.cc
   nodes/node_composite_common.cc
   nodes/node_composite_composite.cc
   nodes/node_composite_cornerpin.cc
@@ -148,3 +149,8 @@ if(WITH_OPENIMAGEDENOISE)
 endif()
 
 blender_add_lib(bf_nodes_composite "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")
+
+if(WITH_UNITY_BUILD)
+  set_target_properties(bf_nodes_composite PROPERTIES UNITY_BUILD ON)
+  set_target_properties(bf_nodes_composite PROPERTIES UNITY_BUILD_BATCH_SIZE 10)
+endif()

@@ -789,7 +789,8 @@ void ShaderManager::texture_system_init()
 void ShaderManager::texture_system_free()
 {
   VLOG(1) << ts->getstats(2);
-  ts->reset_stats();
+  /* This crashes. Why? */
+  /* ts->reset_stats(); */
   ts->invalidate_all(true);
   TextureSystem::destroy(ts);
   ts = NULL;

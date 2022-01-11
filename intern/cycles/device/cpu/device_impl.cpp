@@ -78,6 +78,9 @@ CPUDevice::CPUDevice(const DeviceInfo &info_, Stats &stats_, Profiler &profiler_
 #ifdef WITH_OSL
   kernel_globals.osl = &osl_globals;
 #endif
+#ifdef WITH_OIIO
+  kernel_globals.oiio = &oiio_globals;
+#endif
 #ifdef WITH_EMBREE
   embree_device = rtcNewDevice("verbose=0");
 #endif
@@ -317,7 +320,11 @@ void *CPUDevice::get_cpu_osl_memory()
 
 void *CPUDevice::get_cpu_oiio_memory()
 {
+#ifdef WITH_OIIO
   return &oiio_globals;
+#else
+  return NULL;
+#endif
 }
 
 bool CPUDevice::load_kernels(const uint /*kernel_features*/)

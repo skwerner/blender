@@ -31,6 +31,12 @@ struct OIIOTexture {
 };
 
 struct OIIOGlobals {
+  OIIOGlobals()
+  {
+    tex_sys = NULL;
+    diffuse_blur = 0.0f;
+    glossy_blur = 0.0f;
+  }
   OIIO::TextureSystem *tex_sys;
   float diffuse_blur;
   float glossy_blur;

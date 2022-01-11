@@ -50,7 +50,9 @@ class CPUDevice : public Device {
   device_vector<TextureInfo> texture_info;
   bool need_texture_info;
 
+#ifdef WITH_OIIO
   OIIOGlobals oiio_globals;
+#endif
 #ifdef WITH_OSL
   OSLGlobals osl_globals;
 #endif

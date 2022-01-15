@@ -735,27 +735,20 @@ static bool image_parse_filepaths(PyObject *pyfilepaths, vector<string> &filepat
 
 static PyObject *denoise_func(PyObject * /*self*/, PyObject *args, PyObject *keywords)
 {
-#if 1
-  (void)args;
-  (void)keywords;
-#else
   static const char *keyword_list[] = {
-      "preferences", "scene", "view_layer", "input", "output", "tile_size", "samples", NULL};
+      "preferences", "scene", "view_layer", "input", "output", NULL};
   PyObject *pypreferences, *pyscene, *pyviewlayer;
   PyObject *pyinput, *pyoutput = NULL;
-  int tile_size = 0, samples = 0;
 
   if (!PyArg_ParseTupleAndKeywords(args,
                                    keywords,
-                                   "OOOO|Oii",
+                                   "OOOO|O",
                                    (char **)keyword_list,
                                    &pypreferences,
                                    &pyscene,
                                    &pyviewlayer,
                                    &pyinput,
-                                   &pyoutput,
-                                   &tile_size,
-                                   &samples)) {
+                                   &pyoutput)) {
     return NULL;
   }
 
@@ -777,14 +770,10 @@ static PyObject *denoise_func(PyObject * /*self*/, PyObject *args, PyObject *key
                      &RNA_ViewLayer,
                      PyLong_AsVoidPtr(pyviewlayer),
                      &viewlayerptr);
-  PointerRNA cviewlayer = RNA_pointer_get(&viewlayerptr, "cycles");
+  BL::ViewLayer b_view_layer(viewlayerptr);
 
-  DenoiseParams params;
-  params.radius = get_int(cviewlayer, "denoising_radius");
-  params.strength = get_float(cviewlayer, "denoising_strength");
-  params.feature_strength = get_float(cviewlayer, "denoising_feature_strength");
-  params.relative_pca = get_boolean(cviewlayer, "denoising_relative_pca");
-  params.neighbor_frames = get_int(cviewlayer, "denoising_neighbor_frames");
+  DenoiseParams params = BlenderSync::get_denoise_params(b_scene, b_view_layer, true);
+  params.use = true;
 
   /* Parse file paths list. */
   vector<string> input, output;
@@ -812,24 +801,15 @@ static PyObject *denoise_func(PyObject * /*self*/, PyObject *args, PyObject *key
   }
 
   /* Create denoiser. */
-  DenoiserPipeline denoiser(device);
-  denoiser.params = params;
+  DenoiserPipeline denoiser(device, params);
   denoiser.input = input;
   denoiser.output = output;
-
-  if (tile_size > 0) {
-    denoiser.tile_size = make_int2(tile_size, tile_size);
-  }
-  if (samples > 0) {
-    denoiser.samples_override = samples;
-  }
 
   /* Run denoiser. */
   if (!denoiser.run()) {
     PyErr_SetString(PyExc_ValueError, denoiser.error.c_str());
     return NULL;
   }
-#endif
 
   Py_RETURN_NONE;
 }
@@ -906,16 +886,18 @@ static PyObject *enable_print_stats_func(PyObject * /*self*/, PyObject * /*args*
 static PyObject *get_device_types_func(PyObject * /*self*/, PyObject * /*args*/)
 {
   vector<DeviceType> device_types = Device::available_types();
-  bool has_cuda = false, has_optix = false, has_hip = false;
+  bool has_cuda = false, has_optix = false, has_hip = false, has_metal = false;
   foreach (DeviceType device_type, device_types) {
     has_cuda |= (device_type == DEVICE_CUDA);
     has_optix |= (device_type == DEVICE_OPTIX);
     has_hip |= (device_type == DEVICE_HIP);
+    has_metal |= (device_type == DEVICE_METAL);
   }
-  PyObject *list = PyTuple_New(3);
+  PyObject *list = PyTuple_New(4);
   PyTuple_SET_ITEM(list, 0, PyBool_FromLong(has_cuda));
   PyTuple_SET_ITEM(list, 1, PyBool_FromLong(has_optix));
   PyTuple_SET_ITEM(list, 2, PyBool_FromLong(has_hip));
+  PyTuple_SET_ITEM(list, 3, PyBool_FromLong(has_metal));
   return list;
 }
 
@@ -943,6 +925,9 @@ static PyObject *set_device_override_func(PyObject * /*self*/, PyObject *arg)
   }
   else if (override == "HIP") {
     BlenderSession::device_override = DEVICE_MASK_HIP;
+  }
+  else if (override == "METAL") {
+    BlenderSession::device_override = DEVICE_MASK_METAL;
   }
   else {
     printf("\nError: %s is not a valid Cycles device.\n", override.c_str());

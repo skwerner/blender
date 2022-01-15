@@ -287,8 +287,6 @@ static Mesh *create_uv_sphere_mesh(const float radius, const int segments, const
 
   calculate_sphere_uvs(mesh, segments, rings);
 
-  BLI_assert(BKE_mesh_is_valid(mesh));
-
   return mesh;
 }
 
@@ -321,8 +319,7 @@ void register_node_type_geo_mesh_primitive_uv_sphere()
 
   static bNodeType ntype;
 
-  geo_node_type_base(
-      &ntype, GEO_NODE_MESH_PRIMITIVE_UV_SPHERE, "UV Sphere", NODE_CLASS_GEOMETRY, 0);
+  geo_node_type_base(&ntype, GEO_NODE_MESH_PRIMITIVE_UV_SPHERE, "UV Sphere", NODE_CLASS_GEOMETRY);
   ntype.declare = file_ns::node_declare;
   ntype.geometry_node_execute = file_ns::node_geo_exec;
   nodeRegisterType(&ntype);

@@ -150,7 +150,7 @@ static void node_geo_exec(GeoNodeExecParams params)
 
   /* TODO: This is not necessary-- the input geometry set can be read only,
    * but it must be rewritten to handle instance groups. */
-  geometry_set = geometry_set_realize_instances(geometry_set);
+  geometry_set = geometry::realize_instances_legacy(geometry_set);
 
   if (params.lazy_output_is_required("Geometry 1")) {
     params.set_output("Geometry 1",
@@ -171,7 +171,7 @@ void register_node_type_geo_point_separate()
   static bNodeType ntype;
 
   geo_node_type_base(
-      &ntype, GEO_NODE_LEGACY_POINT_SEPARATE, "Point Separate", NODE_CLASS_GEOMETRY, 0);
+      &ntype, GEO_NODE_LEGACY_POINT_SEPARATE, "Point Separate", NODE_CLASS_GEOMETRY);
   ntype.declare = file_ns::node_declare;
   ntype.geometry_node_execute = file_ns::node_geo_exec;
   ntype.geometry_node_execute_supports_laziness = true;

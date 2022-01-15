@@ -36,16 +36,14 @@ static void set_cyclic_in_component(GeometryComponent &component,
     return;
   }
 
-  fn::FieldEvaluator selection_evaluator{field_context, domain_size};
-  selection_evaluator.add(selection_field);
-  selection_evaluator.evaluate();
-  const IndexMask selection = selection_evaluator.get_evaluated_as_mask(0);
-
   OutputAttribute_Typed<bool> cyclics = component.attribute_try_get_for_output_only<bool>(
       "cyclic", ATTR_DOMAIN_CURVE);
-  fn::FieldEvaluator cyclic_evaluator{field_context, &selection};
-  cyclic_evaluator.add_with_destination(cyclic_field, cyclics.varray());
-  cyclic_evaluator.evaluate();
+
+  fn::FieldEvaluator evaluator{field_context, domain_size};
+  evaluator.set_selection(selection_field);
+  evaluator.add_with_destination(cyclic_field, cyclics.varray());
+  evaluator.evaluate();
+
   cyclics.save();
 }
 
@@ -73,8 +71,7 @@ void register_node_type_geo_set_spline_cyclic()
 
   static bNodeType ntype;
 
-  geo_node_type_base(
-      &ntype, GEO_NODE_SET_SPLINE_CYCLIC, "Set Spline Cyclic", NODE_CLASS_GEOMETRY, 0);
+  geo_node_type_base(&ntype, GEO_NODE_SET_SPLINE_CYCLIC, "Set Spline Cyclic", NODE_CLASS_GEOMETRY);
   ntype.geometry_node_execute = file_ns::node_geo_exec;
   ntype.declare = file_ns::node_declare;
   nodeRegisterType(&ntype);

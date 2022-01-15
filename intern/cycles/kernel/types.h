@@ -86,6 +86,7 @@ CCL_NAMESPACE_BEGIN
 #define __AO__
 #define __PASSES__
 #define __HAIR__
+#define __POINTCLOUD__
 #define __SVM__
 #define __EMISSION__
 #define __HOLDOUT__
@@ -124,6 +125,9 @@ CCL_NAMESPACE_BEGIN
 #  endif
 #  if !(__KERNEL_FEATURES & KERNEL_FEATURE_HAIR)
 #    undef __HAIR__
+#  endif
+#  if !(__KERNEL_FEATURES & KERNEL_FEATURE_POINTCLOUD)
+#    undef __POINTCLOUD__
 #  endif
 #  if !(__KERNEL_FEATURES & KERNEL_FEATURE_VOLUME)
 #    undef __VOLUME__
@@ -198,7 +202,7 @@ enum SamplingPattern {
 
 /* These flags values correspond to `raytypes` in `osl.cpp`, so keep them in sync! */
 
-enum PathRayFlag {
+enum PathRayFlag : uint32_t {
   /* --------------------------------------------------------------------
    * Ray visibility.
    *
@@ -384,6 +388,7 @@ typedef enum PassType {
   PASS_DENOISING_NORMAL,
   PASS_DENOISING_ALBEDO,
   PASS_DENOISING_DEPTH,
+  PASS_DENOISING_PREVIOUS,
 
   /* PASS_SHADOW_CATCHER accumulates contribution of shadow catcher object which is not affected by
    * any other object. The pass accessor will divide the combined pass by the shadow catcher. The
@@ -478,6 +483,7 @@ enum PanoramaType {
   PANORAMA_FISHEYE_EQUIDISTANT = 1,
   PANORAMA_FISHEYE_EQUISOLID = 2,
   PANORAMA_MIRRORBALL = 3,
+  PANORAMA_FISHEYE_LENS_POLYNOMIAL = 4,
 
   PANORAMA_NUM_TYPES,
 };
@@ -532,28 +538,34 @@ typedef struct Intersection {
 typedef enum PrimitiveType {
   PRIMITIVE_NONE = 0,
   PRIMITIVE_TRIANGLE = (1 << 0),
-  PRIMITIVE_MOTION_TRIANGLE = (1 << 1),
-  PRIMITIVE_CURVE_THICK = (1 << 2),
-  PRIMITIVE_MOTION_CURVE_THICK = (1 << 3),
-  PRIMITIVE_CURVE_RIBBON = (1 << 4),
-  PRIMITIVE_MOTION_CURVE_RIBBON = (1 << 5),
-  PRIMITIVE_VOLUME = (1 << 6),
-  PRIMITIVE_LAMP = (1 << 7),
+  PRIMITIVE_CURVE_THICK = (1 << 1),
+  PRIMITIVE_CURVE_RIBBON = (1 << 2),
+  PRIMITIVE_POINT = (1 << 3),
+  PRIMITIVE_VOLUME = (1 << 4),
+  PRIMITIVE_LAMP = (1 << 5),
 
-  PRIMITIVE_ALL_TRIANGLE = (PRIMITIVE_TRIANGLE | PRIMITIVE_MOTION_TRIANGLE),
-  PRIMITIVE_ALL_CURVE = (PRIMITIVE_CURVE_THICK | PRIMITIVE_MOTION_CURVE_THICK |
-                         PRIMITIVE_CURVE_RIBBON | PRIMITIVE_MOTION_CURVE_RIBBON),
-  PRIMITIVE_ALL_VOLUME = (PRIMITIVE_VOLUME),
-  PRIMITIVE_ALL_MOTION = (PRIMITIVE_MOTION_TRIANGLE | PRIMITIVE_MOTION_CURVE_THICK |
-                          PRIMITIVE_MOTION_CURVE_RIBBON),
-  PRIMITIVE_ALL = (PRIMITIVE_ALL_TRIANGLE | PRIMITIVE_ALL_CURVE | PRIMITIVE_ALL_VOLUME |
-                   PRIMITIVE_LAMP),
+  PRIMITIVE_MOTION = (1 << 6),
+  PRIMITIVE_MOTION_TRIANGLE = (PRIMITIVE_TRIANGLE | PRIMITIVE_MOTION),
+  PRIMITIVE_MOTION_CURVE_THICK = (PRIMITIVE_CURVE_THICK | PRIMITIVE_MOTION),
+  PRIMITIVE_MOTION_CURVE_RIBBON = (PRIMITIVE_CURVE_RIBBON | PRIMITIVE_MOTION),
+  PRIMITIVE_MOTION_POINT = (PRIMITIVE_POINT | PRIMITIVE_MOTION),
 
-  PRIMITIVE_NUM = 8,
+  PRIMITIVE_CURVE = (PRIMITIVE_CURVE_THICK | PRIMITIVE_CURVE_RIBBON),
+
+  PRIMITIVE_ALL = (PRIMITIVE_TRIANGLE | PRIMITIVE_CURVE | PRIMITIVE_POINT | PRIMITIVE_VOLUME |
+                   PRIMITIVE_LAMP | PRIMITIVE_MOTION),
+
+  PRIMITIVE_NUM_SHAPES = 6,
+  PRIMITIVE_NUM_BITS = PRIMITIVE_NUM_SHAPES + 1, /* All shapes + motion bit. */
+  PRIMITIVE_NUM = PRIMITIVE_NUM_SHAPES * 2,      /* With and without motion. */
 } PrimitiveType;
 
-#define PRIMITIVE_PACK_SEGMENT(type, segment) ((segment << PRIMITIVE_NUM) | (type))
-#define PRIMITIVE_UNPACK_SEGMENT(type) (type >> PRIMITIVE_NUM)
+/* Convert type to index in range 0..PRIMITIVE_NUM-1. */
+#define PRIMITIVE_INDEX(type) (bitscan((uint32_t)(type)) * 2 + (((type)&PRIMITIVE_MOTION) ? 1 : 0))
+
+/* Pack segment into type value to save space. */
+#define PRIMITIVE_PACK_SEGMENT(type, segment) ((segment << PRIMITIVE_NUM_BITS) | (type))
+#define PRIMITIVE_UNPACK_SEGMENT(type) (type >> PRIMITIVE_NUM_BITS)
 
 typedef enum CurveShapeType {
   CURVE_RIBBON = 0,
@@ -604,6 +616,7 @@ typedef enum AttributeStandard {
   ATTR_STD_CURVE_INTERCEPT,
   ATTR_STD_CURVE_LENGTH,
   ATTR_STD_CURVE_RANDOM,
+  ATTR_STD_POINT_RANDOM,
   ATTR_STD_PTEX_FACE_ID,
   ATTR_STD_PTEX_UV,
   ATTR_STD_VOLUME_DENSITY,
@@ -922,6 +935,8 @@ typedef struct KernelCamera {
   float fisheye_fov;
   float fisheye_lens;
   float4 equirectangular_range;
+  float fisheye_lens_polynomial_bias;
+  float4 fisheye_lens_polynomial_coefficients;
 
   /* stereo */
   float interocular_offset;
@@ -1221,7 +1236,8 @@ typedef enum KernelBVHLayout {
   BVH_LAYOUT_MULTI_OPTIX = (1 << 3),
   BVH_LAYOUT_MULTI_OPTIX_EMBREE = (1 << 4),
   BVH_LAYOUT_METAL = (1 << 5),
-  BVH_LAYOUT_MULTI_METAL_EMBREE = (1 << 6),
+  BVH_LAYOUT_MULTI_METAL = (1 << 6),
+  BVH_LAYOUT_MULTI_METAL_EMBREE = (1 << 7),
 
   /* Default BVH layout to use for CPU. */
   BVH_LAYOUT_AUTO = BVH_LAYOUT_EMBREE,
@@ -1544,7 +1560,7 @@ enum {
 
 /* Kernel Features */
 
-enum KernelFeatureFlag : unsigned int {
+enum KernelFeatureFlag : uint32_t {
   /* Shader nodes. */
   KERNEL_FEATURE_NODE_BSDF = (1U << 0U),
   KERNEL_FEATURE_NODE_EMISSION = (1U << 1U),
@@ -1600,6 +1616,9 @@ enum KernelFeatureFlag : unsigned int {
   KERNEL_FEATURE_AO_PASS = (1U << 25U),
   KERNEL_FEATURE_AO_ADDITIVE = (1U << 26U),
   KERNEL_FEATURE_AO = (KERNEL_FEATURE_AO_PASS | KERNEL_FEATURE_AO_ADDITIVE),
+
+  /* Point clouds. */
+  KERNEL_FEATURE_POINTCLOUD = (1U << 27U),
 };
 
 /* Shader node feature mask, to specialize shader evaluation for kernels. */

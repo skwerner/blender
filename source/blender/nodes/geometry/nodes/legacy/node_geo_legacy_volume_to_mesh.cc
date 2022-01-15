@@ -57,8 +57,7 @@ static void node_layout(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
 
 static void node_init(bNodeTree *UNUSED(ntree), bNode *node)
 {
-  NodeGeometryVolumeToMesh *data = (NodeGeometryVolumeToMesh *)MEM_callocN(
-      sizeof(NodeGeometryVolumeToMesh), __func__);
+  NodeGeometryVolumeToMesh *data = MEM_cnew<NodeGeometryVolumeToMesh>(__func__);
   data->resolution_mode = VOLUME_TO_MESH_RESOLUTION_MODE_GRID;
 
   bNodeSocket *grid_socket = nodeFindSocket(node, SOCK_IN, "Density");
@@ -164,7 +163,7 @@ void register_node_type_geo_legacy_volume_to_mesh()
   static bNodeType ntype;
 
   geo_node_type_base(
-      &ntype, GEO_NODE_LEGACY_VOLUME_TO_MESH, "Volume to Mesh", NODE_CLASS_GEOMETRY, 0);
+      &ntype, GEO_NODE_LEGACY_VOLUME_TO_MESH, "Volume to Mesh", NODE_CLASS_GEOMETRY);
   ntype.declare = file_ns::node_declare;
   node_type_storage(
       &ntype, "NodeGeometryVolumeToMesh", node_free_standard_storage, node_copy_standard_storage);

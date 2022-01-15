@@ -104,7 +104,7 @@ static void node_geo_exec(GeoNodeExecParams params)
 {
   GeometrySet geometry_set = params.extract_input<GeometrySet>("Geometry");
 
-  geometry_set = geometry_set_realize_instances(geometry_set);
+  geometry_set = geometry::realize_instances_legacy(geometry_set);
 
   if (geometry_set.has<MeshComponent>()) {
     execute_on_component(geometry_set.get_component_for_write<MeshComponent>(), params);
@@ -130,8 +130,7 @@ void register_node_type_geo_sample_texture()
   geo_node_type_base(&ntype,
                      GEO_NODE_LEGACY_ATTRIBUTE_SAMPLE_TEXTURE,
                      "Attribute Sample Texture",
-                     NODE_CLASS_ATTRIBUTE,
-                     0);
+                     NODE_CLASS_ATTRIBUTE);
   node_type_size_preset(&ntype, NODE_SIZE_LARGE);
   ntype.declare = file_ns::node_declare;
   ntype.geometry_node_execute = file_ns::node_geo_exec;

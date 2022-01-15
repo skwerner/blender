@@ -53,32 +53,34 @@ class GLShader : public Shader {
   GLShader(const char *name);
   ~GLShader();
 
-  /* Return true on success. */
+  /** Return true on success. */
   void vertex_shader_from_glsl(MutableSpan<const char *> sources) override;
   void geometry_shader_from_glsl(MutableSpan<const char *> sources) override;
   void fragment_shader_from_glsl(MutableSpan<const char *> sources) override;
   void compute_shader_from_glsl(MutableSpan<const char *> sources) override;
-  bool finalize(void) override;
+  bool finalize() override;
 
+  /** Should be called before linking. */
   void transform_feedback_names_set(Span<const char *> name_list,
-                                    const eGPUShaderTFBType geom_type) override;
+                                    eGPUShaderTFBType geom_type) override;
   bool transform_feedback_enable(GPUVertBuf *buf) override;
-  void transform_feedback_disable(void) override;
+  void transform_feedback_disable() override;
 
-  void bind(void) override;
-  void unbind(void) override;
+  void bind() override;
+  void unbind() override;
 
   void uniform_float(int location, int comp_len, int array_size, const float *data) override;
   void uniform_int(int location, int comp_len, int array_size, const int *data) override;
 
   void vertformat_from_shader(GPUVertFormat *format) const override;
 
-  /* DEPRECATED: Kept only because of BGL API. */
-  int program_handle_get(void) const override;
+  /** DEPRECATED: Kept only because of BGL API. */
+  int program_handle_get() const override;
 
  private:
   char *glsl_patch_get(GLenum gl_stage);
 
+  /** Create, compile and attach the shader stage to the shader program. */
   GLuint create_shader_stage(GLenum gl_stage, MutableSpan<const char *> sources);
 
   MEM_CXX_CLASS_ALLOC_FUNCS("GLShader");

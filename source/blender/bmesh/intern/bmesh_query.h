@@ -173,6 +173,30 @@ BMLoop *BM_loop_other_vert_loop_by_edge(BMLoop *l, BMEdge *e) ATTR_WARN_UNUSED_R
  * </pre>
  */
 BMLoop *BM_loop_other_vert_loop(BMLoop *l, BMVert *v) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
+/**
+ * Utility function to step around a fan of loops,
+ * using an edge to mark the previous side.
+ *
+ * \note all edges must be manifold,
+ * once a non manifold edge is hit, return NULL.
+ *
+ * \code{.unparsed}
+ *                ,.,-->|
+ *            _,-'      |
+ *          ,'          | (notice how 'e_step'
+ *         /            |  and 'l' define the
+ *        /             |  direction the arrow
+ *       |     return   |  points).
+ *       |     loop --> |
+ * ---------------------+---------------------
+ *         ^      l --> |
+ *         |            |
+ *  assign e_step       |
+ *                      |
+ *   begin e_step ----> |
+ *                      |
+ * \endcode
+ */
 BMLoop *BM_vert_step_fan_loop(BMLoop *l, BMEdge **e_step) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
 
 /**
@@ -202,7 +226,7 @@ bool BM_vert_pair_share_face_check_cb(BMVert *v_a,
     ATTR_NONNULL(1, 2, 3);
 BMFace *BM_vert_pair_shared_face_cb(BMVert *v_a,
                                     BMVert *v_b,
-                                    const bool allow_adjacent,
+                                    bool allow_adjacent,
                                     bool (*callback)(BMFace *, BMLoop *, BMLoop *, void *userdata),
                                     void *user_data,
                                     BMLoop **r_l_a,
@@ -210,11 +234,8 @@ BMFace *BM_vert_pair_shared_face_cb(BMVert *v_a,
 /**
  * Given 2 verts, find the smallest face they share and give back both loops.
  */
-BMFace *BM_vert_pair_share_face_by_len(BMVert *v_a,
-                                       BMVert *v_b,
-                                       BMLoop **r_l_a,
-                                       BMLoop **r_l_b,
-                                       const bool allow_adjacent) ATTR_NONNULL();
+BMFace *BM_vert_pair_share_face_by_len(
+    BMVert *v_a, BMVert *v_b, BMLoop **r_l_a, BMLoop **r_l_b, bool allow_adjacent) ATTR_NONNULL();
 /**
  * Given 2 verts,
  * find a face they share that has the lowest angle across these verts and give back both loops.
@@ -222,22 +243,16 @@ BMFace *BM_vert_pair_share_face_by_len(BMVert *v_a,
  * This can be better than #BM_vert_pair_share_face_by_len
  * because concave splits are ranked lowest.
  */
-BMFace *BM_vert_pair_share_face_by_angle(BMVert *v_a,
-                                         BMVert *v_b,
-                                         BMLoop **r_l_a,
-                                         BMLoop **r_l_b,
-                                         const bool allow_adjacent) ATTR_NONNULL();
+BMFace *BM_vert_pair_share_face_by_angle(
+    BMVert *v_a, BMVert *v_b, BMLoop **r_l_a, BMLoop **r_l_b, bool allow_adjacent) ATTR_NONNULL();
 
-BMFace *BM_edge_pair_share_face_by_len(BMEdge *e_a,
-                                       BMEdge *e_b,
-                                       BMLoop **r_l_a,
-                                       BMLoop **r_l_b,
-                                       const bool allow_adjacent) ATTR_NONNULL();
+BMFace *BM_edge_pair_share_face_by_len(
+    BMEdge *e_a, BMEdge *e_b, BMLoop **r_l_a, BMLoop **r_l_b, bool allow_adjacent) ATTR_NONNULL();
 
 int BM_vert_edge_count_nonwire(const BMVert *v) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
 #define BM_vert_edge_count_is_equal(v, n) (BM_vert_edge_count_at_most(v, (n) + 1) == n)
 #define BM_vert_edge_count_is_over(v, n) (BM_vert_edge_count_at_most(v, (n) + 1) == (n) + 1)
-int BM_vert_edge_count_at_most(const BMVert *v, const int count_max) ATTR_WARN_UNUSED_RESULT
+int BM_vert_edge_count_at_most(const BMVert *v, int count_max) ATTR_WARN_UNUSED_RESULT
     ATTR_NONNULL();
 /**
  * Returns the number of edges around this vertex.
@@ -245,7 +260,7 @@ int BM_vert_edge_count_at_most(const BMVert *v, const int count_max) ATTR_WARN_U
 int BM_vert_edge_count(const BMVert *v) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
 #define BM_edge_face_count_is_equal(e, n) (BM_edge_face_count_at_most(e, (n) + 1) == n)
 #define BM_edge_face_count_is_over(e, n) (BM_edge_face_count_at_most(e, (n) + 1) == (n) + 1)
-int BM_edge_face_count_at_most(const BMEdge *e, const int count_max) ATTR_WARN_UNUSED_RESULT
+int BM_edge_face_count_at_most(const BMEdge *e, int count_max) ATTR_WARN_UNUSED_RESULT
     ATTR_NONNULL();
 /**
  * Returns the number of faces around this edge
@@ -322,9 +337,8 @@ bool BM_edge_is_convex(const BMEdge *e) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
  * \return true when loop customdata is contiguous.
  */
 bool BM_edge_is_contiguous_loop_cd(const BMEdge *e,
-                                   const int cd_loop_type,
-                                   const int cd_loop_offset) ATTR_WARN_UNUSED_RESULT
-    ATTR_NONNULL();
+                                   int cd_loop_type,
+                                   int cd_loop_offset) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
 
 /**
  * The number of loops connected to this loop (not including disconnected regions).
@@ -359,11 +373,11 @@ float BM_loop_point_side_of_edge_test(const BMLoop *l, const float co[3]) ATTR_W
 /**
  * \return The previous loop, over \a eps_sq distance from \a l (or \a NULL if l_stop is reached).
  */
-BMLoop *BM_loop_find_prev_nodouble(BMLoop *l, BMLoop *l_stop, const float eps_sq);
+BMLoop *BM_loop_find_prev_nodouble(BMLoop *l, BMLoop *l_stop, float eps_sq);
 /**
  * \return The next loop, over \a eps_sq distance from \a l (or \a NULL if l_stop is reached).
  */
-BMLoop *BM_loop_find_next_nodouble(BMLoop *l, BMLoop *l_stop, const float eps_sq);
+BMLoop *BM_loop_find_next_nodouble(BMLoop *l, BMLoop *l_stop, float eps_sq);
 
 /**
  * Calculates the angle between the previous and next loops
@@ -397,7 +411,7 @@ float BM_loop_calc_face_normal_safe(const BMLoop *l, float r_normal[3]) ATTR_NON
  * \param epsilon_sq: Value to avoid numeric errors (1e-5f works well).
  * \param r_normal: Resulting normal.
  */
-float BM_loop_calc_face_normal_safe_ex(const BMLoop *l, const float epsilon, float r_normal[3])
+float BM_loop_calc_face_normal_safe_ex(const BMLoop *l, float epsilon_sq, float r_normal[3])
     ATTR_NONNULL();
 /**
  * A version of BM_loop_calc_face_normal_safe_ex which takes vertex coordinates.
@@ -405,7 +419,7 @@ float BM_loop_calc_face_normal_safe_ex(const BMLoop *l, const float epsilon, flo
 float BM_loop_calc_face_normal_safe_vcos_ex(const BMLoop *l,
                                             const float normal_fallback[3],
                                             float const (*vertexCos)[3],
-                                            const float epsilon_sq,
+                                            float epsilon_sq,
                                             float r_normal[3]) ATTR_NONNULL();
 float BM_loop_calc_face_normal_safe_vcos(const BMLoop *l,
                                          const float normal_fallback[3],
@@ -440,7 +454,7 @@ void BM_loop_calc_face_tangent(const BMLoop *l, float r_tangent[3]);
  *
  * \return angle in radians
  */
-float BM_edge_calc_face_angle_ex(const BMEdge *e, const float fallback) ATTR_WARN_UNUSED_RESULT
+float BM_edge_calc_face_angle_ex(const BMEdge *e, float fallback) ATTR_WARN_UNUSED_RESULT
     ATTR_NONNULL();
 float BM_edge_calc_face_angle(const BMEdge *e) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
 /**
@@ -451,8 +465,7 @@ float BM_edge_calc_face_angle(const BMEdge *e) ATTR_WARN_UNUSED_RESULT ATTR_NONN
  *
  * \return angle in radians
  */
-float BM_edge_calc_face_angle_signed_ex(const BMEdge *e,
-                                        const float fallback) ATTR_WARN_UNUSED_RESULT
+float BM_edge_calc_face_angle_signed_ex(const BMEdge *e, float fallback) ATTR_WARN_UNUSED_RESULT
     ATTR_NONNULL();
 /**
  * \brief BMESH EDGE/FACE ANGLE
@@ -464,12 +477,23 @@ float BM_edge_calc_face_angle_signed_ex(const BMEdge *e,
  */
 float BM_edge_calc_face_angle_with_imat3_ex(const BMEdge *e,
                                             const float imat3[3][3],
-                                            const float fallback) ATTR_WARN_UNUSED_RESULT
-    ATTR_NONNULL();
+                                            float fallback) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
 float BM_edge_calc_face_angle_with_imat3(const BMEdge *e,
                                          const float imat3[3][3]) ATTR_WARN_UNUSED_RESULT
     ATTR_NONNULL();
 float BM_edge_calc_face_angle_signed(const BMEdge *e) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
+/**
+ * \brief BMESH EDGE/FACE TANGENT
+ *
+ * Calculate the tangent at this loop corner or fallback to the face normal on straight lines.
+ * This vector always points inward into the face.
+ *
+ * \brief BM_edge_calc_face_tangent
+ * \param e:
+ * \param e_loop: The loop to calculate the tangent at,
+ * used to get the face and winding direction.
+ * \param r_tangent: The loop corner tangent to set
+ */
 void BM_edge_calc_face_tangent(const BMEdge *e, const BMLoop *e_loop, float r_tangent[3])
     ATTR_NONNULL();
 float BM_vert_calc_edge_angle(const BMVert *v) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
@@ -480,7 +504,7 @@ float BM_vert_calc_edge_angle(const BMVert *v) ATTR_WARN_UNUSED_RESULT ATTR_NONN
  *
  * \returns the angle in radians
  */
-float BM_vert_calc_edge_angle_ex(const BMVert *v, const float fallback) ATTR_WARN_UNUSED_RESULT
+float BM_vert_calc_edge_angle_ex(const BMVert *v, float fallback) ATTR_WARN_UNUSED_RESULT
     ATTR_NONNULL();
 /**
  * \note this isn't optimal to run on an array of verts,
@@ -491,7 +515,7 @@ float BM_vert_calc_shell_factor(const BMVert *v) ATTR_WARN_UNUSED_RESULT ATTR_NO
  * uses 'hflag' faces, but falls back to all if none found. */
 float BM_vert_calc_shell_factor_ex(const BMVert *v,
                                    const float no[3],
-                                   const char hflag) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
+                                   char hflag) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
 /**
  * \note quite an obscure function.
  * used in bmesh operators that have a relative scale options,
@@ -559,7 +583,7 @@ bool BM_face_exists_multi_edge(BMEdge **earr, int len) ATTR_WARN_UNUSED_RESULT A
  * \param len: \a varr array length.
  * \return The face or NULL.
  */
-BMFace *BM_face_exists_overlap(BMVert **varr, const int len) ATTR_WARN_UNUSED_RESULT;
+BMFace *BM_face_exists_overlap(BMVert **varr, int len) ATTR_WARN_UNUSED_RESULT;
 /**
  * Given a set of vertices (varr), find out if
  * there is a face that uses vertices only from this list
@@ -568,8 +592,7 @@ BMFace *BM_face_exists_overlap(BMVert **varr, const int len) ATTR_WARN_UNUSED_RE
  * \param varr: Array of unordered verts.
  * \param len: varr array length.
  */
-bool BM_face_exists_overlap_subset(BMVert **varr, const int len) ATTR_WARN_UNUSED_RESULT
-    ATTR_NONNULL();
+bool BM_face_exists_overlap_subset(BMVert **varr, int len) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
 
 /**
  * Returns the number of faces that are adjacent to both f1 and f2,
@@ -668,27 +691,26 @@ void BM_edge_ordered_verts_ex(const BMEdge *edge,
                               const BMLoop *edge_loop) ATTR_NONNULL();
 
 bool BM_vert_is_all_edge_flag_test(const BMVert *v,
-                                   const char hflag,
-                                   const bool respect_hide) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
+                                   char hflag,
+                                   bool respect_hide) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
 bool BM_vert_is_all_face_flag_test(const BMVert *v,
-                                   const char hflag,
-                                   const bool respect_hide) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
+                                   char hflag,
+                                   bool respect_hide) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
 bool BM_edge_is_all_face_flag_test(const BMEdge *e,
-                                   const char hflag,
-                                   const bool respect_hide) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
+                                   char hflag,
+                                   bool respect_hide) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
 
 /* convenience functions for checking flags */
-bool BM_edge_is_any_vert_flag_test(const BMEdge *e, const char hflag) ATTR_WARN_UNUSED_RESULT
+bool BM_edge_is_any_vert_flag_test(const BMEdge *e, char hflag) ATTR_WARN_UNUSED_RESULT
     ATTR_NONNULL();
-bool BM_edge_is_any_face_flag_test(const BMEdge *e, const char hflag) ATTR_WARN_UNUSED_RESULT
+bool BM_edge_is_any_face_flag_test(const BMEdge *e, char hflag) ATTR_WARN_UNUSED_RESULT
     ATTR_NONNULL();
-bool BM_face_is_any_vert_flag_test(const BMFace *f, const char hflag) ATTR_WARN_UNUSED_RESULT
+bool BM_face_is_any_vert_flag_test(const BMFace *f, char hflag) ATTR_WARN_UNUSED_RESULT
     ATTR_NONNULL();
-bool BM_face_is_any_edge_flag_test(const BMFace *f, const char hflag) ATTR_WARN_UNUSED_RESULT
+bool BM_face_is_any_edge_flag_test(const BMFace *f, char hflag) ATTR_WARN_UNUSED_RESULT
     ATTR_NONNULL();
 
-bool BM_edge_is_any_face_len_test(const BMEdge *e, const int len) ATTR_WARN_UNUSED_RESULT
-    ATTR_NONNULL();
+bool BM_edge_is_any_face_len_test(const BMEdge *e, int len) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
 
 /**
  * Use within assert's to check normals are valid.
@@ -719,13 +741,13 @@ int BM_mesh_calc_face_groups(BMesh *bm,
                              BMLoopFilterFunc filter_fn,
                              BMLoopPairFilterFunc filter_pair_fn,
                              void *user_data,
-                             const char hflag_test,
-                             const char htype_step) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL(1, 2, 3);
+                             char hflag_test,
+                             char htype_step) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL(1, 2, 3);
 /**
  * Calculate isolated groups of edges with optional filtering.
  *
  * \param bm: the BMesh.
- * \param r_groups_array: Array of ints to fill in, length of bm->totedge
+ * \param r_groups_array: Array of ints to fill in, length of `bm->totedge`
  *        (or when hflag_test is set, the number of flagged edges).
  * \param r_group_index: index, length pairs into \a r_groups_array, size of return value
  *        int pairs: (array_start, array_length).
@@ -744,7 +766,7 @@ int BM_mesh_calc_edge_groups(BMesh *bm,
                              int (**r_group_index)[2],
                              BMVertFilterFunc filter_fn,
                              void *user_data,
-                             const char hflag_test) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL(1, 2, 3);
+                             char hflag_test) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL(1, 2, 3);
 
 /**
  * This is an alternative to #BM_mesh_calc_edge_groups.
@@ -761,6 +783,6 @@ int BM_mesh_calc_edge_groups_as_arrays(BMesh *bm,
     ATTR_NONNULL(1, 2, 3, 4, 5);
 
 /* Not really any good place to put this. */
-float bmesh_subd_falloff_calc(const int falloff, float val) ATTR_WARN_UNUSED_RESULT;
+float bmesh_subd_falloff_calc(int falloff, float val) ATTR_WARN_UNUSED_RESULT;
 
 #include "bmesh_query_inline.h"

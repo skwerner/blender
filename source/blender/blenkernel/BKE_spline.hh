@@ -40,7 +40,8 @@ using SplinePtr = std::unique_ptr<Spline>;
 /**
  * A spline is an abstraction of a single branch-less curve section, its evaluation methods,
  * and data. The spline data itself is just control points and a set of attributes by the set
- * of "evaluated" data is often used instead.
+ * of "evaluated" data is often used instead. Conceptually, the derived vs. original data is
+ * an essential distinction. Derived data is usually calculated lazily and cached on the spline.
  *
  * Any derived class of Spline has to manage two things:
  *  1. Interpolating arbitrary attribute data from the control points to evaluated points.
@@ -106,8 +107,17 @@ class Spline {
     copy_base_settings(other, *this);
   }
 
+  /**
+   * Return a new spline with the same data, settings, and attributes.
+   */
   SplinePtr copy() const;
+  /**
+   * Return a new spline with the same type and settings like "cyclic", but without any data.
+   */
   SplinePtr copy_only_settings() const;
+  /**
+   * The same as #copy, but skips copying dynamic attributes to the new spline.
+   */
   SplinePtr copy_without_attributes() const;
   static void copy_base_settings(const Spline &src, Spline &dst);
 
@@ -117,9 +127,9 @@ class Spline {
   virtual int size() const = 0;
   int segments_size() const;
   bool is_cyclic() const;
-  void set_cyclic(const bool value);
+  void set_cyclic(bool value);
 
-  virtual void resize(const int size) = 0;
+  virtual void resize(int size) = 0;
   virtual blender::MutableSpan<blender::float3> positions() = 0;
   virtual blender::Span<blender::float3> positions() const = 0;
   virtual blender::MutableSpan<float> radii() = 0;
@@ -147,11 +157,25 @@ class Spline {
 
   virtual blender::Span<blender::float3> evaluated_positions() const = 0;
 
+  /**
+   * Return non-owning access to the cache of accumulated lengths along the spline. Each item is
+   * the length of the subsequent segment, i.e. the first value is the length of the first segment
+   * rather than 0. This calculation is rather trivial, and only depends on the evaluated
+   * positions. However, the results are used often, and it is necessarily single threaded, so it
+   * is cached.
+   */
   blender::Span<float> evaluated_lengths() const;
+  /**
+   * Return non-owning access to the direction of the curve at each evaluated point.
+   */
   blender::Span<blender::float3> evaluated_tangents() const;
+  /**
+   * Return non-owning access to the direction vectors perpendicular to the tangents at every
+   * evaluated point. The method used to generate the normal vectors depends on Spline.normal_mode.
+   */
   blender::Span<blender::float3> evaluated_normals() const;
 
-  void bounds_min_max(blender::float3 &min, blender::float3 &max, const bool use_evaluated) const;
+  void bounds_min_max(blender::float3 &min, blender::float3 &max, bool use_evaluated) const;
 
   struct LookupResult {
     /**
@@ -172,12 +196,32 @@ class Spline {
      */
     float factor;
   };
-  LookupResult lookup_evaluated_factor(const float factor) const;
-  LookupResult lookup_evaluated_length(const float length) const;
+  /**
+   * Find the position on the evaluated spline at the given portion of the total length.
+   * The return value is the indices of the two neighboring points at that location and the
+   * factor between them, which can be used to look up any attribute on the evaluated points.
+   * \note This does not support extrapolation.
+   */
+  LookupResult lookup_evaluated_factor(float factor) const;
+  /**
+   * The same as #lookup_evaluated_factor, but looks up a length directly instead of
+   * a portion of the total.
+   */
+  LookupResult lookup_evaluated_length(float length) const;
 
-  blender::Array<float> sample_uniform_index_factors(const int samples_size) const;
-  LookupResult lookup_data_from_index_factor(const float index_factor) const;
+  /**
+   * Return an array of evenly spaced samples along the length of the spline. The samples are
+   * indices and factors to the next index encoded in floats. The logic for converting from the
+   * float values to interpolation data is in #lookup_data_from_index_factor.
+   */
+  blender::Array<float> sample_uniform_index_factors(int samples_size) const;
+  LookupResult lookup_data_from_index_factor(float index_factor) const;
 
+  /**
+   * Sample any input data with a value for each evaluated point (already interpolated to evaluated
+   * points) to arbitrary parameters in between the evaluated points. The interpolation is quite
+   * simple, but this handles the cyclic and end point special cases.
+   */
   void sample_with_index_factors(const blender::fn::GVArray &src,
                                  blender::Span<float> index_factors,
                                  blender::fn::GMutableSpan dst) const;
@@ -284,20 +328,9 @@ class BezierSpline final : public Spline {
 
   int size() const final;
   int resolution() const;
-  void set_resolution(const int value);
+  void set_resolution(int value);
 
-  /**
-   * \warning Call #reallocate on the spline's attributes after adding all points.
-   */
-  void add_point(const blender::float3 position,
-                 const HandleType handle_type_left,
-                 const blender::float3 handle_position_left,
-                 const HandleType handle_type_right,
-                 const blender::float3 handle_position_right,
-                 const float radius,
-                 const float tilt);
-
-  void resize(const int size) final;
+  void resize(int size) final;
   blender::MutableSpan<blender::float3> positions() final;
   blender::Span<blender::float3> positions() const final;
   blender::MutableSpan<float> radii() final;
@@ -337,14 +370,14 @@ class BezierSpline final : public Spline {
    * Set positions for the right handle of the control point, ensuring that
    * aligned handles stay aligned. Has no effect for auto and vector type handles.
    */
-  void set_handle_position_right(const int index, const blender::float3 &value);
+  void set_handle_position_right(int index, const blender::float3 &value);
   /**
    * Set positions for the left handle of the control point, ensuring that
    * aligned handles stay aligned. Has no effect for auto and vector type handles.
    */
-  void set_handle_position_left(const int index, const blender::float3 &value);
+  void set_handle_position_left(int index, const blender::float3 &value);
 
-  bool point_is_sharp(const int index) const;
+  bool point_is_sharp(int index) const;
 
   void mark_cache_invalid() final;
   int evaluated_points_size() const final;
@@ -381,18 +414,18 @@ class BezierSpline final : public Spline {
    * to interpolate data from control points to evaluated points between them. The next control
    * point index result will not overflow the size of the control point vectors.
    */
-  InterpolationData interpolation_data_from_index_factor(const float index_factor) const;
+  InterpolationData interpolation_data_from_index_factor(float index_factor) const;
 
   virtual blender::fn::GVArray interpolate_to_evaluated(
       const blender::fn::GVArray &src) const override;
 
-  void evaluate_segment(const int index,
-                        const int next_index,
+  void evaluate_segment(int index,
+                        int next_index,
                         blender::MutableSpan<blender::float3> positions) const;
   /**
    * \warning This functional assumes that the spline has more than one point.
    */
-  bool segment_is_vector(const int start_index) const;
+  bool segment_is_vector(int start_index) const;
 
   /** See comment and diagram for #calculate_segment_insertion. */
   struct InsertResult {
@@ -421,11 +454,15 @@ class BezierSpline final : public Spline {
    *       point_prev                  point_next
    * </pre>
    */
-  InsertResult calculate_segment_insertion(const int index,
-                                           const int next_index,
-                                           const float parameter);
+  InsertResult calculate_segment_insertion(int index, int next_index, float parameter);
 
  private:
+  /**
+   * If the spline is not cyclic, the direction for the first and last points is just the
+   * direction formed by the corresponding handles and control points. In the unlikely situation
+   * that the handles define a zero direction, fallback to using the direction defined by the
+   * first and last evaluated segments already calculated in #Spline::evaluated_tangents().
+   */
   void correct_end_tangents() const final;
   void copy_settings(Spline &dst) const final;
   void copy_data(Spline &dst) const final;
@@ -513,22 +550,14 @@ class NURBSpline final : public Spline {
 
   int size() const final;
   int resolution() const;
-  void set_resolution(const int value);
+  void set_resolution(int value);
   uint8_t order() const;
-  void set_order(const uint8_t value);
-
-  /**
-   * \warning Call #reallocate on the spline's attributes after adding all points.
-   */
-  void add_point(const blender::float3 position,
-                 const float radius,
-                 const float tilt,
-                 const float weight);
+  void set_order(uint8_t value);
 
   bool check_valid_size_and_order() const;
   int knots_size() const;
 
-  void resize(const int size) final;
+  void resize(int size) final;
   blender::MutableSpan<blender::float3> positions() final;
   blender::Span<blender::float3> positions() const final;
   blender::MutableSpan<float> radii() final;
@@ -558,9 +587,12 @@ class NURBSpline final : public Spline {
 };
 
 /**
- * A Poly spline is like a bezier spline with a resolution of one. The main reason to distinguish
+ * A Poly spline is like a Bézier spline with a resolution of one. The main reason to distinguish
  * the two is for reduced complexity and increased performance, since interpolating data to control
  * points does not change it.
+ *
+ * Poly spline code is very simple, since it doesn't do anything that the base #Spline doesn't
+ * handle. Mostly it just worries about storing the data used by the base class.
  */
 class PolySpline final : public Spline {
   blender::Vector<blender::float3> positions_;
@@ -581,12 +613,7 @@ class PolySpline final : public Spline {
 
   int size() const final;
 
-  /**
-   * \warning Call #reallocate on the spline's attributes after adding all points.
-   */
-  void add_point(const blender::float3 position, const float radius, const float tilt);
-
-  void resize(const int size) final;
+  void resize(int size) final;
   blender::MutableSpan<blender::float3> positions() final;
   blender::Span<blender::float3> positions() const final;
   blender::MutableSpan<float> radii() final;
@@ -599,6 +626,12 @@ class PolySpline final : public Spline {
 
   blender::Span<blender::float3> evaluated_positions() const final;
 
+  /**
+   * Poly spline interpolation from control points to evaluated points is a special case, since
+   * the result data is the same as the input data. This function returns a #GVArray that points to
+   * the original data. Therefore the lifetime of the returned virtual array must not be longer
+   * than the source data.
+   */
   blender::fn::GVArray interpolate_to_evaluated(const blender::fn::GVArray &src) const final;
 
  protected:
@@ -641,16 +674,17 @@ struct CurveEval {
    */
   bool has_spline_with_type(const Spline::Type type) const;
 
-  void resize(const int size);
+  void resize(int size);
   /**
    * \warning Call #reallocate on the spline's attributes after adding all splines.
    */
   void add_spline(SplinePtr spline);
+  void add_splines(blender::MutableSpan<SplinePtr> splines);
   void remove_splines(blender::IndexMask mask);
 
   void translate(const blender::float3 &translation);
   void transform(const blender::float4x4 &matrix);
-  void bounds_min_max(blender::float3 &min, blender::float3 &max, const bool use_evaluated) const;
+  bool bounds_min_max(blender::float3 &min, blender::float3 &max, bool use_evaluated) const;
 
   /**
    * Return the start indices for each of the curve spline's control points, if they were part

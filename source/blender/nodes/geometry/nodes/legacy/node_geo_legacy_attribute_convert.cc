@@ -39,8 +39,7 @@ static void node_layout(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
 
 static void node_init(bNodeTree *UNUSED(tree), bNode *node)
 {
-  NodeAttributeConvert *data = (NodeAttributeConvert *)MEM_callocN(sizeof(NodeAttributeConvert),
-                                                                   __func__);
+  NodeAttributeConvert *data = MEM_cnew<NodeAttributeConvert>(__func__);
 
   data->data_type = CD_AUTO_FROM_NAME;
   data->domain = ATTR_DOMAIN_AUTO;
@@ -132,7 +131,7 @@ static void node_geo_exec(GeoNodeExecParams params)
 {
   GeometrySet geometry_set = params.extract_input<GeometrySet>("Geometry");
 
-  geometry_set = geometry_set_realize_instances(geometry_set);
+  geometry_set = geometry::realize_instances_legacy(geometry_set);
 
   const std::string result_name = params.extract_input<std::string>("Result");
   const std::string source_name = params.extract_input<std::string>("Attribute");
@@ -182,7 +181,7 @@ void register_node_type_geo_attribute_convert()
   static bNodeType ntype;
 
   geo_node_type_base(
-      &ntype, GEO_NODE_LEGACY_ATTRIBUTE_CONVERT, "Attribute Convert", NODE_CLASS_ATTRIBUTE, 0);
+      &ntype, GEO_NODE_LEGACY_ATTRIBUTE_CONVERT, "Attribute Convert", NODE_CLASS_ATTRIBUTE);
   ntype.declare = file_ns::node_declare;
   ntype.geometry_node_execute = file_ns::node_geo_exec;
   ntype.draw_buttons = file_ns::node_layout;

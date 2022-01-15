@@ -32,7 +32,7 @@ static void node_declare(NodeDeclarationBuilder &b)
 static void node_geo_exec(GeoNodeExecParams params)
 {
   GeometrySet geometry_set = params.extract_input<GeometrySet>("Curve");
-  geometry_set = bke::geometry_set_realize_instances(geometry_set);
+  geometry_set = geometry::realize_instances_legacy(geometry_set);
   if (!geometry_set.has_curve()) {
     params.set_output("Curve", geometry_set);
     return;
@@ -65,8 +65,7 @@ void register_node_type_geo_legacy_curve_reverse()
   namespace file_ns = blender::nodes::node_geo_legacy_curve_reverse_cc;
 
   static bNodeType ntype;
-  geo_node_type_base(
-      &ntype, GEO_NODE_LEGACY_CURVE_REVERSE, "Curve Reverse", NODE_CLASS_GEOMETRY, 0);
+  geo_node_type_base(&ntype, GEO_NODE_LEGACY_CURVE_REVERSE, "Curve Reverse", NODE_CLASS_GEOMETRY);
   ntype.declare = file_ns::node_declare;
   ntype.geometry_node_execute = file_ns::node_geo_exec;
   nodeRegisterType(&ntype);

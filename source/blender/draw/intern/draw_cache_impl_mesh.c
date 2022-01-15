@@ -54,6 +54,7 @@
 #include "BKE_object_deform.h"
 #include "BKE_paint.h"
 #include "BKE_pbvh.h"
+#include "BKE_subdiv_modifier.h"
 
 #include "atomic_ops.h"
 
@@ -69,6 +70,7 @@
 
 #include "draw_cache_extract.h"
 #include "draw_cache_inline.h"
+#include "draw_subdivision.h"
 
 #include "draw_cache_impl.h" /* own include */
 
@@ -380,6 +382,7 @@ static void drw_mesh_attributes_add_request(DRW_MeshAttributes *attrs,
 BLI_INLINE const CustomData *mesh_cd_ldata_get_from_mesh(const Mesh *me)
 {
   switch ((eMeshWrapperType)me->runtime.wrapper_type) {
+    case ME_WRAPPER_TYPE_SUBD:
     case ME_WRAPPER_TYPE_MDATA:
       return &me->ldata;
       break;
@@ -395,6 +398,7 @@ BLI_INLINE const CustomData *mesh_cd_ldata_get_from_mesh(const Mesh *me)
 BLI_INLINE const CustomData *mesh_cd_pdata_get_from_mesh(const Mesh *me)
 {
   switch ((eMeshWrapperType)me->runtime.wrapper_type) {
+    case ME_WRAPPER_TYPE_SUBD:
     case ME_WRAPPER_TYPE_MDATA:
       return &me->pdata;
       break;
@@ -410,6 +414,7 @@ BLI_INLINE const CustomData *mesh_cd_pdata_get_from_mesh(const Mesh *me)
 BLI_INLINE const CustomData *mesh_cd_edata_get_from_mesh(const Mesh *me)
 {
   switch ((eMeshWrapperType)me->runtime.wrapper_type) {
+    case ME_WRAPPER_TYPE_SUBD:
     case ME_WRAPPER_TYPE_MDATA:
       return &me->edata;
       break;
@@ -425,6 +430,7 @@ BLI_INLINE const CustomData *mesh_cd_edata_get_from_mesh(const Mesh *me)
 BLI_INLINE const CustomData *mesh_cd_vdata_get_from_mesh(const Mesh *me)
 {
   switch ((eMeshWrapperType)me->runtime.wrapper_type) {
+    case ME_WRAPPER_TYPE_SUBD:
     case ME_WRAPPER_TYPE_MDATA:
       return &me->vdata;
       break;
@@ -1037,6 +1043,15 @@ static void mesh_buffer_cache_clear(MeshBufferCache *mbc)
   mbc->poly_sorted.visible_tri_len = 0;
 }
 
+static void mesh_batch_cache_free_subdiv_cache(MeshBatchCache *cache)
+{
+  if (cache->subdiv_cache) {
+    draw_subdiv_cache_free(cache->subdiv_cache);
+    MEM_freeN(cache->subdiv_cache);
+    cache->subdiv_cache = NULL;
+  }
+}
+
 static void mesh_batch_cache_clear(Mesh *me)
 {
   MeshBatchCache *cache = me->runtime.batch_cache;
@@ -1064,6 +1079,8 @@ static void mesh_batch_cache_clear(Mesh *me)
 
   cache->batch_ready = 0;
   drw_mesh_weight_state_clear(&cache->weight_state);
+
+  mesh_batch_cache_free_subdiv_cache(cache);
 }
 
 void DRW_mesh_batch_cache_free(Mesh *me)
@@ -1372,11 +1389,6 @@ static void edituv_request_active_uv(MeshBatchCache *cache, Mesh *me)
   mesh_cd_layers_type_merge(&cache->cd_needed, cd_needed);
 }
 
-/* Creates the GPUBatch for drawing the UV Stretching Area Overlay.
- * Optional retrieves the total area or total uv area of the mesh.
- *
- * The `cache->tot_area` and cache->tot_uv_area` update are calculation are
- * only valid after calling `DRW_mesh_batch_cache_create_requested`. */
 GPUBatch *DRW_mesh_batch_cache_get_edituv_faces_stretch_area(Mesh *me,
                                                              float **tot_area,
                                                              float **tot_uv_area)
@@ -1456,9 +1468,6 @@ GPUBatch *DRW_mesh_batch_cache_get_surface_edges(Mesh *me)
 /** \name Grouped batch generation
  * \{ */
 
-/* Thread safety need to be assured by caller. Don't call this during drawing.
- * NOTE: For now this only free the shading batches / vbo if any cd layers is
- * not needed anymore. */
 void DRW_mesh_batch_cache_free_old(Mesh *me, int ctime)
 {
   MeshBatchCache *cache = me->runtime.batch_cache;
@@ -1526,7 +1535,6 @@ static void drw_mesh_batch_cache_check_available(struct TaskGraph *task_graph, M
 }
 #endif
 
-/* Can be called for any surface type. Mesh *me is the final mesh. */
 void DRW_mesh_batch_cache_create_requested(struct TaskGraph *task_graph,
                                            Object *ob,
                                            Mesh *me,
@@ -1701,6 +1709,10 @@ void DRW_mesh_batch_cache_create_requested(struct TaskGraph *task_graph,
                         (me->edit_mesh->mesh_eval_final != me->edit_mesh->mesh_eval_cage));
 
   const bool do_uvcage = is_editmode && !me->edit_mesh->mesh_eval_final->runtime.is_original;
+
+  const int required_mode = BKE_subsurf_modifier_eval_required_mode(DRW_state_is_scene_render(),
+                                                                    is_editmode);
+  const bool do_subdivision = BKE_subsurf_modifier_can_do_gpu_subdiv(scene, ob, required_mode);
 
   MeshBufferList *mbuflist = &cache->final.buff;
 
@@ -2045,6 +2057,15 @@ void DRW_mesh_batch_cache_create_requested(struct TaskGraph *task_graph,
                                        scene,
                                        ts,
                                        true);
+  }
+
+  if (do_subdivision) {
+    DRW_create_subdivision(scene, ob, me, cache, &cache->final, ts);
+  }
+  else {
+    /* The subsurf modifier may have been recently removed, or another modifier was added after it,
+     * so free any potential subdivision cache as it is not needed anymore. */
+    mesh_batch_cache_free_subdiv_cache(cache);
   }
 
   mesh_buffer_cache_create_requested(task_graph,

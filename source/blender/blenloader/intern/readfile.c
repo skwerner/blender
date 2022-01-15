@@ -214,13 +214,6 @@ typedef struct BHeadN {
  * because ID names are used in lookup tables. */
 #define BHEAD_USE_READ_ON_DEMAND(bhead) ((bhead)->code == DATA)
 
-/**
- * This function ensures that reports are printed,
- * in the case of library linking errors this is important!
- *
- * bit kludge but better than doubling up on prints,
- * we could alternatively have a versions of a report function which forces printing - campbell
- */
 void BLO_reportf_wrap(BlendFileReadReport *reports, eReportType type, const char *format, ...)
 {
   char fixed_buf[1024]; /* should be long enough */
@@ -261,7 +254,7 @@ typedef struct OldNewMap {
   /* Array that stores the actual entries. */
   OldNew *entries;
   int nentries;
-  /* Hashmap that stores indices into the `entries` array. */
+  /* Hash-map that stores indices into the `entries` array. */
   int32_t *map;
 
   int capacity_exp;
@@ -638,7 +631,7 @@ static Main *blo_find_main(FileData *fd, const char *filepath, const char *relab
   //  printf("blo_find_main: converted to %s\n", name1);
 
   for (m = mainlist->first; m; m = m->next) {
-    const char *libname = (m->curlib) ? m->curlib->filepath_abs : m->name;
+    const char *libname = (m->curlib) ? m->curlib->filepath_abs : m->filepath;
 
     if (BLI_path_cmp(name1, libname) == 0) {
       if (G.debug & G_DEBUG) {
@@ -997,13 +990,11 @@ static BHead *blo_bhead_read_full(FileData *fd, BHead *thisblock)
 }
 #endif /* USE_BHEAD_READ_ON_DEMAND */
 
-/* Warning! Caller's responsibility to ensure given bhead **is** an ID one! */
 const char *blo_bhead_id_name(const FileData *fd, const BHead *bhead)
 {
   return (const char *)POINTER_OFFSET(bhead, sizeof(*bhead) + fd->id_name_offset);
 }
 
-/* Warning! Caller's responsibility to ensure given bhead **is** an ID one! */
 AssetMetaData *blo_bhead_id_asset_data_address(const FileData *fd, const BHead *bhead)
 {
   BLI_assert(blo_bhead_is_id_valid_type(bhead));
@@ -1148,6 +1139,10 @@ static int *read_file_thumbnail(FileData *fd)
 
 /** \} */
 
+/* -------------------------------------------------------------------- */
+/** \name File Data API
+ * \{ */
+
 static FileData *filedata_new(BlendFileReadReport *reports)
 {
   BLI_assert(reports != NULL);
@@ -1269,8 +1264,6 @@ static FileData *blo_filedata_from_file_open(const char *filepath, BlendFileRead
   return blo_filedata_from_file_descriptor(filepath, reports, file);
 }
 
-/* cannot be called with relative paths anymore! */
-/* on each new library added, it now checks for the current FileData and expands relativeness */
 FileData *blo_filedata_from_file(const char *filepath, BlendFileReadReport *reports)
 {
   FileData *fd = blo_filedata_from_file_open(filepath, reports);
@@ -1411,30 +1404,12 @@ void blo_filedata_free(FileData *fd)
 /** \name Public Utilities
  * \{ */
 
-/**
- * Check whether given path ends with a blend file compatible extension
- * (`.blend`, `.ble` or `.blend.gz`).
- *
- * \param str: The path to check.
- * \return true is this path ends with a blender file extension.
- */
 bool BLO_has_bfile_extension(const char *str)
 {
   const char *ext_test[4] = {".blend", ".ble", ".blend.gz", NULL};
   return BLI_path_extension_check_array(str, ext_test);
 }
 
-/**
- * Try to explode given path into its 'library components'
- * (i.e. a .blend file, id type/group, and data-block itself).
- *
- * \param path: the full path to explode.
- * \param r_dir: the string that'll contain path up to blend file itself ('library' path).
- * WARNING! Must be #FILE_MAX_LIBEXTRA long (it also stores group and name strings)!
- * \param r_group: the string that'll contain 'group' part of the path, if any. May be NULL.
- * \param r_name: the string that'll contain data's name part of the path, if any. May be NULL.
- * \return true if path contains a blend file.
- */
 bool BLO_library_path_explode(const char *path, char *r_dir, char **r_group, char **r_name)
 {
   /* We might get some data names with slashes,
@@ -1495,14 +1470,6 @@ bool BLO_library_path_explode(const char *path, char *r_dir, char **r_group, cha
   return true;
 }
 
-/**
- * Does a very light reading of given .blend file to extract its stored thumbnail.
- *
- * \param filepath: The path of the file to extract thumbnail from.
- * \return The raw thumbnail
- * (MEM-allocated, as stored in file, use #BKE_main_thumbnail_to_imbuf()
- * to convert it to ImBuf image).
- */
 BlendThumbnail *BLO_thumbnail_from_file(const char *filepath)
 {
   FileData *fd;
@@ -1551,7 +1518,6 @@ static void *newdataadr_no_us(FileData *fd, const void *adr)
   return oldnewmap_lookup_and_inc(fd->datamap, adr, false);
 }
 
-/* Direct datablocks with global linking. */
 void *blo_read_get_new_globaldata_address(FileData *fd, const void *adr)
 {
   return oldnewmap_lookup_and_inc(fd->globmap, adr, true);
@@ -1573,7 +1539,6 @@ static void *newlibadr(FileData *fd, const void *lib, const void *adr)
   return oldnewmap_liblookup(fd->libmap, adr, lib);
 }
 
-/* only lib data */
 void *blo_do_versions_newlibadr(FileData *fd, const void *lib, const void *adr)
 {
   return newlibadr(fd, lib, adr);
@@ -1615,12 +1580,6 @@ static void change_link_placeholder_to_real_ID_pointer(ListBase *mainlist,
   }
 }
 
-/* lib linked proxy objects point to our local data, we need
- * to clear that pointer before reading the undo memfile since
- * the object might be removed, it is set again in reading
- * if the local object still exists.
- * This is only valid for local proxy objects though, linked ones should not be affected here.
- */
 void blo_clear_proxy_pointers_from_lib(Main *oldmain)
 {
   LISTBASE_FOREACH (Object *, ob, &oldmain->objects) {
@@ -1680,8 +1639,6 @@ void blo_make_packed_pointer_map(FileData *fd, Main *oldmain)
   }
 }
 
-/* set old main packed data to zero if it has been restored */
-/* this works because freeing old main only happens after this call */
 void blo_end_packed_pointer_map(FileData *fd, Main *oldmain)
 {
   OldNew *entry = fd->packedmap->entries;
@@ -1718,7 +1675,6 @@ void blo_end_packed_pointer_map(FileData *fd, Main *oldmain)
   }
 }
 
-/* undo file support: add all library pointers in lookup */
 void blo_add_library_pointer_map(ListBase *old_mainlist, FileData *fd)
 {
   ListBase *lbarray[INDEX_ID_MAX];
@@ -1735,8 +1691,6 @@ void blo_add_library_pointer_map(ListBase *old_mainlist, FileData *fd)
   fd->old_mainlist = old_mainlist;
 }
 
-/* Build a GSet of old main (we only care about local data here, so we can do that after
- * split_main() call. */
 void blo_make_old_idmap_from_main(FileData *fd, Main *bmain)
 {
   if (fd->old_idmap != NULL) {
@@ -2770,10 +2724,6 @@ static void lib_link_workspace_layout_restore(struct IDNameLib_Map *id_map,
   }
 }
 
-/**
- * Used to link a file (without UI) to the current UI.
- * Note that it assumes the old pointers in UI are still valid, so old Main is not freed.
- */
 void blo_lib_link_restore(Main *oldmain,
                           Main *newmain,
                           wmWindowManager *curwm,
@@ -2902,7 +2852,7 @@ static void lib_link_library(BlendLibReader *UNUSED(reader), Library *UNUSED(lib
  * in relation to the blend file. */
 static void fix_relpaths_library(const char *basepath, Main *main)
 {
-  /* BLO_read_from_memory uses a blank filename */
+  /* #BLO_read_from_memory uses a blank file-path. */
   if (basepath == NULL || basepath[0] == '\0') {
     LISTBASE_FOREACH (Library *, lib, &main->libraries) {
       /* when loading a linked lib into a file which has not been saved,
@@ -3556,25 +3506,25 @@ static BHead *read_global(BlendFileData *bfd, FileData *fd, BHead *bhead)
 
   bfd->fileflags = fg->fileflags;
   bfd->globalf = fg->globalf;
-  BLI_strncpy(bfd->filename, fg->filename, sizeof(bfd->filename));
+  STRNCPY(bfd->filepath, fg->filepath);
 
-  /* Error in 2.65 and older: main->name was not set if you save from startup
+  /* Error in 2.65 and older: `main->filepath` was not set if you save from startup
    * (not after loading file). */
-  if (bfd->filename[0] == 0) {
+  if (bfd->filepath[0] == 0) {
     if (fd->fileversion < 265 || (fd->fileversion == 265 && fg->subversion < 1)) {
       if ((G.fileflags & G_FILE_RECOVER_READ) == 0) {
-        BLI_strncpy(bfd->filename, BKE_main_blendfile_path(bfd->main), sizeof(bfd->filename));
+        STRNCPY(bfd->filepath, BKE_main_blendfile_path(bfd->main));
       }
     }
 
-    /* early 2.50 version patch - filename not in FileGlobal struct at all */
+    /* early 2.50 version patch - filepath not in FileGlobal struct at all */
     if (fd->fileversion <= 250) {
-      BLI_strncpy(bfd->filename, BKE_main_blendfile_path(bfd->main), sizeof(bfd->filename));
+      STRNCPY(bfd->filepath, BKE_main_blendfile_path(bfd->main));
     }
   }
 
   if (G.fileflags & G_FILE_RECOVER_READ) {
-    BLI_strncpy(fd->relabase, fg->filename, sizeof(fd->relabase));
+    BLI_strncpy(fd->relabase, fg->filepath, sizeof(fd->relabase));
   }
 
   bfd->curscreen = fg->curscreen;
@@ -3670,7 +3620,7 @@ static void do_versions_after_linking(Main *main, ReportList *reports)
   CLOG_INFO(&LOG,
             2,
             "Processing %s (%s), %d.%d",
-            main->curlib ? main->curlib->filepath : main->name,
+            main->curlib ? main->curlib->filepath : main->filepath,
             main->curlib ? "LIB" : "MAIN",
             main->versionfile,
             main->subversionfile);
@@ -3908,7 +3858,7 @@ BlendFileData *blo_read_file_internal(FileData *fd, const char *filepath)
   if ((fd->skip_flags & BLO_READ_SKIP_DATA) == 0) {
     BLI_addtail(&mainlist, bfd->main);
     fd->mainlist = &mainlist;
-    BLI_strncpy(bfd->main->name, filepath, sizeof(bfd->main->name));
+    STRNCPY(bfd->main->filepath, filepath);
   }
 
   if (G.background) {
@@ -4383,23 +4333,11 @@ static void expand_id(BlendExpander *expander, ID *id)
   expand_id_embedded_id(expander, id);
 }
 
-/**
- * Set the callback func used over all ID data found by \a BLO_expand_main func.
- *
- * \param expand_doit_func: Called for each ID block it finds.
- */
 void BLO_main_expander(BLOExpandDoitCallback expand_doit_func)
 {
   expand_doit = expand_doit_func;
 }
 
-/**
- * Loop over all ID data in Main to mark relations.
- * Set (id->tag & LIB_TAG_NEED_EXPAND) to mark expanding. Flags get cleared after expanding.
- *
- * \param fdhandle: usually filedata, or own handle.
- * \param mainvar: the Main database to expand.
- */
 void BLO_expand_main(void *fdhandle, Main *mainvar)
 {
   ListBase *lbarray[INDEX_ID_MAX];
@@ -4492,15 +4430,6 @@ static ID *link_named_part(
   return id;
 }
 
-/**
- * Link a named data-block from an external blend file.
- *
- * \param mainl: The main database to link from (not the active one).
- * \param bh: The blender file handle.
- * \param idcode: The kind of data-block to link.
- * \param name: The name of the data-block (without the 2 char ID prefix).
- * \return the linked ID when found.
- */
 ID *BLO_library_link_named_part(Main *mainl,
                                 BlendHandle **bh,
                                 const short idcode,
@@ -4573,15 +4502,6 @@ void BLO_library_link_params_init_with_context(struct LibraryLink_Params *params
   }
 }
 
-/**
- * Initialize the #BlendHandle for linking library data.
- *
- * \param bh: A blender file handle as returned by
- * #BLO_blendhandle_from_file or #BLO_blendhandle_from_memory.
- * \param filepath: Used for relative linking, copied to the `lib->filepath`.
- * \param params: Settings for linking that don't change from beginning to end of linking.
- * \return the library #Main, to be passed to #BLO_library_link_named_part as \a mainl.
- */
 Main *BLO_library_link_begin(BlendHandle **bh,
                              const char *filepath,
                              const struct LibraryLink_Params *params)
@@ -4595,7 +4515,7 @@ static void split_main_newid(Main *mainptr, Main *main_newid)
   /* We only copy the necessary subset of data in this temp main. */
   main_newid->versionfile = mainptr->versionfile;
   main_newid->subversionfile = mainptr->subversionfile;
-  BLI_strncpy(main_newid->name, mainptr->name, sizeof(main_newid->name));
+  STRNCPY(main_newid->filepath, mainptr->filepath);
   main_newid->curlib = mainptr->curlib;
 
   ListBase *lbarray[INDEX_ID_MAX];
@@ -4706,15 +4626,6 @@ static void library_link_end(Main *mainl, FileData **fd, const int flag)
   }
 }
 
-/**
- * Finalize linking from a given .blend file (library).
- * Optionally instance the indirect object/collection in the scene when the flags are set.
- * \note Do not use \a bh after calling this function, it may frees it.
- *
- * \param mainl: The main database to link from (not the active one).
- * \param bh: The blender file handle (WARNING! may be freed by this function!).
- * \param params: Settings for linking that don't change from beginning to end of linking.
- */
 void BLO_library_link_end(Main *mainl, BlendHandle **bh, const struct LibraryLink_Params *params)
 {
   FileData *fd = (FileData *)(*bh);
@@ -5070,11 +4981,6 @@ bool BLO_read_requires_endian_switch(BlendDataReader *reader)
   return (reader->fd->flags & FD_FLAGS_SWITCH_ENDIAN) != 0;
 }
 
-/**
- * Updates all ->prev and ->next pointers of the list elements.
- * Updates the list->first and list->last pointers.
- * When not NULL, calls the callback on every element.
- */
 void BLO_read_list_cb(BlendDataReader *reader, ListBase *list, BlendReadListFn callback)
 {
   if (BLI_listbase_is_empty(list)) {

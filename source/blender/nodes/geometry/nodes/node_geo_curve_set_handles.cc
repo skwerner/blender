@@ -23,6 +23,8 @@
 
 namespace blender::nodes::node_geo_curve_set_handles_cc {
 
+NODE_STORAGE_FUNCS(NodeGeometryCurveSetHandles)
+
 static void node_declare(NodeDeclarationBuilder &b)
 {
   b.add_input<decl::Geometry>(N_("Curve")).supported_type(GEO_COMPONENT_TYPE_CURVE);
@@ -38,8 +40,7 @@ static void node_layout(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
 
 static void node_init(bNodeTree *UNUSED(tree), bNode *node)
 {
-  NodeGeometryCurveSetHandles *data = (NodeGeometryCurveSetHandles *)MEM_callocN(
-      sizeof(NodeGeometryCurveSetHandles), __func__);
+  NodeGeometryCurveSetHandles *data = MEM_cnew<NodeGeometryCurveSetHandles>(__func__);
 
   data->handle_type = GEO_NODE_CURVE_HANDLE_AUTO;
   data->mode = GEO_NODE_CURVE_HANDLE_LEFT;
@@ -64,10 +65,9 @@ static BezierSpline::HandleType handle_type_from_input_type(GeometryNodeCurveHan
 
 static void node_geo_exec(GeoNodeExecParams params)
 {
-  const NodeGeometryCurveSetHandles *node_storage =
-      (NodeGeometryCurveSetHandles *)params.node().storage;
-  const GeometryNodeCurveHandleType type = (GeometryNodeCurveHandleType)node_storage->handle_type;
-  const GeometryNodeCurveHandleMode mode = (GeometryNodeCurveHandleMode)node_storage->mode;
+  const NodeGeometryCurveSetHandles &storage = node_storage(params.node());
+  const GeometryNodeCurveHandleType type = (GeometryNodeCurveHandleType)storage.handle_type;
+  const GeometryNodeCurveHandleMode mode = (GeometryNodeCurveHandleMode)storage.mode;
 
   GeometrySet geometry_set = params.extract_input<GeometrySet>("Curve");
   Field<bool> selection_field = params.extract_input<Field<bool>>("Selection");
@@ -135,8 +135,7 @@ void register_node_type_geo_curve_set_handles()
   namespace file_ns = blender::nodes::node_geo_curve_set_handles_cc;
 
   static bNodeType ntype;
-  geo_node_type_base(
-      &ntype, GEO_NODE_CURVE_SET_HANDLES, "Set Handle Type", NODE_CLASS_GEOMETRY, 0);
+  geo_node_type_base(&ntype, GEO_NODE_CURVE_SET_HANDLES, "Set Handle Type", NODE_CLASS_GEOMETRY);
   ntype.declare = file_ns::node_declare;
   ntype.geometry_node_execute = file_ns::node_geo_exec;
   node_type_init(&ntype, file_ns::node_init);

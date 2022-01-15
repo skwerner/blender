@@ -104,7 +104,7 @@ typedef struct UndoMesh {
   int selectmode;
 
   /** \note
-   * this isn't a prefect solution, if you edit keys and change shapes this works well
+   * This isn't a perfect solution, if you edit keys and change shapes this works well
    * (fixing T32442), but editing shape keys, going into object mode, removing or changing their
    * order, then go back into editmode and undo will give issues - where the old index will be
    * out of sync with the new object index.
@@ -915,7 +915,6 @@ static void mesh_undosys_foreach_ID_ref(UndoStep *us_p,
   }
 }
 
-/* Export for ED_undo_sys. */
 void ED_mesh_undosys_type(UndoType *ut)
 {
   ut->name = "Edit Mesh";

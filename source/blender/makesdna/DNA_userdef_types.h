@@ -30,7 +30,8 @@
 extern "C" {
 #endif
 
-/* themes; defines in BIF_resource.h */
+/* Themes; defines in `BIF_resource.h`. */
+
 struct ColorBand;
 
 /* ************************ style definitions ******************** */
@@ -50,19 +51,20 @@ typedef enum eUIFont_ID {
   /* UIFONT_CUSTOM2 = 3, */ /* UNUSED */
 } eUIFont_ID;
 
-/* default fonts to load/initialize */
-/* first font is the default (index 0), others optional */
+/**
+ * Default fonts to load/initialize.
+ * First font is the default (index 0), others optional.
+ */
+#
+#
 typedef struct uiFont {
   struct uiFont *next, *prev;
   /** 1024 = FILE_MAX. */
-  char filename[1024];
+  char filepath[1024];
   /** From blfont lib. */
   short blf_id;
   /** Own id (eUIFont_ID). */
   short uifont_id;
-  /** Fonts that read from left to right. */
-  short r_to_l;
-  char _pad0[2];
 } uiFont;
 
 /** This state defines appearance of text. */
@@ -445,7 +447,7 @@ typedef enum eBackgroundGradientTypes {
   TH_BACKGROUND_GRADIENT_RADIAL = 2,
 } eBackgroundGradientTypes;
 
-/* set of colors for use as a custom color set for Objects/Bones wire drawing */
+/** Set of colors for use as a custom color set for Objects/Bones wire drawing. */
 typedef struct ThemeWireColor {
   unsigned char solid[4];
   unsigned char select[4];
@@ -959,7 +961,7 @@ typedef struct UserDef {
   UserDef_Runtime runtime;
 } UserDef;
 
-/* from blenkernel blender.c */
+/** From blenkernel `blender.c`. */
 extern UserDef U;
 
 /* ***************** USERDEF ****************** */
@@ -1142,6 +1144,7 @@ typedef enum eUserpref_GPU_Flag {
   USER_GPU_FLAG_NO_DEPT_PICK = (1 << 0),
   USER_GPU_FLAG_NO_EDIT_MODE_SMOOTH_WIRE = (1 << 1),
   USER_GPU_FLAG_OVERLAY_SMOOTH_WIRE = (1 << 2),
+  USER_GPU_FLAG_SUBDIVISION_EVALUATION = (1 << 3),
 } eUserpref_GPU_Flag;
 
 /** #UserDef.tablet_api */

@@ -21,7 +21,10 @@
  * \ingroup cmpnodes
  */
 
-#include "../node_composite_util.hh"
+#include "UI_interface.h"
+#include "UI_resources.h"
+
+#include "node_composite_util.hh"
 
 /* **************** Switch ******************** */
 
@@ -36,13 +39,19 @@ static void cmp_node_switch_declare(NodeDeclarationBuilder &b)
 
 }  // namespace blender::nodes
 
+static void node_composit_buts_switch(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
+{
+  uiItemR(layout, ptr, "check", UI_ITEM_R_SPLIT_EMPTY_NAME, nullptr, ICON_NONE);
+}
+
 /* custom1 = mix type */
-void register_node_type_cmp_switch(void)
+void register_node_type_cmp_switch()
 {
   static bNodeType ntype;
 
-  cmp_node_type_base(&ntype, CMP_NODE_SWITCH, "Switch", NODE_CLASS_LAYOUT, 0);
+  cmp_node_type_base(&ntype, CMP_NODE_SWITCH, "Switch", NODE_CLASS_LAYOUT);
   ntype.declare = blender::nodes::cmp_node_switch_declare;
+  ntype.draw_buttons = node_composit_buts_switch;
   node_type_size_preset(&ntype, NODE_SIZE_SMALL);
   nodeRegisterType(&ntype);
 }

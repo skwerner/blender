@@ -46,8 +46,7 @@ static void node_layout(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
 
 static void node_init(bNodeTree *UNUSED(tree), bNode *node)
 {
-  NodeAttributeClamp *data = (NodeAttributeClamp *)MEM_callocN(sizeof(NodeAttributeClamp),
-                                                               __func__);
+  NodeAttributeClamp *data = MEM_cnew<NodeAttributeClamp>(__func__);
   data->data_type = CD_PROP_FLOAT;
   data->operation = NODE_CLAMP_MINMAX;
   node->storage = data;
@@ -247,7 +246,7 @@ static void node_geo_exec(GeoNodeExecParams params)
 {
   GeometrySet geometry_set = params.extract_input<GeometrySet>("Geometry");
 
-  geometry_set = geometry_set_realize_instances(geometry_set);
+  geometry_set = geometry::realize_instances_legacy(geometry_set);
 
   if (geometry_set.has<MeshComponent>()) {
     clamp_attribute(geometry_set.get_component_for_write<MeshComponent>(), params);
@@ -271,7 +270,7 @@ void register_node_type_geo_attribute_clamp()
   static bNodeType ntype;
 
   geo_node_type_base(
-      &ntype, GEO_NODE_LEGACY_ATTRIBUTE_CLAMP, "Attribute Clamp", NODE_CLASS_ATTRIBUTE, 0);
+      &ntype, GEO_NODE_LEGACY_ATTRIBUTE_CLAMP, "Attribute Clamp", NODE_CLASS_ATTRIBUTE);
   node_type_init(&ntype, file_ns::node_init);
   node_type_update(&ntype, file_ns::node_update);
   ntype.declare = file_ns::node_declare;

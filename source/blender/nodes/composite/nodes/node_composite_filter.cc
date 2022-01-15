@@ -21,6 +21,9 @@
  * \ingroup cmpnodes
  */
 
+#include "UI_interface.h"
+#include "UI_resources.h"
+
 #include "node_composite_util.hh"
 
 /* **************** FILTER  ******************** */
@@ -36,13 +39,20 @@ static void cmp_node_filter_declare(NodeDeclarationBuilder &b)
 
 }  // namespace blender::nodes
 
-void register_node_type_cmp_filter(void)
+static void node_composit_buts_filter(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
+{
+  uiItemR(layout, ptr, "filter_type", UI_ITEM_R_SPLIT_EMPTY_NAME, "", ICON_NONE);
+}
+
+void register_node_type_cmp_filter()
 {
   static bNodeType ntype;
 
-  cmp_node_type_base(&ntype, CMP_NODE_FILTER, "Filter", NODE_CLASS_OP_FILTER, NODE_PREVIEW);
+  cmp_node_type_base(&ntype, CMP_NODE_FILTER, "Filter", NODE_CLASS_OP_FILTER);
   ntype.declare = blender::nodes::cmp_node_filter_declare;
-  node_type_label(&ntype, node_filter_label);
+  ntype.draw_buttons = node_composit_buts_filter;
+  ntype.labelfunc = node_filter_label;
+  ntype.flag |= NODE_PREVIEW;
 
   nodeRegisterType(&ntype);
 }

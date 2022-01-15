@@ -36,11 +36,11 @@ static void cmp_node_posterize_declare(NodeDeclarationBuilder &b)
 
 }  // namespace blender::nodes
 
-void register_node_type_cmp_posterize(void)
+void register_node_type_cmp_posterize()
 {
   static bNodeType ntype;
 
-  cmp_node_type_base(&ntype, CMP_NODE_POSTERIZE, "Posterize", NODE_CLASS_OP_COLOR, 0);
+  cmp_node_type_base(&ntype, CMP_NODE_POSTERIZE, "Posterize", NODE_CLASS_OP_COLOR);
   ntype.declare = blender::nodes::cmp_node_posterize_declare;
 
   nodeRegisterType(&ntype);

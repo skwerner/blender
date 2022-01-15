@@ -529,6 +529,30 @@ static void separate_point_cloud_selection(GeometrySet &geometry_set,
   geometry_set.replace_pointcloud(pointcloud);
 }
 
+static void separate_instance_selection(GeometrySet &geometry_set,
+                                        const Field<bool> &selection_field,
+                                        const bool invert)
+{
+  InstancesComponent &instances = geometry_set.get_component_for_write<InstancesComponent>();
+  GeometryComponentFieldContext field_context{instances, ATTR_DOMAIN_INSTANCE};
+
+  const int domain_size = instances.attribute_domain_size(ATTR_DOMAIN_INSTANCE);
+  fn::FieldEvaluator evaluator{field_context, domain_size};
+  evaluator.add(selection_field);
+  evaluator.evaluate();
+  const VArray_Span<bool> &selection = evaluator.get_evaluated<bool>(0);
+
+  Vector<int64_t> indices;
+  const IndexMask mask = index_mask_indices(selection, invert, indices);
+
+  if (mask.is_empty()) {
+    geometry_set.remove<InstancesComponent>();
+    return;
+  }
+
+  instances.remove_instances(mask);
+}
+
 static void compute_selected_vertices_from_vertex_selection(const Span<bool> vertex_selection,
                                                             const bool invert,
                                                             MutableSpan<int> r_vertex_map,
@@ -979,8 +1003,8 @@ static void do_mesh_separation(GeometrySet &geometry_set,
   /* Needed in all cases. */
   Vector<int> selected_poly_indices;
   Vector<int> new_loop_starts;
-  int num_selected_polys;
-  int num_selected_loops;
+  int num_selected_polys = 0;
+  int num_selected_loops = 0;
 
   const Mesh &mesh_in = *in_component.get_for_read();
   Mesh *mesh_out;
@@ -1261,7 +1285,7 @@ void separate_geometry(GeometrySet &geometry_set,
     }
   }
   if (geometry_set.has_mesh()) {
-    if (domain != ATTR_DOMAIN_CURVE) {
+    if (ELEM(domain, ATTR_DOMAIN_POINT, ATTR_DOMAIN_EDGE, ATTR_DOMAIN_FACE, ATTR_DOMAIN_CORNER)) {
       separate_mesh_selection(geometry_set, selection_field, domain, mode, invert);
       some_valid_domain = true;
     }
@@ -1272,12 +1296,20 @@ void separate_geometry(GeometrySet &geometry_set,
       some_valid_domain = true;
     }
   }
+  if (geometry_set.has_instances()) {
+    if (domain == ATTR_DOMAIN_INSTANCE) {
+      separate_instance_selection(geometry_set, selection_field, invert);
+      some_valid_domain = true;
+    }
+  }
   r_is_error = !some_valid_domain && geometry_set.has_realized_data();
 }
 
 }  // namespace blender::nodes
 
 namespace blender::nodes::node_geo_delete_geometry_cc {
+
+NODE_STORAGE_FUNCS(NodeGeometryDeleteGeometry)
 
 static void node_declare(NodeDeclarationBuilder &b)
 {
@@ -1293,7 +1325,7 @@ static void node_declare(NodeDeclarationBuilder &b)
 static void node_layout(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
 {
   const bNode *node = static_cast<bNode *>(ptr->data);
-  const NodeGeometryDeleteGeometry &storage = *(const NodeGeometryDeleteGeometry *)node->storage;
+  const NodeGeometryDeleteGeometry &storage = node_storage(*node);
   const AttributeDomain domain = static_cast<AttributeDomain>(storage.domain);
 
   uiItemR(layout, ptr, "domain", 0, "", ICON_NONE);
@@ -1305,8 +1337,7 @@ static void node_layout(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
 
 static void node_init(bNodeTree *UNUSED(tree), bNode *node)
 {
-  NodeGeometryDeleteGeometry *data = (NodeGeometryDeleteGeometry *)MEM_callocN(
-      sizeof(NodeGeometryDeleteGeometry), __func__);
+  NodeGeometryDeleteGeometry *data = MEM_cnew<NodeGeometryDeleteGeometry>(__func__);
   data->domain = ATTR_DOMAIN_POINT;
   data->mode = GEO_NODE_DELETE_GEOMETRY_MODE_ALL;
 
@@ -1319,22 +1350,20 @@ static void node_geo_exec(GeoNodeExecParams params)
 
   const Field<bool> selection_field = params.extract_input<Field<bool>>("Selection");
 
-  const bNode &node = params.node();
-  const NodeGeometryDeleteGeometry &storage = *(const NodeGeometryDeleteGeometry *)node.storage;
+  const NodeGeometryDeleteGeometry &storage = node_storage(params.node());
   const AttributeDomain domain = static_cast<AttributeDomain>(storage.domain);
-  const GeometryNodeDeleteGeometryMode mode = static_cast<GeometryNodeDeleteGeometryMode>(
-      storage.mode);
+  const GeometryNodeDeleteGeometryMode mode = (GeometryNodeDeleteGeometryMode)storage.mode;
 
-  bool all_is_error = false;
-  geometry_set.modify_geometry_sets([&](GeometrySet &geometry_set) {
-    bool this_is_error = false;
-    /* Invert here because we want to keep the things not in the selection. */
-    separate_geometry(geometry_set, domain, mode, selection_field, true, this_is_error);
-    all_is_error &= this_is_error;
-  });
-  if (all_is_error) {
-    /* Only show this if none of the instances/components actually changed. */
-    params.error_message_add(NodeWarningType::Info, TIP_("No geometry with given domain"));
+  if (domain == ATTR_DOMAIN_INSTANCE) {
+    bool is_error;
+    separate_geometry(geometry_set, domain, mode, selection_field, true, is_error);
+  }
+  else {
+    geometry_set.modify_geometry_sets([&](GeometrySet &geometry_set) {
+      bool is_error;
+      /* Invert here because we want to keep the things not in the selection. */
+      separate_geometry(geometry_set, domain, mode, selection_field, true, is_error);
+    });
   }
 
   params.set_output("Geometry", std::move(geometry_set));
@@ -1348,7 +1377,7 @@ void register_node_type_geo_delete_geometry()
 
   static bNodeType ntype;
 
-  geo_node_type_base(&ntype, GEO_NODE_DELETE_GEOMETRY, "Delete Geometry", NODE_CLASS_GEOMETRY, 0);
+  geo_node_type_base(&ntype, GEO_NODE_DELETE_GEOMETRY, "Delete Geometry", NODE_CLASS_GEOMETRY);
 
   node_type_storage(&ntype,
                     "NodeGeometryDeleteGeometry",

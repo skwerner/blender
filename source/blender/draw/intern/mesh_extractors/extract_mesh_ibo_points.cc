@@ -25,6 +25,7 @@
 
 #include "MEM_guardedalloc.h"
 
+#include "draw_subdivision.h"
 #include "extract_mesh.h"
 
 namespace blender::draw {
@@ -32,6 +33,7 @@ namespace blender::draw {
 /* ---------------------------------------------------------------------- */
 /** \name Extract Point Indices
  * \{ */
+
 static void extract_points_init(const MeshRenderData *mr,
                                 struct MeshBatchCache *UNUSED(cache),
                                 void *UNUSED(buf),
@@ -154,6 +156,76 @@ static void extract_points_finish(const MeshRenderData *UNUSED(mr),
   GPU_indexbuf_build_in_place(elb, ibo);
 }
 
+static void extract_points_init_subdiv(const DRWSubdivCache *subdiv_cache,
+                                       const MeshRenderData *UNUSED(mr),
+                                       struct MeshBatchCache *UNUSED(cache),
+                                       void *UNUSED(buffer),
+                                       void *data)
+{
+  GPUIndexBufBuilder *elb = static_cast<GPUIndexBufBuilder *>(data);
+  /* Copy the points as the data upload will free them. */
+  elb->data = (uint *)MEM_dupallocN(subdiv_cache->point_indices);
+  elb->index_len = subdiv_cache->num_subdiv_verts;
+  elb->index_min = 0;
+  elb->index_max = subdiv_cache->num_subdiv_loops - 1;
+  elb->prim_type = GPU_PRIM_POINTS;
+}
+
+static void extract_points_loose_geom_subdiv(const DRWSubdivCache *subdiv_cache,
+                                             const MeshRenderData *UNUSED(mr),
+                                             const MeshExtractLooseGeom *loose_geom,
+                                             void *UNUSED(buffer),
+                                             void *data)
+{
+  const int loop_loose_len = loose_geom->edge_len + loose_geom->vert_len;
+  if (loop_loose_len == 0) {
+    return;
+  }
+
+  GPUIndexBufBuilder *elb = static_cast<GPUIndexBufBuilder *>(data);
+
+  elb->data = static_cast<uint32_t *>(
+      MEM_reallocN(elb->data, sizeof(uint) * (subdiv_cache->num_subdiv_loops + loop_loose_len)));
+
+  const Mesh *coarse_mesh = subdiv_cache->mesh;
+  const MEdge *coarse_edges = coarse_mesh->medge;
+
+  uint offset = subdiv_cache->num_subdiv_loops;
+
+  for (int i = 0; i < loose_geom->edge_len; i++) {
+    const MEdge *loose_edge = &coarse_edges[loose_geom->edges[i]];
+    if (elb->data[loose_edge->v1] == -1u) {
+      elb->data[loose_edge->v1] = offset;
+    }
+    if (elb->data[loose_edge->v2] == -1u) {
+      elb->data[loose_edge->v2] = offset + 1;
+    }
+    elb->index_max += 2;
+    elb->index_len += 2;
+    offset += 2;
+  }
+
+  for (int i = 0; i < loose_geom->vert_len; i++) {
+    if (elb->data[loose_geom->verts[i]] == -1u) {
+      elb->data[loose_geom->verts[i]] = offset;
+    }
+    elb->index_max += 1;
+    elb->index_len += 1;
+    offset += 1;
+  }
+}
+
+static void extract_points_finish_subdiv(const DRWSubdivCache *UNUSED(subdiv_cache),
+                                         const MeshRenderData *UNUSED(mr),
+                                         struct MeshBatchCache *UNUSED(cache),
+                                         void *buf,
+                                         void *_userdata)
+{
+  GPUIndexBufBuilder *elb = static_cast<GPUIndexBufBuilder *>(_userdata);
+  GPUIndexBuf *ibo = static_cast<GPUIndexBuf *>(buf);
+  GPU_indexbuf_build_in_place(elb, ibo);
+}
+
 constexpr MeshExtract create_extractor_points()
 {
   MeshExtract extractor = {nullptr};
@@ -166,6 +238,9 @@ constexpr MeshExtract create_extractor_points()
   extractor.iter_lvert_mesh = extract_points_iter_lvert_mesh;
   extractor.task_reduce = extract_points_task_reduce;
   extractor.finish = extract_points_finish;
+  extractor.init_subdiv = extract_points_init_subdiv;
+  extractor.iter_loose_geom_subdiv = extract_points_loose_geom_subdiv;
+  extractor.finish_subdiv = extract_points_finish_subdiv;
   extractor.use_threading = true;
   extractor.data_type = MR_DATA_NONE;
   extractor.data_size = sizeof(GPUIndexBufBuilder);
@@ -173,10 +248,10 @@ constexpr MeshExtract create_extractor_points()
   return extractor;
 }
 
+/** \} */
+
 }  // namespace blender::draw
 
 extern "C" {
 const MeshExtract extract_points = blender::draw::create_extractor_points();
 }
-
-/** \} */

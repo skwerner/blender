@@ -16,8 +16,6 @@
 
 #include <cmath>
 
-//#include "node_geometry_util.hh"
-
 #include "BLI_listbase.h"
 #include "BLI_string.h"
 
@@ -28,7 +26,11 @@
 
 #include "node_function_util.hh"
 
+#include "NOD_socket_search_link.hh"
+
 namespace blender::nodes::node_fn_compare_cc {
+
+NODE_STORAGE_FUNCS(NodeFunctionCompare)
 
 static void fn_node_compare_declare(NodeDeclarationBuilder &b)
 {
@@ -57,9 +59,9 @@ static void fn_node_compare_declare(NodeDeclarationBuilder &b)
 
 static void geo_node_compare_layout(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
 {
-  const NodeFunctionCompare *data = (NodeFunctionCompare *)((bNode *)(ptr->data))->storage;
+  const NodeFunctionCompare &data = node_storage(*static_cast<const bNode *>(ptr->data));
   uiItemR(layout, ptr, "data_type", 0, "", ICON_NONE);
-  if (data->data_type == SOCK_VECTOR) {
+  if (data.data_type == SOCK_VECTOR) {
     uiItemR(layout, ptr, "mode", 0, "", ICON_NONE);
   }
   uiItemR(layout, ptr, "operation", 0, "", ICON_NONE);
@@ -95,15 +97,73 @@ static void node_compare_update(bNodeTree *ntree, bNode *node)
 
 static void node_compare_init(bNodeTree *UNUSED(tree), bNode *node)
 {
-  NodeFunctionCompare *data = (NodeFunctionCompare *)MEM_callocN(sizeof(NodeFunctionCompare),
-                                                                 __func__);
+  NodeFunctionCompare *data = MEM_cnew<NodeFunctionCompare>(__func__);
   data->operation = NODE_COMPARE_GREATER_THAN;
   data->data_type = SOCK_FLOAT;
   data->mode = NODE_COMPARE_MODE_ELEMENT;
   node->storage = data;
 }
 
-static void node_compare_label(bNodeTree *UNUSED(ntree), bNode *node, char *label, int maxlen)
+class SocketSearchOp {
+ public:
+  std::string socket_name;
+  eNodeSocketDatatype data_type;
+  NodeCompareOperation operation;
+  NodeCompareMode mode = NODE_COMPARE_MODE_ELEMENT;
+  void operator()(LinkSearchOpParams &params)
+  {
+    bNode &node = params.add_node("FunctionNodeCompare");
+    node_storage(node).data_type = data_type;
+    node_storage(node).operation = operation;
+    node_storage(node).mode = mode;
+    params.update_and_connect_available_socket(node, socket_name);
+  }
+};
+
+static void node_compare_gather_link_searches(GatherLinkSearchOpParams &params)
+{
+  const NodeDeclaration &declaration = *params.node_type().fixed_declaration;
+  if (params.in_out() == SOCK_OUT) {
+    search_link_ops_for_declarations(params, declaration.outputs());
+    return;
+  }
+
+  const eNodeSocketDatatype type = static_cast<eNodeSocketDatatype>(params.other_socket().type);
+
+  if (ELEM(type, SOCK_BOOLEAN, SOCK_FLOAT, SOCK_RGBA, SOCK_VECTOR, SOCK_INT, SOCK_STRING)) {
+    const eNodeSocketDatatype mode_type = (type == SOCK_BOOLEAN) ? SOCK_FLOAT : type;
+    const bool string_type = (type == SOCK_STRING);
+    /* Add socket A compare operations. */
+    for (const EnumPropertyItem *item = rna_enum_node_compare_operation_items;
+         item->identifier != nullptr;
+         item++) {
+      if (item->name != nullptr && item->identifier[0] != '\0') {
+        if (!string_type &&
+            ELEM(item->value, NODE_COMPARE_COLOR_BRIGHTER, NODE_COMPARE_COLOR_DARKER)) {
+          params.add_item(IFACE_(item->name),
+                          SocketSearchOp{"A", SOCK_RGBA, (NodeCompareOperation)item->value});
+        }
+        else if ((!string_type) ||
+                 (string_type && ELEM(item->value, NODE_COMPARE_EQUAL, NODE_COMPARE_NOT_EQUAL))) {
+          params.add_item(IFACE_(item->name),
+                          SocketSearchOp{"A", mode_type, (NodeCompareOperation)item->value});
+        }
+      }
+    }
+    /* Add Angle socket. */
+    if (!string_type) {
+      params.add_item(
+          IFACE_("Angle"),
+          SocketSearchOp{
+              "Angle", SOCK_VECTOR, NODE_COMPARE_GREATER_THAN, NODE_COMPARE_MODE_DIRECTION});
+    }
+  }
+}
+
+static void node_compare_label(const bNodeTree *UNUSED(ntree),
+                               const bNode *node,
+                               char *label,
+                               int maxlen)
 {
   const NodeFunctionCompare *data = (NodeFunctionCompare *)node->storage;
   const char *name;
@@ -477,14 +537,15 @@ void register_node_type_fn_compare()
   namespace file_ns = blender::nodes::node_fn_compare_cc;
 
   static bNodeType ntype;
-  fn_node_type_base(&ntype, FN_NODE_COMPARE, "Compare", NODE_CLASS_CONVERTER, 0);
+  fn_node_type_base(&ntype, FN_NODE_COMPARE, "Compare", NODE_CLASS_CONVERTER);
   ntype.declare = file_ns::fn_node_compare_declare;
-  node_type_label(&ntype, file_ns::node_compare_label);
+  ntype.labelfunc = file_ns::node_compare_label;
   node_type_update(&ntype, file_ns::node_compare_update);
   node_type_init(&ntype, file_ns::node_compare_init);
   node_type_storage(
       &ntype, "NodeFunctionCompare", node_free_standard_storage, node_copy_standard_storage);
   ntype.build_multi_function = file_ns::fn_node_compare_build_multi_function;
   ntype.draw_buttons = file_ns::geo_node_compare_layout;
+  ntype.gather_link_search_ops = file_ns::node_compare_gather_link_searches;
   nodeRegisterType(&ntype);
 }

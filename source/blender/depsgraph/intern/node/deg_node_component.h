@@ -67,6 +67,7 @@ struct ComponentNode : public Node {
   ComponentNode();
   ~ComponentNode();
 
+  /** Initialize 'component' node - from pointer data given. */
   void init(const ID *id, const char *subdata) override;
 
   virtual string identifier() const override;
@@ -221,9 +222,11 @@ DEG_COMPONENT_NODE_DECLARE_GENERIC(Armature);
 DEG_COMPONENT_NODE_DECLARE_GENERIC(GenericDatablock);
 DEG_COMPONENT_NODE_DECLARE_NO_COW(Visibility);
 DEG_COMPONENT_NODE_DECLARE_GENERIC(Simulation);
+DEG_COMPONENT_NODE_DECLARE_GENERIC(NTreeOutput);
 
 /* Bone Component */
 struct BoneComponentNode : public ComponentNode {
+  /** Initialize 'bone component' node - from pointer data given. */
   void init(const ID *id, const char *subdata);
 
   struct bPoseChannel *pchan; /* the bone that this component represents */

@@ -297,7 +297,7 @@ static void image_refresh(const bContext *C, ScrArea *area)
   ima = ED_space_image(sima);
   BKE_image_user_frame_calc(ima, &sima->iuser, scene->r.cfra);
 
-  /* check if we have to set the image from the editmesh */
+  /* Check if we have to set the image from the edit-mesh. */
   if (ima && (ima->source == IMA_SRC_VIEWER && sima->mode == SI_MODE_MASK)) {
     if (scene->nodetree) {
       Mask *mask = ED_space_image_get_mask(sima);
@@ -1042,7 +1042,6 @@ static void image_space_subtype_item_extend(bContext *UNUSED(C),
 
 /**************************** spacetype *****************************/
 
-/* only called once, from space/spacetypes.c */
 void ED_spacetype_image(void)
 {
   SpaceType *st = MEM_callocN(sizeof(SpaceType), "spacetype image");

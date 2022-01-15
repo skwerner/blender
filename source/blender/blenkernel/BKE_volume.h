@@ -88,6 +88,7 @@ const char *BKE_volume_grids_frame_filepath(const struct Volume *volume);
 const VolumeGrid *BKE_volume_grid_get_for_read(const struct Volume *volume, int grid_index);
 VolumeGrid *BKE_volume_grid_get_for_write(struct Volume *volume, int grid_index);
 const VolumeGrid *BKE_volume_grid_active_get_for_read(const struct Volume *volume);
+/* Tries to find a grid with the given name. Make sure that the volume has been loaded. */
 const VolumeGrid *BKE_volume_grid_find_for_read(const struct Volume *volume, const char *name);
 
 /* Grid
@@ -115,9 +116,13 @@ void BKE_volume_grid_unload(const struct Volume *volume, const struct VolumeGrid
 bool BKE_volume_grid_is_loaded(const struct VolumeGrid *grid);
 
 /* Metadata */
+
 const char *BKE_volume_grid_name(const struct VolumeGrid *grid);
 VolumeGridType BKE_volume_grid_type(const struct VolumeGrid *grid);
 int BKE_volume_grid_channels(const struct VolumeGrid *grid);
+/**
+ * Transformation from index space to object space.
+ */
 void BKE_volume_grid_transform_matrix(const struct VolumeGrid *grid, float mat[4][4]);
 
 /* Volume Editing
@@ -184,7 +189,7 @@ openvdb::GridBase::ConstPtr BKE_volume_grid_openvdb_for_read(const struct Volume
                                                              const struct VolumeGrid *grid);
 openvdb::GridBase::Ptr BKE_volume_grid_openvdb_for_write(const struct Volume *volume,
                                                          struct VolumeGrid *grid,
-                                                         const bool clear);
+                                                         bool clear);
 
 VolumeGridType BKE_volume_grid_type_openvdb(const openvdb::GridBase &grid);
 
@@ -224,9 +229,7 @@ auto BKE_volume_grid_type_operation(const VolumeGridType grid_type, OpType &&op)
 }
 
 openvdb::GridBase::Ptr BKE_volume_grid_create_with_changed_resolution(
-    const VolumeGridType grid_type,
-    const openvdb::GridBase &old_grid,
-    const float resolution_factor);
+    const VolumeGridType grid_type, const openvdb::GridBase &old_grid, float resolution_factor);
 
 #  endif
 #endif

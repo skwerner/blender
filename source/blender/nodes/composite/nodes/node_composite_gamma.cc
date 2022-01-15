@@ -40,11 +40,11 @@ static void cmp_node_gamma_declare(NodeDeclarationBuilder &b)
 
 }  // namespace blender::nodes
 
-void register_node_type_cmp_gamma(void)
+void register_node_type_cmp_gamma()
 {
   static bNodeType ntype;
 
-  cmp_node_type_base(&ntype, CMP_NODE_GAMMA, "Gamma", NODE_CLASS_OP_COLOR, 0);
+  cmp_node_type_base(&ntype, CMP_NODE_GAMMA, "Gamma", NODE_CLASS_OP_COLOR);
   ntype.declare = blender::nodes::cmp_node_gamma_declare;
 
   nodeRegisterType(&ntype);

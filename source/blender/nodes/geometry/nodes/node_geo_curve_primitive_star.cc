@@ -54,19 +54,24 @@ static std::unique_ptr<CurveEval> create_star_curve(const float inner_radius,
 {
   std::unique_ptr<CurveEval> curve = std::make_unique<CurveEval>();
   std::unique_ptr<PolySpline> spline = std::make_unique<PolySpline>();
+  spline->set_cyclic(true);
+
+  spline->resize(points * 2);
+  MutableSpan<float3> positions = spline->positions();
+  spline->radii().fill(1.0f);
+  spline->tilts().fill(0.0f);
 
   const float theta_step = (2.0f * M_PI) / float(points);
-  for (int i : IndexRange(points)) {
+  for (const int i : IndexRange(points)) {
     const float x = outer_radius * cos(theta_step * i);
     const float y = outer_radius * sin(theta_step * i);
-    spline->add_point(float3(x, y, 0.0f), 1.0f, 0.0f);
+    positions[i * 2] = {x, y, 0.0f};
 
     const float inner_x = inner_radius * cos(theta_step * i + theta_step * 0.5f + twist);
     const float inner_y = inner_radius * sin(theta_step * i + theta_step * 0.5f + twist);
-    spline->add_point(float3(inner_x, inner_y, 0.0f), 1.0f, 0.0f);
+    positions[i * 2 + 1] = {inner_x, inner_y, 0.0f};
   }
-  spline->set_cyclic(true);
-  spline->attributes.reallocate(spline->size());
+
   curve->add_spline(std::move(spline));
   curve->attributes.reallocate(curve->splines().size());
 
@@ -110,7 +115,7 @@ void register_node_type_geo_curve_primitive_star()
   namespace file_ns = blender::nodes::node_geo_curve_primitive_star_cc;
 
   static bNodeType ntype;
-  geo_node_type_base(&ntype, GEO_NODE_CURVE_PRIMITIVE_STAR, "Star", NODE_CLASS_GEOMETRY, 0);
+  geo_node_type_base(&ntype, GEO_NODE_CURVE_PRIMITIVE_STAR, "Star", NODE_CLASS_GEOMETRY);
   ntype.declare = file_ns::node_declare;
   ntype.geometry_node_execute = file_ns::node_geo_exec;
   nodeRegisterType(&ntype);

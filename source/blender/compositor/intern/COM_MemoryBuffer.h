@@ -132,9 +132,17 @@ class MemoryBuffer {
    */
   MemoryBuffer(DataType data_type, const rcti &rect, bool is_a_single_elem = false);
 
+  /**
+   * Construct MemoryBuffer from a float buffer. MemoryBuffer is not responsible for
+   * freeing it.
+   */
   MemoryBuffer(
       float *buffer, int num_channels, int width, int height, bool is_a_single_elem = false);
 
+  /**
+   * Construct MemoryBuffer from a float buffer area. MemoryBuffer is not responsible for
+   * freeing given buffer.
+   */
   MemoryBuffer(float *buffer, int num_channels, const rcti &rect, bool is_a_single_elem = false);
 
   /**
@@ -278,8 +286,7 @@ class MemoryBuffer {
     }
   }
 
-  void read_elem_filtered(
-      const float x, const float y, float dx[2], float dy[2], float *out) const;
+  void read_elem_filtered(float x, float y, float dx[2], float dy[2], float *out) const;
 
   /**
    * Get channel value at given coordinates.
@@ -377,6 +384,10 @@ class MemoryBuffer {
     return buffer_;
   }
 
+  /**
+   * Converts a single elem buffer to a full size buffer (allocates memory for all
+   * elements in resolution).
+   */
   MemoryBuffer *inflate() const;
 
   inline void wrap_pixel(int &x, int &y, MemoryBufferExtend extend_x, MemoryBufferExtend extend_y)
@@ -710,18 +721,15 @@ class MemoryBuffer {
   void copy_single_elem_from(const MemoryBuffer *src,
                              int channel_offset,
                              int elem_size,
-                             const int to_channel_offset);
-  void copy_rows_from(const MemoryBuffer *src,
-                      const rcti &src_area,
-                      const int to_x,
-                      const int to_y);
+                             int to_channel_offset);
+  void copy_rows_from(const MemoryBuffer *src, const rcti &src_area, int to_x, int to_y);
   void copy_elems_from(const MemoryBuffer *src,
                        const rcti &area,
-                       const int channel_offset,
-                       const int elem_size,
-                       const int to_x,
-                       const int to_y,
-                       const int to_channel_offset);
+                       int channel_offset,
+                       int elem_size,
+                       int to_x,
+                       int to_y,
+                       int to_channel_offset);
 
 #ifdef WITH_CXX_GUARDEDALLOC
   MEM_CXX_CLASS_ALLOC_FUNCS("COM:MemoryBuffer")

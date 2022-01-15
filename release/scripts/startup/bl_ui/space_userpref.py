@@ -596,9 +596,11 @@ class USERPREF_PT_system_cycles_devices(SystemPanel, CenterAlignMixIn, Panel):
 
     @classmethod
     def poll(cls, _context):
-        # No GPU rendering on macOS currently.
+        # No GPU rendering on macOS x86_64 currently.
+        import platform
         import sys
-        return bpy.app.build_options.cycles and sys.platform != "darwin"
+        return bpy.app.build_options.cycles and \
+               (sys.platform != "darwin" or platform.machine() == "arm64")
 
     def draw_centered(self, context, layout):
         prefs = context.preferences
@@ -768,6 +770,17 @@ class USERPREF_PT_viewport_selection(ViewportPanel, CenterAlignMixIn, Panel):
         system = prefs.system
 
         layout.prop(system, "use_select_pick_depth")
+
+
+class USERPREF_PT_viewport_subdivision(ViewportPanel, CenterAlignMixIn, Panel):
+    bl_label = "Subdivision"
+    bl_options = {'DEFAULT_CLOSED'}
+
+    def draw_centered(self, context, layout):
+        prefs = context.preferences
+        system = prefs.system
+
+        layout.prop(system, "use_gpu_subdivision")
 
 
 # -----------------------------------------------------------------------------
@@ -2340,6 +2353,7 @@ classes = (
     USERPREF_PT_viewport_quality,
     USERPREF_PT_viewport_textures,
     USERPREF_PT_viewport_selection,
+    USERPREF_PT_viewport_subdivision,
 
     USERPREF_PT_edit_objects,
     USERPREF_PT_edit_objects_new,

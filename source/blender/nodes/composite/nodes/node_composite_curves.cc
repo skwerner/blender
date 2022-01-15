@@ -21,6 +21,9 @@
  * \ingroup cmpnodes
  */
 
+#include "UI_interface.h"
+#include "UI_resources.h"
+
 #include "node_composite_util.hh"
 
 /* **************** CURVE Time  ******************** */
@@ -42,13 +45,13 @@ static void node_composit_init_curves_time(bNodeTree *UNUSED(ntree), bNode *node
   node->storage = BKE_curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
 }
 
-void register_node_type_cmp_curve_time(void)
+void register_node_type_cmp_curve_time()
 {
   static bNodeType ntype;
 
-  cmp_node_type_base(&ntype, CMP_NODE_TIME, "Time", NODE_CLASS_INPUT, 0);
+  cmp_node_type_base(&ntype, CMP_NODE_TIME, "Time", NODE_CLASS_INPUT);
   ntype.declare = blender::nodes::cmp_node_time_declare;
-  node_type_size(&ntype, 140, 100, 320);
+  node_type_size(&ntype, 200, 140, 320);
   node_type_init(&ntype, node_composit_init_curves_time);
   node_type_storage(&ntype, "CurveMapping", node_free_curves, node_copy_curves);
 
@@ -72,12 +75,18 @@ static void node_composit_init_curve_vec(bNodeTree *UNUSED(ntree), bNode *node)
   node->storage = BKE_curvemapping_add(3, -1.0f, -1.0f, 1.0f, 1.0f);
 }
 
-void register_node_type_cmp_curve_vec(void)
+static void node_buts_curvevec(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
+{
+  uiTemplateCurveMapping(layout, ptr, "mapping", 'v', false, false, false, false);
+}
+
+void register_node_type_cmp_curve_vec()
 {
   static bNodeType ntype;
 
-  cmp_node_type_base(&ntype, CMP_NODE_CURVE_VEC, "Vector Curves", NODE_CLASS_OP_VECTOR, 0);
+  cmp_node_type_base(&ntype, CMP_NODE_CURVE_VEC, "Vector Curves", NODE_CLASS_OP_VECTOR);
   ntype.declare = blender::nodes::cmp_node_curve_vec_declare;
+  ntype.draw_buttons = node_buts_curvevec;
   node_type_size(&ntype, 200, 140, 320);
   node_type_init(&ntype, node_composit_init_curve_vec);
   node_type_storage(&ntype, "CurveMapping", node_free_curves, node_copy_curves);
@@ -106,11 +115,11 @@ static void node_composit_init_curve_rgb(bNodeTree *UNUSED(ntree), bNode *node)
   node->storage = BKE_curvemapping_add(4, 0.0f, 0.0f, 1.0f, 1.0f);
 }
 
-void register_node_type_cmp_curve_rgb(void)
+void register_node_type_cmp_curve_rgb()
 {
   static bNodeType ntype;
 
-  cmp_node_type_base(&ntype, CMP_NODE_CURVE_RGB, "RGB Curves", NODE_CLASS_OP_COLOR, 0);
+  cmp_node_type_base(&ntype, CMP_NODE_CURVE_RGB, "RGB Curves", NODE_CLASS_OP_COLOR);
   ntype.declare = blender::nodes::cmp_node_rgbcurves_declare;
   node_type_size(&ntype, 200, 140, 320);
   node_type_init(&ntype, node_composit_init_curve_rgb);

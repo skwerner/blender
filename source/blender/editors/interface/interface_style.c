@@ -173,11 +173,11 @@ void UI_fontstyle_draw_ex(const uiFontStyle *fs,
   BLF_enable(fs->uifont_id, font_flag);
 
   if (fs_params->word_wrap == 1) {
-    /* draw from boundbox top */
+    /* Draw from bound-box top. */
     yofs = BLI_rcti_size_y(rect) - BLF_height_max(fs->uifont_id);
   }
   else {
-    /* draw from boundbox center */
+    /* Draw from bound-box center. */
     const float height = BLF_ascender(fs->uifont_id) + BLF_descender(fs->uifont_id);
     yofs = ceil(0.5f * (BLI_rcti_size_y(rect) - height));
   }
@@ -219,7 +219,6 @@ void UI_fontstyle_draw(const uiFontStyle *fs,
   UI_fontstyle_draw_ex(fs, rect, str, col, fs_params, BLF_DRAW_STR_DUMMY_MAX, &xofs, &yofs, NULL);
 }
 
-/* drawn same as above, but at 90 degree angle */
 void UI_fontstyle_draw_rotated(const uiFontStyle *fs,
                                const rcti *rect,
                                const char *str,
@@ -279,12 +278,6 @@ void UI_fontstyle_draw_rotated(const uiFontStyle *fs,
   }
 }
 
-/**
- * Similar to #UI_fontstyle_draw
- * but ignore alignment, shadow & no clipping rect.
- *
- * For drawing on-screen labels.
- */
 void UI_fontstyle_draw_simple(
     const uiFontStyle *fs, float x, float y, const char *str, const uchar col[4])
 {
@@ -294,9 +287,6 @@ void UI_fontstyle_draw_simple(
   BLF_draw(fs->uifont_id, str, BLF_DRAW_STR_DUMMY_MAX);
 }
 
-/**
- * Same as #UI_fontstyle_draw but draw a colored backdrop.
- */
 void UI_fontstyle_draw_simple_backdrop(const uiFontStyle *fs,
                                        float x,
                                        float y,
@@ -331,7 +321,7 @@ void UI_fontstyle_draw_simple_backdrop(const uiFontStyle *fs,
 }
 
 /* ************** helpers ************************ */
-/* XXX: read a style configure */
+
 const uiStyle *UI_style_get(void)
 {
 #if 0
@@ -344,7 +334,6 @@ const uiStyle *UI_style_get(void)
 #endif
 }
 
-/* for drawing, scaled with DPI setting */
 const uiStyle *UI_style_get_dpi(void)
 {
   const uiStyle *style = UI_style_get();
@@ -376,16 +365,6 @@ int UI_fontstyle_string_width(const uiFontStyle *fs, const char *str)
   return (int)BLF_width(fs->uifont_id, str, BLF_DRAW_STR_DUMMY_MAX);
 }
 
-/**
- * Return the width of `str` with the spacing & kerning of `fs` with `aspect`
- * (representing #uiBlock.aspect) applied.
- *
- * When calculating text width, the UI layout logic calculate widths without scale,
- * only applying scale when drawing. This causes problems for fonts since kerning at
- * smaller sizes often makes them wider than a scaled down version of the larger text.
- * Resolve this by calculating the text at the on-screen size,
- * returning the result scaled back to 1:1. See T92361.
- */
 int UI_fontstyle_string_width_with_block_aspect(const uiFontStyle *fs,
                                                 const char *str,
                                                 const float aspect)
@@ -415,8 +394,6 @@ int UI_fontstyle_height_max(const uiFontStyle *fs)
 
 /* ************** init exit ************************ */
 
-/* called on each startup.blend read */
-/* reading without uifont will create one */
 void uiStyleInit(void)
 {
   const uiStyle *style = U.uistyles.first;
@@ -450,11 +427,11 @@ void uiStyleInit(void)
   }
 
   if (U.font_path_ui[0]) {
-    BLI_strncpy(font_first->filename, U.font_path_ui, sizeof(font_first->filename));
+    BLI_strncpy(font_first->filepath, U.font_path_ui, sizeof(font_first->filepath));
     font_first->uifont_id = UIFONT_CUSTOM1;
   }
   else {
-    BLI_strncpy(font_first->filename, "default", sizeof(font_first->filename));
+    BLI_strncpy(font_first->filepath, "default", sizeof(font_first->filepath));
     font_first->uifont_id = UIFONT_DEFAULT;
   }
 
@@ -465,7 +442,7 @@ void uiStyleInit(void)
       font->blf_id = BLF_load_default(unique);
     }
     else {
-      font->blf_id = BLF_load(font->filename);
+      font->blf_id = BLF_load(font->filepath);
       if (font->blf_id == -1) {
         font->blf_id = BLF_load_default(unique);
       }

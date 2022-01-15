@@ -36,16 +36,14 @@ static void set_tilt_in_component(GeometryComponent &component,
     return;
   }
 
-  fn::FieldEvaluator selection_evaluator{field_context, domain_size};
-  selection_evaluator.add(selection_field);
-  selection_evaluator.evaluate();
-  const IndexMask selection = selection_evaluator.get_evaluated_as_mask(0);
-
   OutputAttribute_Typed<float> tilts = component.attribute_try_get_for_output_only<float>(
       "tilt", ATTR_DOMAIN_POINT);
-  fn::FieldEvaluator tilt_evaluator{field_context, &selection};
-  tilt_evaluator.add_with_destination(tilt_field, tilts.varray());
-  tilt_evaluator.evaluate();
+
+  fn::FieldEvaluator evaluator{field_context, domain_size};
+  evaluator.set_selection(selection_field);
+  evaluator.add_with_destination(tilt_field, tilts.varray());
+  evaluator.evaluate();
+
   tilts.save();
 }
 
@@ -73,7 +71,7 @@ void register_node_type_geo_set_curve_tilt()
 
   static bNodeType ntype;
 
-  geo_node_type_base(&ntype, GEO_NODE_SET_CURVE_TILT, "Set Curve Tilt", NODE_CLASS_GEOMETRY, 0);
+  geo_node_type_base(&ntype, GEO_NODE_SET_CURVE_TILT, "Set Curve Tilt", NODE_CLASS_GEOMETRY);
   ntype.geometry_node_execute = file_ns::node_geo_exec;
   ntype.declare = file_ns::node_declare;
   nodeRegisterType(&ntype);

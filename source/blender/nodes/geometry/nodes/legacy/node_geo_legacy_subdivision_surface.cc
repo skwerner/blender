@@ -47,8 +47,7 @@ static void node_layout(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
 
 static void node_init(bNodeTree *UNUSED(ntree), bNode *node)
 {
-  NodeGeometrySubdivisionSurface *data = (NodeGeometrySubdivisionSurface *)MEM_callocN(
-      sizeof(NodeGeometrySubdivisionSurface), __func__);
+  NodeGeometrySubdivisionSurface *data = MEM_cnew<NodeGeometrySubdivisionSurface>(__func__);
   data->uv_smooth = SUBSURF_UV_SMOOTH_PRESERVE_BOUNDARIES;
   data->boundary_smooth = SUBSURF_BOUNDARY_SMOOTH_ALL;
   node->storage = data;
@@ -58,7 +57,7 @@ static void node_geo_exec(GeoNodeExecParams params)
 {
   GeometrySet geometry_set = params.extract_input<GeometrySet>("Geometry");
 
-  geometry_set = geometry_set_realize_instances(geometry_set);
+  geometry_set = geometry::realize_instances_legacy(geometry_set);
 
   if (!geometry_set.has_mesh()) {
     params.set_output("Geometry", geometry_set);
@@ -133,7 +132,7 @@ void register_node_type_geo_legacy_subdivision_surface()
   static bNodeType ntype;
 
   geo_node_type_base(
-      &ntype, GEO_NODE_LEGACY_SUBDIVISION_SURFACE, "Subdivision Surface", NODE_CLASS_GEOMETRY, 0);
+      &ntype, GEO_NODE_LEGACY_SUBDIVISION_SURFACE, "Subdivision Surface", NODE_CLASS_GEOMETRY);
   ntype.declare = file_ns::node_declare;
   ntype.geometry_node_execute = file_ns::node_geo_exec;
   ntype.draw_buttons = file_ns::node_layout;

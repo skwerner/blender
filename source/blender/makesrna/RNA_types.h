@@ -23,6 +23,7 @@
 #define __RNA_TYPES_H__
 
 #include "../blenlib/BLI_sys_types.h"
+#include "BLI_utildefines.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -265,7 +266,8 @@ typedef enum PropertyFlag {
    * This is crucial information for processes that walk the whole data of an ID e.g.
    * (like library override).
    * Note that all ID pointers are enforced to this by default,
-   * this probably will need to be rechecked (see ugly infamous NodeTrees of mat/tex/scene/etc.).
+   * this probably will need to be rechecked
+   * (see ugly infamous node-trees of material/texture/scene/etc.).
    */
   PROP_PTR_NO_OWNERSHIP = (1 << 7),
 
@@ -313,6 +315,7 @@ typedef enum PropertyFlag {
    */
   PROP_NO_DEG_UPDATE = (1 << 30),
 } PropertyFlag;
+ENUM_OPERATORS(PropertyFlag, PROP_TEXTEDIT_UPDATE);
 
 /**
  * Flags related to comparing and overriding RNA properties.

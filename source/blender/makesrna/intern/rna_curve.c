@@ -141,8 +141,6 @@ const EnumPropertyItem rna_enum_beztriple_interpolation_mode_items[] = {
 static const EnumPropertyItem curve_type_items[] = {
     {CU_POLY, "POLY", 0, "Poly", ""},
     {CU_BEZIER, "BEZIER", 0, "Bezier", ""},
-    {CU_BSPLINE, "BSPLINE", 0, "BSpline", ""},
-    {CU_CARDINAL, "CARDINAL", 0, "Cardinal", ""},
     {CU_NURBS, "NURBS", 0, "Ease", ""},
     {0, NULL, 0, NULL, NULL},
 };
@@ -455,8 +453,8 @@ static void rna_Curve_bevelObject_set(PointerRNA *ptr,
   Object *ob = (Object *)value.data;
 
   if (ob) {
-    /* if bevel object has got the save curve, as object, for which it's */
-    /* set as bevobj, there could be infinity loop in displist calculation */
+    /* If bevel object has got the save curve, as object, for which it's set as bevobj,
+     * there could be infinity loop in #DispList calculation. */
     if (ob->type == OB_CURVE && ob->data != cu) {
       cu->bevobj = ob;
       id_lib_extern((ID *)ob);
@@ -530,8 +528,8 @@ static void rna_Curve_taperObject_set(PointerRNA *ptr,
   Object *ob = (Object *)value.data;
 
   if (ob) {
-    /* if taper object has got the save curve, as object, for which it's */
-    /* set as bevobj, there could be infinity loop in displist calculation */
+    /* If taper object has got the save curve, as object, for which it's set as bevobj,
+     * there could be infinity loop in #DispList calculation. */
     if (ob->type == OB_CURVE && ob->data != cu) {
       cu->taperobj = ob;
       id_lib_extern((ID *)ob);

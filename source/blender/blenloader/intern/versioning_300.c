@@ -30,6 +30,7 @@
 #include "BLI_math_vector.h"
 #include "BLI_path_util.h"
 #include "BLI_string.h"
+#include "BLI_string_utils.h"
 #include "BLI_utildefines.h"
 
 #include "DNA_anim_types.h"
@@ -44,6 +45,8 @@
 #include "DNA_listBase.h"
 #include "DNA_material_types.h"
 #include "DNA_modifier_types.h"
+#include "DNA_screen_types.h"
+#include "DNA_space_types.h"
 #include "DNA_text_types.h"
 #include "DNA_workspace_types.h"
 
@@ -57,6 +60,7 @@
 #include "BKE_fcurve.h"
 #include "BKE_fcurve_driver.h"
 #include "BKE_idprop.h"
+#include "BKE_image.h"
 #include "BKE_lib_id.h"
 #include "BKE_lib_override.h"
 #include "BKE_main.h"
@@ -592,7 +596,7 @@ static bNodeTree *add_realize_node_tree(Main *bmain)
     nodeSetSelected(node, false);
   }
 
-  ntreeUpdateTree(bmain, node_tree);
+  version_socket_update_is_used(node_tree);
   return node_tree;
 }
 
@@ -790,6 +794,40 @@ void do_versions_after_linking_300(Main *bmain, ReportList *UNUSED(reports))
    */
   {
     /* Keep this block, even when empty. */
+
+    { /* Ensure driver variable names are unique within the driver. */
+      ID *id;
+      FOREACH_MAIN_ID_BEGIN (bmain, id) {
+        AnimData *adt = BKE_animdata_from_id(id);
+        if (adt == NULL) {
+          continue;
+        }
+        LISTBASE_FOREACH (FCurve *, fcu, &adt->drivers) {
+          ChannelDriver *driver = fcu->driver;
+          /* Ensure the uniqueness front to back. Given a list of identically
+           * named variables, the last one gets to keep its original name. This
+           * matches the evaluation order, and thus shouldn't change the evaluated
+           * value of the driver expression. */
+          LISTBASE_FOREACH (DriverVar *, dvar, &driver->variables) {
+            BLI_uniquename(&driver->variables,
+                           dvar,
+                           dvar->name,
+                           '_',
+                           offsetof(DriverVar, name),
+                           sizeof(dvar->name));
+          }
+        }
+      }
+      FOREACH_MAIN_ID_END;
+    }
+
+    /* Ensure tiled image sources contain a UDIM token. */
+    LISTBASE_FOREACH (Image *, ima, &bmain->images) {
+      if (ima->source == IMA_SRC_TILED) {
+        char *filename = (char *)BLI_path_basename(ima->filepath);
+        BKE_image_ensure_tile_token(filename);
+      }
+    }
   }
 }
 
@@ -2035,7 +2073,7 @@ void blo_do_versions_300(FileData *fd, Library *UNUSED(lib), Main *bmain)
               SpaceFile *sfile = (SpaceFile *)sl;
               if (sfile->params) {
                 sfile->params->flag &= ~(FILE_PARAMS_FLAG_UNUSED_1 | FILE_PARAMS_FLAG_UNUSED_2 |
-                                         FILE_PARAMS_FLAG_UNUSED_3 | FILE_PARAMS_FLAG_UNUSED_4);
+                                         FILE_PARAMS_FLAG_UNUSED_3 | FILE_PATH_TOKENS_ALLOW);
               }
 
               /* New default import type: Append with reuse. */
@@ -2414,7 +2452,6 @@ void blo_do_versions_300(FileData *fd, Library *UNUSED(lib), Main *bmain)
             data->data_type = SOCK_FLOAT;
             data->operation = node->custom1;
             strcpy(node->idname, "FunctionNodeCompare");
-            node->update = NODE_UPDATE;
             node->storage = data;
           }
         }
@@ -2434,6 +2471,20 @@ void blo_do_versions_300(FileData *fd, Library *UNUSED(lib), Main *bmain)
     }
   }
 
+  if (!MAIN_VERSION_ATLEAST(bmain, 301, 5)) {
+    LISTBASE_FOREACH (bNodeTree *, ntree, &bmain->nodetrees) {
+      if (ntree->type != NTREE_GEOMETRY) {
+        continue;
+      }
+      LISTBASE_FOREACH (bNode *, node, &ntree->nodes) {
+        if (node->type != GEO_NODE_REALIZE_INSTANCES) {
+          continue;
+        }
+        node->custom1 |= GEO_NODE_REALIZE_INSTANCES_LEGACY_BEHAVIOR;
+      }
+    }
+  }
+
   /**
    * Versioning code until next subversion bump goes here.
    *
@@ -2445,5 +2496,52 @@ void blo_do_versions_300(FileData *fd, Library *UNUSED(lib), Main *bmain)
    */
   {
     /* Keep this block, even when empty. */
+
+    /* Add node storage for map range node. */
+    FOREACH_NODETREE_BEGIN (bmain, ntree, id) {
+      LISTBASE_FOREACH (bNode *, node, &ntree->nodes) {
+        if (node->type == SH_NODE_MAP_RANGE) {
+          if (node->storage == NULL) {
+            NodeMapRange *data = MEM_callocN(sizeof(NodeMapRange), __func__);
+            data->clamp = node->custom1;
+            data->data_type = CD_PROP_FLOAT;
+            data->interpolation_type = node->custom2;
+            node->storage = data;
+          }
+        }
+      }
+    }
+    FOREACH_NODETREE_END;
+
+    /* Update spreadsheet data set region type. */
+    LISTBASE_FOREACH (bScreen *, screen, &bmain->screens) {
+      LISTBASE_FOREACH (ScrArea *, area, &screen->areabase) {
+        LISTBASE_FOREACH (SpaceLink *, sl, &area->spacedata) {
+          if (sl->spacetype == SPACE_SPREADSHEET) {
+            ListBase *regionbase = (sl == area->spacedata.first) ? &area->regionbase :
+                                                                   &sl->regionbase;
+            LISTBASE_FOREACH (ARegion *, region, regionbase) {
+              if (region->regiontype == RGN_TYPE_CHANNELS) {
+                region->regiontype = RGN_TYPE_TOOLS;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    /* Initialize the bone wireframe opacity setting. */
+    if (!DNA_struct_elem_find(fd->filesdna, "View3DOverlay", "float", "bone_wire_alpha")) {
+      for (bScreen *screen = bmain->screens.first; screen; screen = screen->id.next) {
+        LISTBASE_FOREACH (ScrArea *, area, &screen->areabase) {
+          LISTBASE_FOREACH (SpaceLink *, sl, &area->spacedata) {
+            if (sl->spacetype == SPACE_VIEW3D) {
+              View3D *v3d = (View3D *)sl;
+              v3d->overlay.bone_wire_alpha = 1.0f;
+            }
+          }
+        }
+      }
+    }
   }
 }

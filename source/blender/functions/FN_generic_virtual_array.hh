@@ -47,15 +47,15 @@ class GVArrayImpl {
   int64_t size_;
 
  public:
-  GVArrayImpl(const CPPType &type, const int64_t size);
+  GVArrayImpl(const CPPType &type, int64_t size);
   virtual ~GVArrayImpl() = default;
 
   const CPPType &type() const;
 
   int64_t size() const;
 
-  virtual void get(const int64_t index, void *r_value) const;
-  virtual void get_to_uninitialized(const int64_t index, void *r_value) const = 0;
+  virtual void get(int64_t index, void *r_value) const;
+  virtual void get_to_uninitialized(int64_t index, void *r_value) const = 0;
 
   virtual bool is_span() const;
   virtual GSpan get_internal_span() const;
@@ -73,11 +73,11 @@ class GVArrayImpl {
 /* A generic version of #VMutableArrayImpl. */
 class GVMutableArrayImpl : public GVArrayImpl {
  public:
-  GVMutableArrayImpl(const CPPType &type, const int64_t size);
+  GVMutableArrayImpl(const CPPType &type, int64_t size);
 
-  virtual void set_by_copy(const int64_t index, const void *value);
-  virtual void set_by_relocate(const int64_t index, void *value);
-  virtual void set_by_move(const int64_t index, void *value) = 0;
+  virtual void set_by_copy(int64_t index, const void *value);
+  virtual void set_by_relocate(int64_t index, void *value);
+  virtual void set_by_move(int64_t index, void *value) = 0;
 
   virtual void set_all(const void *src);
 
@@ -148,15 +148,38 @@ class GVArrayCommon {
   void materialize_to_uninitialized(void *dst) const;
   void materialize_to_uninitialized(const IndexMask mask, void *dst) const;
 
+  /**
+   * Returns true when the virtual array is stored as a span internally.
+   */
   bool is_span() const;
+  /**
+   * Returns the internally used span of the virtual array. This invokes undefined behavior is the
+   * virtual array is not stored as a span internally.
+   */
   GSpan get_internal_span() const;
 
+  /**
+   * Returns true when the virtual array returns the same value for every index.
+   */
   bool is_single() const;
+  /**
+   * Copies the value that is used for every element into `r_value`, which is expected to point to
+   * initialized memory. This invokes undefined behavior if the virtual array would not return the
+   * same value for every index.
+   */
   void get_internal_single(void *r_value) const;
+  /**
+   * Same as `get_internal_single`, but `r_value` points to initialized memory.
+   */
   void get_internal_single_to_uninitialized(void *r_value) const;
 
-  void get(const int64_t index, void *r_value) const;
-  void get_to_uninitialized(const int64_t index, void *r_value) const;
+  void get(int64_t index, void *r_value) const;
+  /**
+   * Returns a copy of the value at the given index. Usually a typed virtual array should
+   * be used instead, but sometimes this is simpler when only a few indices are needed.
+   */
+  template<typename T> T get(int64_t index) const;
+  void get_to_uninitialized(int64_t index, void *r_value) const;
 };
 
 /** Generic version of #VArray. */
@@ -177,9 +200,9 @@ class GVArray : public GVArrayCommon {
 
   template<typename ImplT, typename... Args> static GVArray For(Args &&...args);
 
-  static GVArray ForSingle(const CPPType &type, const int64_t size, const void *value);
-  static GVArray ForSingleRef(const CPPType &type, const int64_t size, const void *value);
-  static GVArray ForSingleDefault(const CPPType &type, const int64_t size);
+  static GVArray ForSingle(const CPPType &type, int64_t size, const void *value);
+  static GVArray ForSingleRef(const CPPType &type, int64_t size, const void *value);
+  static GVArray ForSingleDefault(const CPPType &type, int64_t size);
   static GVArray ForSpan(GSpan span);
   static GVArray ForGArray(GArray<> array);
   static GVArray ForEmpty(const CPPType &type);
@@ -221,11 +244,14 @@ class GVMutableArray : public GVArrayCommon {
 
   template<typename T> bool try_assign_VMutableArray(VMutableArray<T> &varray) const;
 
-  void set_by_copy(const int64_t index, const void *value);
-  void set_by_move(const int64_t index, void *value);
-  void set_by_relocate(const int64_t index, void *value);
+  void set_by_copy(int64_t index, const void *value);
+  void set_by_move(int64_t index, void *value);
+  void set_by_relocate(int64_t index, void *value);
 
   void fill(const void *value);
+  /**
+   * Copy the values from the source buffer to all elements in the virtual array.
+   */
   void set_all(const void *src);
 
   GVMutableArrayImpl *get_implementation() const;
@@ -567,15 +593,15 @@ class GVArrayImpl_For_GSpan : public GVMutableArrayImpl {
   GVArrayImpl_For_GSpan(const GMutableSpan span);
 
  protected:
-  GVArrayImpl_For_GSpan(const CPPType &type, const int64_t size);
+  GVArrayImpl_For_GSpan(const CPPType &type, int64_t size);
 
  public:
-  void get(const int64_t index, void *r_value) const override;
-  void get_to_uninitialized(const int64_t index, void *r_value) const override;
+  void get(int64_t index, void *r_value) const override;
+  void get_to_uninitialized(int64_t index, void *r_value) const override;
 
-  void set_by_copy(const int64_t index, const void *value) override;
-  void set_by_move(const int64_t index, void *value) override;
-  void set_by_relocate(const int64_t index, void *value) override;
+  void set_by_copy(int64_t index, const void *value) override;
+  void set_by_move(int64_t index, void *value) override;
+  void set_by_relocate(int64_t index, void *value) override;
 
   bool is_span() const override;
   GSpan get_internal_span() const override;
@@ -670,6 +696,16 @@ inline void GVArrayCommon::get(const int64_t index, void *r_value) const
   impl_->get(index, r_value);
 }
 
+template<typename T> inline T GVArrayCommon::get(const int64_t index) const
+{
+  BLI_assert(index >= 0);
+  BLI_assert(index < this->size());
+  BLI_assert(this->type().is<T>());
+  T value{};
+  impl_->get(index, &value);
+  return value;
+}
+
 /* Same as `get`, but `r_value` is expected to point to uninitialized memory. */
 inline void GVArrayCommon::get_to_uninitialized(const int64_t index, void *r_value) const
 {
@@ -717,8 +753,7 @@ namespace detail {
 template<typename StorageT> inline GVArrayAnyExtraInfo GVArrayAnyExtraInfo::get()
 {
   static_assert(std::is_base_of_v<GVArrayImpl, StorageT> ||
-                std::is_same_v<StorageT, const GVArrayImpl *> ||
-                std::is_same_v<StorageT, std::shared_ptr<const GVArrayImpl>>);
+                is_same_any_v<StorageT, const GVArrayImpl *, std::shared_ptr<const GVArrayImpl>>);
 
   if constexpr (std::is_base_of_v<GVArrayImpl, StorageT>) {
     return {[](const void *buffer) {

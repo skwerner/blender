@@ -22,6 +22,7 @@
 
 #pragma once
 
+struct DRWSubdivCache;
 struct TaskGraph;
 
 #include "DNA_customdata_types.h"
@@ -244,6 +245,13 @@ typedef enum DRWBatchFlag {
 
 BLI_STATIC_ASSERT(MBC_BATCH_LEN < 32, "Number of batches exceeded the limit of bit fields");
 
+typedef struct MeshExtractLooseGeom {
+  int edge_len;
+  int vert_len;
+  int *verts;
+  int *edges;
+} MeshExtractLooseGeom;
+
 /**
  * Data that are kept around between extractions to reduce rebuilding time.
  *
@@ -252,12 +260,7 @@ BLI_STATIC_ASSERT(MBC_BATCH_LEN < 32, "Number of batches exceeded the limit of b
 typedef struct MeshBufferCache {
   MeshBufferList buff;
 
-  struct {
-    int edge_len;
-    int vert_len;
-    int *verts;
-    int *edges;
-  } loose_geom;
+  MeshExtractLooseGeom loose_geom;
 
   struct {
     int *tri_first_index;
@@ -282,6 +285,8 @@ typedef struct MeshBatchCache {
   GPUIndexBuf **tris_per_mat;
 
   GPUBatch **surface_per_mat;
+
+  struct DRWSubdivCache *subdiv_cache;
 
   DRWBatchFlag batch_requested; /* DRWBatchFlag */
   DRWBatchFlag batch_ready;     /* DRWBatchFlag */
@@ -324,16 +329,21 @@ void mesh_buffer_cache_create_requested(struct TaskGraph *task_graph,
                                         MeshBatchCache *cache,
                                         MeshBufferCache *mbc,
                                         Mesh *me,
-                                        const bool is_editmode,
-                                        const bool is_paint_mode,
-                                        const bool is_mode_active,
+                                        bool is_editmode,
+                                        bool is_paint_mode,
+                                        bool is_mode_active,
                                         const float obmat[4][4],
-                                        const bool do_final,
-                                        const bool do_uvedit,
-                                        const bool use_subsurf_fdots,
+                                        bool do_final,
+                                        bool do_uvedit,
+                                        bool use_subsurf_fdots,
                                         const Scene *scene,
-                                        const ToolSettings *ts,
-                                        const bool use_hide);
+                                        const struct ToolSettings *ts,
+                                        bool use_hide);
+
+void mesh_buffer_cache_create_requested_subdiv(MeshBatchCache *cache,
+                                               MeshBufferCache *mbc,
+                                               struct DRWSubdivCache *subdiv_cache,
+                                               const struct ToolSettings *ts);
 
 #ifdef __cplusplus
 }

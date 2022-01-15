@@ -24,12 +24,24 @@ namespace blender::nodes::node_geo_attribute_domain_size_cc {
 static void node_declare(NodeDeclarationBuilder &b)
 {
   b.add_input<decl::Geometry>("Geometry");
-  b.add_output<decl::Int>("Point Count");
-  b.add_output<decl::Int>("Edge Count");
-  b.add_output<decl::Int>("Face Count");
-  b.add_output<decl::Int>("Face Corner Count");
-  b.add_output<decl::Int>("Spline Count");
-  b.add_output<decl::Int>("Instance Count");
+  b.add_output<decl::Int>("Point Count").make_available([](bNode &node) {
+    node.custom1 = GEO_COMPONENT_TYPE_MESH;
+  });
+  b.add_output<decl::Int>("Edge Count").make_available([](bNode &node) {
+    node.custom1 = GEO_COMPONENT_TYPE_MESH;
+  });
+  b.add_output<decl::Int>("Face Count").make_available([](bNode &node) {
+    node.custom1 = GEO_COMPONENT_TYPE_MESH;
+  });
+  b.add_output<decl::Int>("Face Corner Count").make_available([](bNode &node) {
+    node.custom1 = GEO_COMPONENT_TYPE_MESH;
+  });
+  b.add_output<decl::Int>("Spline Count").make_available([](bNode &node) {
+    node.custom1 = GEO_COMPONENT_TYPE_CURVE;
+  });
+  b.add_output<decl::Int>("Instance Count").make_available([](bNode &node) {
+    node.custom1 = GEO_COMPONENT_TYPE_INSTANCES;
+  });
 }
 
 static void node_layout(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
@@ -131,8 +143,7 @@ void register_node_type_geo_attribute_domain_size()
   namespace file_ns = blender::nodes::node_geo_attribute_domain_size_cc;
 
   static bNodeType ntype;
-  geo_node_type_base(
-      &ntype, GEO_NODE_ATTRIBUTE_DOMAIN_SIZE, "Domain Size", NODE_CLASS_ATTRIBUTE, 0);
+  geo_node_type_base(&ntype, GEO_NODE_ATTRIBUTE_DOMAIN_SIZE, "Domain Size", NODE_CLASS_ATTRIBUTE);
   ntype.geometry_node_execute = file_ns::node_geo_exec;
   ntype.declare = file_ns::node_declare;
   ntype.draw_buttons = file_ns::node_layout;

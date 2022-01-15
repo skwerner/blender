@@ -39,8 +39,7 @@ static void node_layout(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
 
 static void node_init(bNodeTree *UNUSED(tree), bNode *node)
 {
-  NodeGeometryCurveSplineType *data = (NodeGeometryCurveSplineType *)MEM_callocN(
-      sizeof(NodeGeometryCurveSplineType), __func__);
+  NodeGeometryCurveSplineType *data = MEM_cnew<NodeGeometryCurveSplineType>(__func__);
 
   data->spline_type = GEO_NODE_SPLINE_TYPE_POLY;
   node->storage = data;
@@ -243,7 +242,7 @@ static void node_geo_exec(GeoNodeExecParams params)
   const GeometryNodeSplineType output_type = (const GeometryNodeSplineType)storage->spline_type;
 
   GeometrySet geometry_set = params.extract_input<GeometrySet>("Curve");
-  geometry_set = bke::geometry_set_realize_instances(geometry_set);
+  geometry_set = geometry::realize_instances_legacy(geometry_set);
   if (!geometry_set.has_curve()) {
     params.set_output("Curve", geometry_set);
     return;
@@ -288,7 +287,7 @@ void register_node_type_geo_legacy_curve_spline_type()
 
   static bNodeType ntype;
   geo_node_type_base(
-      &ntype, GEO_NODE_LEGACY_CURVE_SPLINE_TYPE, "Set Spline Type", NODE_CLASS_GEOMETRY, 0);
+      &ntype, GEO_NODE_LEGACY_CURVE_SPLINE_TYPE, "Set Spline Type", NODE_CLASS_GEOMETRY);
   ntype.declare = file_ns::node_declare;
   ntype.geometry_node_execute = file_ns::node_geo_exec;
   node_type_init(&ntype, file_ns::node_init);

@@ -51,8 +51,7 @@ static void fn_attribute_map_range_layout(uiLayout *layout, bContext *UNUSED(C),
 
 static void node_init(bNodeTree *UNUSED(ntree), bNode *node)
 {
-  NodeAttributeMapRange *data = (NodeAttributeMapRange *)MEM_callocN(sizeof(NodeAttributeMapRange),
-                                                                     __func__);
+  NodeAttributeMapRange *data = MEM_cnew<NodeAttributeMapRange>(__func__);
   data->data_type = CD_PROP_FLOAT;
   data->interpolation_type = NODE_MAP_RANGE_LINEAR;
 
@@ -425,7 +424,7 @@ void register_node_type_geo_attribute_map_range()
   static bNodeType ntype;
 
   geo_node_type_base(
-      &ntype, GEO_NODE_LEGACY_ATTRIBUTE_MAP_RANGE, "Attribute Map Range", NODE_CLASS_ATTRIBUTE, 0);
+      &ntype, GEO_NODE_LEGACY_ATTRIBUTE_MAP_RANGE, "Attribute Map Range", NODE_CLASS_ATTRIBUTE);
   ntype.geometry_node_execute = file_ns::node_geo_exec;
   node_type_init(&ntype, file_ns::node_init);
   node_type_update(&ntype, file_ns::node_update);

@@ -16,11 +16,11 @@
 
 #pragma once
 
+#include "BKE_node.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include "BKE_node.h"
 
 extern struct bNodeTreeType *ntreeType_Geometry;
 
@@ -49,6 +49,7 @@ void register_node_type_geo_legacy_select_by_material(void);
 void register_node_type_geo_legacy_subdivision_surface(void);
 void register_node_type_geo_legacy_volume_to_mesh(void);
 
+void register_node_type_geo_accumulate_field(void);
 void register_node_type_geo_align_rotation_to_vector(void);
 void register_node_type_geo_attribute_capture(void);
 void register_node_type_geo_attribute_clamp(void);
@@ -87,8 +88,8 @@ void register_node_type_geo_curve_resample(void);
 void register_node_type_geo_curve_reverse(void);
 void register_node_type_geo_curve_sample(void);
 void register_node_type_geo_curve_set_handles(void);
-void register_node_type_geo_curve_spline_type(void);
 void register_node_type_geo_curve_spline_parameter(void);
+void register_node_type_geo_curve_spline_type(void);
 void register_node_type_geo_curve_subdivide(void);
 void register_node_type_geo_curve_to_mesh(void);
 void register_node_type_geo_curve_to_points(void);
@@ -97,6 +98,7 @@ void register_node_type_geo_delete_geometry(void);
 void register_node_type_geo_distribute_points_on_faces(void);
 void register_node_type_geo_dual_mesh(void);
 void register_node_type_geo_edge_split(void);
+void register_node_type_geo_geometry_to_instance(void);
 void register_node_type_geo_image_texture(void);
 void register_node_type_geo_input_curve_handles(void);
 void register_node_type_geo_input_curve_tilt(void);
@@ -104,9 +106,17 @@ void register_node_type_geo_input_id(void);
 void register_node_type_geo_input_index(void);
 void register_node_type_geo_input_material_index(void);
 void register_node_type_geo_input_material(void);
+void register_node_type_geo_input_mesh_edge_angle(void);
+void register_node_type_geo_input_mesh_edge_neighbors(void);
+void register_node_type_geo_input_mesh_edge_vertices(void);
+void register_node_type_geo_input_mesh_face_area(void);
+void register_node_type_geo_input_mesh_face_neighbors(void);
+void register_node_type_geo_input_mesh_island(void);
+void register_node_type_geo_input_mesh_vertex_neighbors(void);
 void register_node_type_geo_input_normal(void);
 void register_node_type_geo_input_position(void);
 void register_node_type_geo_input_radius(void);
+void register_node_type_geo_input_scene_time(void);
 void register_node_type_geo_input_shade_smooth(void);
 void register_node_type_geo_input_spline_cyclic(void);
 void register_node_type_geo_input_spline_length(void);

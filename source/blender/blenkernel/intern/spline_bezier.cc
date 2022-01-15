@@ -70,24 +70,6 @@ void BezierSpline::set_resolution(const int value)
   this->mark_cache_invalid();
 }
 
-void BezierSpline::add_point(const float3 position,
-                             const HandleType handle_type_left,
-                             const float3 handle_position_left,
-                             const HandleType handle_type_right,
-                             const float3 handle_position_right,
-                             const float radius,
-                             const float tilt)
-{
-  handle_types_left_.append(handle_type_left);
-  handle_positions_left_.append(handle_position_left);
-  positions_.append(position);
-  handle_types_right_.append(handle_type_right);
-  handle_positions_right_.append(handle_position_right);
-  radii_.append(radius);
-  tilts_.append(tilt);
-  this->mark_cache_invalid();
-}
-
 void BezierSpline::resize(const int size)
 {
   handle_types_left_.resize(size);
@@ -369,12 +351,6 @@ int BezierSpline::evaluated_points_size() const
   return this->control_point_offsets().last();
 }
 
-/**
- * If the spline is not cyclic, the direction for the first and last points is just the
- * direction formed by the corresponding handles and control points. In the unlikely situation
- * that the handles define a zero direction, fallback to using the direction defined by the
- * first and last evaluated segments already calculated in #Spline::evaluated_tangents().
- */
 void BezierSpline::correct_end_tangents() const
 {
   if (is_cyclic_) {

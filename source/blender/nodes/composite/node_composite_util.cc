@@ -21,6 +21,8 @@
  * \ingroup nodes
  */
 
+#include "NOD_socket_search_link.hh"
+
 #include "node_composite_util.hh"
 
 bool cmp_node_poll_default(bNodeType *UNUSED(ntype),
@@ -45,11 +47,12 @@ void cmp_node_update_default(bNodeTree *UNUSED(ntree), bNode *node)
   node->need_exec = 1;
 }
 
-void cmp_node_type_base(bNodeType *ntype, int type, const char *name, short nclass, short flag)
+void cmp_node_type_base(bNodeType *ntype, int type, const char *name, short nclass)
 {
-  node_type_base(ntype, type, name, nclass, flag);
+  node_type_base(ntype, type, name, nclass);
 
   ntype->poll = cmp_node_poll_default;
   ntype->updatefunc = cmp_node_update_default;
   ntype->insert_link = node_insert_link_default;
+  ntype->gather_link_search_ops = blender::nodes::search_link_ops_for_basic_node;
 }

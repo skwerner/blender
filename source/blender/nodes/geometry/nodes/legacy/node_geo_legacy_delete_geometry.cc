@@ -630,7 +630,7 @@ static void delete_mesh_selection(MeshComponent &component,
 static void node_geo_exec(GeoNodeExecParams params)
 {
   GeometrySet geometry_set = params.extract_input<GeometrySet>("Geometry");
-  geometry_set = bke::geometry_set_realize_instances(geometry_set);
+  geometry_set = geometry::realize_instances_legacy(geometry_set);
 
   const bool invert = params.extract_input<bool>("Invert");
   const std::string selection_name = params.extract_input<std::string>("Selection");
@@ -671,7 +671,7 @@ void register_node_type_geo_legacy_delete_geometry()
   static bNodeType ntype;
 
   geo_node_type_base(
-      &ntype, GEO_NODE_LEGACY_DELETE_GEOMETRY, "Delete Geometry", NODE_CLASS_GEOMETRY, 0);
+      &ntype, GEO_NODE_LEGACY_DELETE_GEOMETRY, "Delete Geometry", NODE_CLASS_GEOMETRY);
 
   ntype.declare = file_ns::node_declare;
   ntype.geometry_node_execute = file_ns::node_geo_exec;

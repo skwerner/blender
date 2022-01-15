@@ -21,6 +21,9 @@
  * \ingroup cmpnodes
  */
 
+#include "UI_interface.h"
+#include "UI_resources.h"
+
 #include "node_composite_util.hh"
 
 /* **************** BILATERALBLUR ******************** */
@@ -38,20 +41,32 @@ static void cmp_node_bilateralblur_declare(NodeDeclarationBuilder &b)
 
 static void node_composit_init_bilateralblur(bNodeTree *UNUSED(ntree), bNode *node)
 {
-  NodeBilateralBlurData *nbbd = (NodeBilateralBlurData *)MEM_callocN(sizeof(NodeBilateralBlurData),
-                                                                     "node bilateral blur data");
+  NodeBilateralBlurData *nbbd = MEM_cnew<NodeBilateralBlurData>(__func__);
   node->storage = nbbd;
   nbbd->iter = 1;
   nbbd->sigma_color = 0.3;
   nbbd->sigma_space = 5.0;
 }
 
-void register_node_type_cmp_bilateralblur(void)
+static void node_composit_buts_bilateralblur(uiLayout *layout,
+                                             bContext *UNUSED(C),
+                                             PointerRNA *ptr)
+{
+  uiLayout *col;
+
+  col = uiLayoutColumn(layout, true);
+  uiItemR(col, ptr, "iterations", UI_ITEM_R_SPLIT_EMPTY_NAME, nullptr, ICON_NONE);
+  uiItemR(col, ptr, "sigma_color", UI_ITEM_R_SPLIT_EMPTY_NAME, nullptr, ICON_NONE);
+  uiItemR(col, ptr, "sigma_space", UI_ITEM_R_SPLIT_EMPTY_NAME, nullptr, ICON_NONE);
+}
+
+void register_node_type_cmp_bilateralblur()
 {
   static bNodeType ntype;
 
-  cmp_node_type_base(&ntype, CMP_NODE_BILATERALBLUR, "Bilateral Blur", NODE_CLASS_OP_FILTER, 0);
+  cmp_node_type_base(&ntype, CMP_NODE_BILATERALBLUR, "Bilateral Blur", NODE_CLASS_OP_FILTER);
   ntype.declare = blender::nodes::cmp_node_bilateralblur_declare;
+  ntype.draw_buttons = node_composit_buts_bilateralblur;
   node_type_init(&ntype, node_composit_init_bilateralblur);
   node_type_storage(
       &ntype, "NodeBilateralBlurData", node_free_standard_storage, node_copy_standard_storage);

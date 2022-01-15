@@ -906,7 +906,9 @@ ID *deg_update_copy_on_write_datablock(const Depsgraph *depsgraph, const IDNode 
   return id_cow;
 }
 
-/* NOTE: Depsgraph is supposed to have ID node already. */
+/**
+ * \note Depsgraph is supposed to have ID node already.
+ */
 ID *deg_update_copy_on_write_datablock(const Depsgraph *depsgraph, ID *id_orig)
 {
   IDNode *id_node = depsgraph->find_id_node(id_orig);
@@ -987,10 +989,12 @@ void discard_edit_mode_pointers(ID *id_cow)
 
 }  // namespace
 
-/* Free content of the CoW data-block
+/**
+   Free content of the CoW data-block.
  * Notes:
  * - Does not recurse into nested ID data-blocks.
- * - Does not free data-block itself. */
+ * - Does not free data-block itself.
+ */
 void deg_free_copy_on_write_datablock(ID *id_cow)
 {
   if (!check_datablock_expanded(id_cow)) {
@@ -1006,7 +1010,7 @@ void deg_free_copy_on_write_datablock(ID *id_cow)
     case ID_OB: {
       /* TODO(sergey): This workaround is only to prevent free derived
        * caches from modifying object->data. This is currently happening
-       * due to mesh/curve datablock boundbox tagging dirty. */
+       * due to mesh/curve data-block bound-box tagging dirty. */
       Object *ob_cow = (Object *)id_cow;
       ob_cow->data = nullptr;
       ob_cow->sculpt = nullptr;

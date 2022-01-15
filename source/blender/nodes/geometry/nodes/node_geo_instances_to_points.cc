@@ -56,10 +56,12 @@ static void convert_instances_to_points(GeometrySet &geometry_set,
   GeometryComponentFieldContext field_context{instances, ATTR_DOMAIN_INSTANCE};
   const int domain_size = instances.attribute_domain_size(ATTR_DOMAIN_INSTANCE);
 
-  fn::FieldEvaluator selection_evaluator{field_context, domain_size};
-  selection_evaluator.add(std::move(selection_field));
-  selection_evaluator.evaluate();
-  const IndexMask selection = selection_evaluator.get_evaluated_as_mask(0);
+  fn::FieldEvaluator evaluator{field_context, domain_size};
+  evaluator.set_selection(std::move(selection_field));
+  evaluator.add(std::move(position_field));
+  evaluator.add(std::move(radius_field));
+  evaluator.evaluate();
+  const IndexMask selection = evaluator.get_evaluated_selection_as_mask();
   if (selection.is_empty()) {
     return;
   }
@@ -69,10 +71,6 @@ static void convert_instances_to_points(GeometrySet &geometry_set,
 
   PointCloudComponent &points = geometry_set.get_component_for_write<PointCloudComponent>();
 
-  fn::FieldEvaluator evaluator{field_context, &selection};
-  evaluator.add(std::move(position_field));
-  evaluator.add(std::move(radius_field));
-  evaluator.evaluate();
   const VArray<float3> &positions = evaluator.get_evaluated<float3>(0);
   copy_attribute_to_points(positions, selection, {(float3 *)pointcloud->co, pointcloud->totpoint});
   const VArray<float> &radii = evaluator.get_evaluated<float>(1);
@@ -87,7 +85,7 @@ static void convert_instances_to_points(GeometrySet &geometry_set,
   attributes_to_propagate.remove("position");
   attributes_to_propagate.remove("radius");
 
-  for (const auto &item : attributes_to_propagate.items()) {
+  for (const auto item : attributes_to_propagate.items()) {
     const AttributeIDRef &attribute_id = item.key;
     const AttributeKind attribute_kind = item.value;
 
@@ -132,7 +130,7 @@ void register_node_type_geo_instances_to_points()
   static bNodeType ntype;
 
   geo_node_type_base(
-      &ntype, GEO_NODE_INSTANCES_TO_POINTS, "Instances to Points", NODE_CLASS_GEOMETRY, 0);
+      &ntype, GEO_NODE_INSTANCES_TO_POINTS, "Instances to Points", NODE_CLASS_GEOMETRY);
   ntype.declare = file_ns::node_declare;
   ntype.geometry_node_execute = file_ns::node_geo_exec;
   nodeRegisterType(&ntype);

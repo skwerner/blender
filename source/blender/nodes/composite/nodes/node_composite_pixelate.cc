@@ -35,11 +35,11 @@ static void cmp_node_pixelate_declare(NodeDeclarationBuilder &b)
 
 }  // namespace blender::nodes
 
-void register_node_type_cmp_pixelate(void)
+void register_node_type_cmp_pixelate()
 {
   static bNodeType ntype;
 
-  cmp_node_type_base(&ntype, CMP_NODE_PIXELATE, "Pixelate", NODE_CLASS_OP_FILTER, 0);
+  cmp_node_type_base(&ntype, CMP_NODE_PIXELATE, "Pixelate", NODE_CLASS_OP_FILTER);
   ntype.declare = blender::nodes::cmp_node_pixelate_declare;
 
   nodeRegisterType(&ntype);

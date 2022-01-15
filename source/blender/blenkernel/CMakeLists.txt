@@ -118,7 +118,7 @@ set(SRC
   intern/context.c
   intern/crazyspace.c
   intern/cryptomatte.cc
-  intern/curve.c
+  intern/curve.cc
   intern/curve_bevel.c
   intern/curve_convert.c
   intern/curve_decimate.c
@@ -126,7 +126,7 @@ set(SRC
   intern/curve_eval.cc
   intern/curve_to_mesh_convert.cc
   intern/curveprofile.cc
-  intern/customdata.c
+  intern/customdata.cc
   intern/customdata_file.c
   intern/data_transfer.c
   intern/deform.c
@@ -139,7 +139,6 @@ set(SRC
   intern/editmesh_cache.c
   intern/editmesh_tangent.c
   intern/effect.c
-  intern/extern_implementations.cc
   intern/fcurve.c
   intern/fcurve_cache.c
   intern/fcurve_driver.c
@@ -157,7 +156,7 @@ set(SRC
   intern/gpencil_curve.c
   intern/gpencil_geom.cc
   intern/gpencil_modifier.c
-  intern/hair.c
+  intern/hair.cc
   intern/icons.cc
   intern/icons_rasterize.c
   intern/idprop.c
@@ -227,6 +226,7 @@ set(SRC
   intern/multires_versioning.c
   intern/nla.c
   intern/node.cc
+  intern/node_tree_update.cc
   intern/object.cc
   intern/object_deform.c
   intern/object_dupli.cc
@@ -274,6 +274,7 @@ set(SRC
   intern/subdiv_eval.c
   intern/subdiv_foreach.c
   intern/subdiv_mesh.c
+  intern/subdiv_modifier.c
   intern/subdiv_stats.c
   intern/subdiv_topology.c
   intern/subsurf_ccg.c
@@ -288,6 +289,7 @@ set(SRC
   intern/tracking_solver.c
   intern/tracking_stabilize.c
   intern/tracking_util.c
+  intern/type_conversions.cc
   intern/undo_system.c
   intern/unit.c
   intern/vfont.c
@@ -420,6 +422,7 @@ set(SRC
   BKE_multires.h
   BKE_nla.h
   BKE_node.h
+  BKE_node_tree_update.h
   BKE_object.h
   BKE_object_deform.h
   BKE_object_facemap.h
@@ -451,12 +454,14 @@ set(SRC
   BKE_subdiv_eval.h
   BKE_subdiv_foreach.h
   BKE_subdiv_mesh.h
+  BKE_subdiv_modifier.h
   BKE_subdiv_topology.h
   BKE_subsurf.h
   BKE_text.h
   BKE_text_suggestions.h
   BKE_texture.h
   BKE_tracking.h
+  BKE_type_conversions.hh
   BKE_undo_system.h
   BKE_unit.h
   BKE_vfont.h

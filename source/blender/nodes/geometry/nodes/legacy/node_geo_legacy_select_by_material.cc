@@ -60,7 +60,7 @@ static void node_geo_exec(GeoNodeExecParams params)
   const std::string selection_name = params.extract_input<std::string>("Selection");
 
   GeometrySet geometry_set = params.extract_input<GeometrySet>("Geometry");
-  geometry_set = geometry_set_realize_instances(geometry_set);
+  geometry_set = geometry::realize_instances_legacy(geometry_set);
 
   if (geometry_set.has<MeshComponent>()) {
     MeshComponent &mesh_component = geometry_set.get_component_for_write<MeshComponent>();
@@ -87,7 +87,7 @@ void register_node_type_geo_legacy_select_by_material()
   static bNodeType ntype;
 
   geo_node_type_base(
-      &ntype, GEO_NODE_LEGACY_SELECT_BY_MATERIAL, "Select by Material", NODE_CLASS_GEOMETRY, 0);
+      &ntype, GEO_NODE_LEGACY_SELECT_BY_MATERIAL, "Select by Material", NODE_CLASS_GEOMETRY);
   ntype.declare = file_ns::node_declare;
   ntype.geometry_node_execute = file_ns::node_geo_exec;
   nodeRegisterType(&ntype);

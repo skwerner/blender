@@ -21,10 +21,13 @@
  * \ingroup cmpnodes
  */
 
-#include "node_composite_util.hh"
-
 #include "BKE_context.h"
 #include "BKE_lib_id.h"
+
+#include "UI_interface.h"
+#include "UI_resources.h"
+
+#include "node_composite_util.hh"
 
 /* **************** Translate  ******************** */
 
@@ -38,7 +41,7 @@ static void cmp_node_moviedistortion_declare(NodeDeclarationBuilder &b)
 
 }  // namespace blender::nodes
 
-static void label(bNodeTree *UNUSED(ntree), bNode *node, char *label, int maxlen)
+static void label(const bNodeTree *UNUSED(ntree), const bNode *node, char *label, int maxlen)
 {
   if (node->custom1 == 0) {
     BLI_strncpy(label, IFACE_("Undistortion"), maxlen);
@@ -73,14 +76,36 @@ static void storage_copy(bNodeTree *UNUSED(dest_ntree), bNode *dest_node, const 
   }
 }
 
-void register_node_type_cmp_moviedistortion(void)
+static void node_composit_buts_moviedistortion(uiLayout *layout, bContext *C, PointerRNA *ptr)
+{
+  bNode *node = (bNode *)ptr->data;
+
+  uiTemplateID(layout,
+               C,
+               ptr,
+               "clip",
+               nullptr,
+               "CLIP_OT_open",
+               nullptr,
+               UI_TEMPLATE_ID_FILTER_ALL,
+               false,
+               nullptr);
+
+  if (!node->id) {
+    return;
+  }
+
+  uiItemR(layout, ptr, "distortion_type", UI_ITEM_R_SPLIT_EMPTY_NAME, "", ICON_NONE);
+}
+
+void register_node_type_cmp_moviedistortion()
 {
   static bNodeType ntype;
 
-  cmp_node_type_base(&ntype, CMP_NODE_MOVIEDISTORTION, "Movie Distortion", NODE_CLASS_DISTORT, 0);
+  cmp_node_type_base(&ntype, CMP_NODE_MOVIEDISTORTION, "Movie Distortion", NODE_CLASS_DISTORT);
   ntype.declare = blender::nodes::cmp_node_moviedistortion_declare;
-  node_type_label(&ntype, label);
-
+  ntype.draw_buttons = node_composit_buts_moviedistortion;
+  ntype.labelfunc = label;
   ntype.initfunc_api = init;
   node_type_storage(&ntype, nullptr, storage_free, storage_copy);
 

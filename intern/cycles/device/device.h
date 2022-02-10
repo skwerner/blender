@@ -76,6 +76,7 @@ class DeviceInfo {
   bool display_device;        /* GPU is used as a display device. */
   bool has_nanovdb;           /* Support NanoVDB volumes. */
   bool has_osl;               /* Support Open Shading Language. */
+  bool has_texture_cache;     /* Supports on-demand tiled texture loading. */
   bool has_profiling;         /* Supports runtime collection of profiling info. */
   bool has_peer_memory;       /* GPU has P2P access to memory of another GPU. */
   bool has_gpu_queue;         /* Device supports GPU queue. */
@@ -93,6 +94,7 @@ class DeviceInfo {
     display_device = false;
     has_nanovdb = false;
     has_osl = false;
+    has_texture_cache = false;
     has_profiling = false;
     has_peer_memory = false;
     has_gpu_queue = false;

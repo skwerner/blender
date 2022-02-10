@@ -313,7 +313,7 @@ ImageManager::ImageManager(const DeviceInfo &info)
 
   /* Set image limits */
   features.has_nanovdb = info.has_nanovdb;
-  features.has_texture_cache = false;
+  features.has_texture_cache = info.has_texture_cache;
 }
 
 ImageManager::~ImageManager()
@@ -828,6 +828,7 @@ void ImageManager::device_load_image(Device *device, Scene *scene, int slot, Pro
 
     if (pixels != NULL) {
       OIIO::TextureSystem *tex_sys = (OIIO::TextureSystem *)oiio_texture_system;
+      assert(tex_sys);
       OIIO::TextureSystem::TextureHandle *handle = tex_sys->get_texture_handle(
           OIIO::ustring(img->loader->osl_filepath()));
       *((OIIO::TextureSystem::TextureHandle **)pixels) = tex_sys->good(handle) ? handle : NULL;

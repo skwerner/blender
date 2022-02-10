@@ -39,6 +39,7 @@ void device_cpu_info(vector<DeviceInfo> &devices)
   info.num = 0;
   info.has_osl = true;
   info.has_nanovdb = true;
+  info.has_texture_cache = true;
   info.has_profiling = true;
   if (openimagedenoise_supported()) {
     info.denoisers |= DENOISER_OPENIMAGEDENOISE;
